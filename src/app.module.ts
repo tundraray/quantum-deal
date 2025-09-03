@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { WebhookController } from './webhook.controller';
+import { WebhookService } from './webhook.service';
 import { AppService } from './app.service';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BotModule, BotName, UserManagementMiddleware } from '@quantumdeal/bot';
 import { MasterbotModule } from '@quantumdeal/masterbot';
-import { DbModule } from '@quantumdeal/db';
+import { DbModule, OrdersRepository } from '@quantumdeal/db';
 import { FrameworkModule } from '@quantumdeal/framework';
 import { session } from 'telegraf';
 
@@ -58,6 +59,6 @@ export const sessionMiddleware = session();
     */
   ],
   controllers: [WebhookController],
-  providers: [AppService],
+  providers: [AppService, WebhookService, OrdersRepository],
 })
 export class AppModule {}
