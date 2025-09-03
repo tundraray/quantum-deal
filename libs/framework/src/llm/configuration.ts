@@ -12,9 +12,9 @@ export class LLMConfigurationService {
   /**
    * Gets Gemini API key
    */
-  get geminiApiKey(): string {
+  get geminiApiKey(): string | undefined {
     // Support both GEMINI_API_KEY and GOOGLE_GENERATIVE_AI_API_KEY for AI SDK compatibility
-    return this.configService.getOrThrow<string>('GEMINI_API_KEY');
+    return this.configService.get<string>('GEMINI_API_KEY');
   }
 
   /**

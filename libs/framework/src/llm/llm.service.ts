@@ -166,15 +166,15 @@ export class LLMService {
         apiKey: this.configService.openaiApiKey,
       });
 
-      this.registerModel('gpt-4.1-mini', {
+      this.registerModel('gpt-5-mini', {
         provider: 'openai',
-        model: 'gpt-4.1-mini',
+        model: 'gpt-5-mini',
         apiKey: this.configService.openaiApiKey,
       });
 
-      this.registerModel('gpt-4o-mini', {
+      this.registerModel('gpt-5-nano', {
         provider: 'openai',
-        model: 'gpt-4o-mini',
+        model: 'gpt-5-nano',
         apiKey: this.configService.openaiApiKey,
       });
 
