@@ -10,12 +10,35 @@ import {
   CodesRepository,
   SummaryRepository,
 } from './repositories';
-import databaseConfig from './config/database.config';
 
 @Module({
-  imports: [ConfigModule.forFeature(databaseConfig)],
+  imports: [ConfigModule],
+  providers: [...drizzleProvider],
+  exports: [...drizzleProvider],
+})
+export class DrizzleModule {}
+
+/**
+ * Database module that provides Drizzle ORM client and database configuration
+ *
+ * This module:
+ * - Registers the database configuration using ConfigModule.forFeature()
+ * - Provides the Drizzle ORM client through drizzleProvider
+ * - Exports all repositories for use in other modules
+ *
+ * Usage:
+ * Import this module in your feature modules to access database repositories
+ */
+@Module({
+  imports: [
+    // Register the database configuration namespace
+    ConfigModule,
+    DrizzleModule,
+  ],
   providers: [
+    // Database connection provider
     ...drizzleProvider,
+    // Repository providers
     UsersRepository,
     ManagersRepository,
     OrdersRepository,
@@ -25,6 +48,9 @@ import databaseConfig from './config/database.config';
     SummaryRepository,
   ],
   exports: [
+    // Export the database client for direct access if needed
+    ...drizzleProvider,
+    // Export all repositories for use in other modules
     UsersRepository,
     ManagersRepository,
     OrdersRepository,

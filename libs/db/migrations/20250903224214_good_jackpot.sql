@@ -1,0 +1,1 @@
+DROP INDEX "orders_event_type_idx";

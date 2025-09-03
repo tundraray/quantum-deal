@@ -2,7 +2,6 @@ import {
   Controller,
   Post,
   Body,
-  Get,
   HttpCode,
   HttpStatus,
   Logger,
@@ -19,7 +18,7 @@ export class WebhookController {
   /**
    * Main endpoint to receive MT5 trading events
    */
-  @Post('mt5/events')
+  @Post('events')
   @HttpCode(HttpStatus.OK)
   async receiveMT5Event(@Body() eventData: unknown) {
     try {
@@ -60,22 +59,9 @@ export class WebhookController {
   }
 
   /**
-   * Health check endpoint for MT5 EA to verify connectivity
-   */
-  @Get('health')
-  healthCheck() {
-    return {
-      status: 'healthy',
-      service: 'quantum-deal-webhook',
-      timestamp: new Date().toISOString(),
-      version: '1.0.0',
-    };
-  }
-
-  /**
    * Test endpoint for development
    */
-  @Post('mt5/test')
+  @Post('test')
   @HttpCode(HttpStatus.OK)
   async testEndpoint(@Body() testData: unknown) {
     await Promise.resolve(); // Add await expression for ESLint

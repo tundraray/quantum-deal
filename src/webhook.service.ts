@@ -1,28 +1,14 @@
-import {
-  Injectable,
-  Logger,
-  BadRequestException,
-  Inject,
-} from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { eq, and } from 'drizzle-orm';
-import {
-  OrdersRepository,
-  DRIZZLE_CLIENT,
-  type DrizzleClient,
-  orders,
-} from '@quantumdeal/db';
+import { OrdersRepository, Order, NewOrder } from '@quantumdeal/db';
 import { BaseMT5EventDto, MT5EventType, MT5EventDto } from './dto';
 
 @Injectable()
 export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
 
-  constructor(
-    private readonly ordersRepository: OrdersRepository,
-    @Inject(DRIZZLE_CLIENT) private readonly db: DrizzleClient,
-  ) {}
+  constructor(private readonly ordersRepository: OrdersRepository) {}
 
   /**
    * Process MT5 trading event
@@ -41,26 +27,11 @@ export class WebhookService {
       // Validate and transform the incoming data
       const validatedEvent = await this.validateAndTransformEvent(rawData);
 
-      // Check for duplicate events
-      const eventTimestamp = new Date(validatedEvent.timestamp);
-      const isDuplicate = await this.checkEventExists(
-        validatedEvent.ticket,
-        validatedEvent.event,
-        eventTimestamp,
-      );
-
-      if (isDuplicate) {
-        this.logger.warn(
-          `Duplicate event detected: ${validatedEvent.event} for ticket ${validatedEvent.ticket}`,
-        );
-        return {
-          success: true,
-          message: 'Duplicate event ignored',
-        };
+      // Handle order creation/update (skip for TEST events)
+      let savedEvent: { id?: number } = { id: undefined };
+      if (validatedEvent.event !== MT5EventType.TEST) {
+        savedEvent = await this.handleOrderEvent(validatedEvent);
       }
-
-      // Store the event in the database
-      const savedEvent = await this.storeEvent(validatedEvent);
 
       // Process event-specific business logic
       await this.processEventSpecificLogic(validatedEvent);
@@ -72,7 +43,7 @@ export class WebhookService {
       return {
         success: true,
         eventId: savedEvent.id,
-        message: 'Event processed successfully',
+        message: 'Event processed and order updated successfully',
       };
     } catch (error: unknown) {
       const err = error as Error;
@@ -122,34 +93,48 @@ export class WebhookService {
   }
 
   /**
-   * Store event in the database
+   * Handle order creation or update based on event type
    */
-  private async storeEvent(validatedEvent: MT5EventDto) {
+  private async handleOrderEvent(validatedEvent: MT5EventDto) {
+    const existingOrder = await this.ordersRepository.findOneByTicket(
+      validatedEvent.ticket,
+    );
+
+    if (existingOrder) {
+      // Update existing order
+      return await this.updateExistingOrder(existingOrder, validatedEvent);
+    } else {
+      // Create new order
+      return await this.createNewOrder(validatedEvent);
+    }
+  }
+
+  /**
+   * Create a new order from event data
+   */
+  private async createNewOrder(validatedEvent: MT5EventDto) {
     const eventTimestamp = new Date(validatedEvent.timestamp);
 
     const newOrder = {
       // Core order identification - Map MT5 fields to orders table
       ticketId: validatedEvent.ticket,
       symbol: validatedEvent.symbol,
-      orderType: validatedEvent.type || validatedEvent.order_type || 'UNKNOWN',
+      orderType: validatedEvent.type || 'UNKNOWN',
 
       // Volume and pricing
-      lots: validatedEvent.volume || validatedEvent.order_volume || 0,
-      openPrice: validatedEvent.price || validatedEvent.order_price || 0,
-      closePrice: validatedEvent.deal_price || null,
-      stopLoss: validatedEvent.sl || validatedEvent.order_sl || null,
-      takeProfit: validatedEvent.tp || validatedEvent.order_tp || null,
-      profit:
-        validatedEvent.total_profit ||
-        validatedEvent.deal_profit ||
-        validatedEvent.profit ||
-        null,
-      closeTime: ['CLOSE', 'PARTIAL_CLOSE'].includes(validatedEvent.event)
-        ? eventTimestamp
-        : null,
+      lots: validatedEvent.volume || 0,
+      openPrice: validatedEvent.price || 0, // For OPEN events, this is the open price
+      closePrice:
+        validatedEvent.event === MT5EventType.CLOSE
+          ? validatedEvent.price
+          : null,
+      stopLoss: validatedEvent.sl || null,
+      takeProfit: validatedEvent.tp || null,
+      profit: validatedEvent.total_profit || validatedEvent.profit || null,
+      closeTime:
+        validatedEvent.event === MT5EventType.CLOSE ? eventTimestamp : null,
 
       // MT5 Event specific fields
-      eventType: validatedEvent.event,
       account: validatedEvent.account,
       broker: validatedEvent.broker,
       schemaVersion: validatedEvent.schema_version,
@@ -159,17 +144,92 @@ export class WebhookService {
       eventTimestamp,
 
       // Additional financial fields
-      swap: validatedEvent.swap || validatedEvent.deal_swap || null,
+      swap: validatedEvent.swap || null,
       commission: validatedEvent.commission || null,
-      dealType: validatedEvent.deal_type || null,
-      dealVolume: validatedEvent.deal_volume || null,
-      dealProfit: validatedEvent.deal_profit || null,
-      dealSwap: validatedEvent.deal_swap || null,
-      partialClose: validatedEvent.partial_close || null,
       comment: validatedEvent.comment || null,
     };
 
     return await this.ordersRepository.create(newOrder);
+  }
+
+  /**
+   * Update existing order with new event data
+   */
+  private async updateExistingOrder(
+    existingOrder: Order,
+    validatedEvent: MT5EventDto,
+  ) {
+    const eventTimestamp = new Date(validatedEvent.timestamp);
+    const updates = this.buildOrderUpdates(
+      existingOrder,
+      validatedEvent,
+      eventTimestamp,
+    );
+
+    const updatedOrders = await this.ordersRepository.updateByTicketId(
+      validatedEvent.ticket,
+      updates,
+    );
+
+    return updatedOrders[0] || existingOrder;
+  }
+
+  /**
+   * Build update object based on event type
+   */
+  private buildOrderUpdates(
+    existingOrder: Order,
+    validatedEvent: MT5EventDto,
+    eventTimestamp: Date,
+  ): Partial<NewOrder> {
+    const baseUpdates: Partial<NewOrder> = {
+      eventTimestamp,
+      updatedAt: new Date(),
+    };
+
+    switch (validatedEvent.event) {
+      case MT5EventType.CLOSE:
+        return {
+          ...baseUpdates,
+          closePrice: validatedEvent.price || existingOrder.closePrice,
+          profit:
+            validatedEvent.total_profit ||
+            validatedEvent.profit ||
+            existingOrder.profit,
+          closeTime: eventTimestamp,
+          swap: validatedEvent.swap || existingOrder.swap,
+          commission: validatedEvent.commission || existingOrder.commission,
+          comment: validatedEvent.comment || existingOrder.comment,
+        };
+
+      case MT5EventType.POSITION_SLTP_UPDATE:
+      case MT5EventType.ORDER_SLTP_UPDATE:
+        return {
+          ...baseUpdates,
+          stopLoss: validatedEvent.sl || existingOrder.stopLoss,
+          takeProfit: validatedEvent.tp || existingOrder.takeProfit,
+          comment: validatedEvent.comment || existingOrder.comment,
+        };
+
+      case MT5EventType.OPEN:
+        // OPEN events should create new orders, but if updating existing:
+        return {
+          ...baseUpdates,
+          orderType: validatedEvent.type || existingOrder.orderType,
+          lots: validatedEvent.volume || existingOrder.lots,
+          openPrice: validatedEvent.price || existingOrder.openPrice,
+          stopLoss: validatedEvent.sl || existingOrder.stopLoss,
+          takeProfit: validatedEvent.tp || existingOrder.takeProfit,
+          comment: validatedEvent.comment || existingOrder.comment,
+        };
+
+      default:
+        // For other events, just update the event info and timestamp
+        return {
+          ...baseUpdates,
+          comment: validatedEvent.comment || existingOrder.comment,
+        };
+    }
   }
 
   /**
@@ -183,19 +243,13 @@ export class WebhookService {
       case MT5EventType.CLOSE:
         await this.handlePositionClose(event);
         break;
-      case MT5EventType.PARTIAL_CLOSE:
-        await this.handlePartialClose(event);
-        break;
-      case MT5EventType.PENDING:
-        await this.handlePendingOrder(event);
-        break;
-      case MT5EventType.ACTIVATED:
-        await this.handleOrderActivation(event);
+      case MT5EventType.TEST:
+        await this.handleTestEvent(event);
         break;
       default:
         // For other event types, just log for now
         this.logger.debug(
-          `Event ${event.event} processed without specific logic`,
+          `Event ${event.event} processed and order updated with basic info`,
         );
     }
   }
@@ -206,7 +260,7 @@ export class WebhookService {
   private async handlePositionOpen(event: BaseMT5EventDto): Promise<void> {
     await Promise.resolve(); // Add await expression for ESLint
     this.logger.debug(
-      `Position opened: ${event.symbol} ${event.type || 'unknown'} ${event.volume || 0} lots at ${event.price || 0}`,
+      `Position opened/updated: ${event.symbol} ${event.type || 'unknown'} ${event.volume || 0} lots at ${event.price || 0}`,
     );
 
     // TODO: Implement specific logic for position opening:
@@ -221,7 +275,7 @@ export class WebhookService {
   private async handlePositionClose(event: BaseMT5EventDto): Promise<void> {
     await Promise.resolve(); // Add await expression for ESLint
     this.logger.debug(
-      `Position closed: ${event.symbol} with profit ${event.total_profit || 0}`,
+      `Position closed/updated: ${event.symbol} with profit ${event.total_profit || 0}`,
     );
 
     // TODO: Implement specific logic for position closing:
@@ -232,67 +286,15 @@ export class WebhookService {
   }
 
   /**
-   * Handle partial position closing
+   * Handle test event
    */
-  private async handlePartialClose(event: BaseMT5EventDto): Promise<void> {
+  private async handleTestEvent(event: BaseMT5EventDto): Promise<void> {
     await Promise.resolve(); // Add await expression for ESLint
-    this.logger.debug(
-      `Position partially closed: ${event.symbol} ${event.partial_close || 0} lots`,
+    this.logger.log(
+      `TEST event received: ticket=${event.ticket}, symbol=${event.symbol}, account=${event.account}, broker=${event.broker}`,
     );
 
-    // TODO: Implement specific logic for partial closing:
-    // - Update position size tracking
-    // - Partial profit calculations
-  }
-
-  /**
-   * Handle pending order placement
-   */
-  private async handlePendingOrder(event: BaseMT5EventDto): Promise<void> {
-    await Promise.resolve(); // Add await expression for ESLint
-    this.logger.debug(
-      `Pending order placed: ${event.symbol} ${event.order_type || 'unknown'} at ${event.order_price || 0}`,
-    );
-
-    // TODO: Implement specific logic for pending orders:
-    // - Track pending orders
-    // - Risk management checks
-  }
-
-  /**
-   * Handle order activation
-   */
-  private async handleOrderActivation(event: BaseMT5EventDto): Promise<void> {
-    await Promise.resolve(); // Add await expression for ESLint
-    this.logger.debug(
-      `Order activated: ${event.symbol} ${event.order_type || 'unknown'}`,
-    );
-
-    // TODO: Implement specific logic for order activation:
-    // - Update order status tracking
-    // - Notifications
-  }
-
-  /**
-   * Check if order event already exists (to prevent duplicates)
-   */
-  private async checkEventExists(
-    ticketId: string,
-    eventType: string,
-    timestamp: Date,
-  ): Promise<boolean> {
-    const result = await this.db
-      .select({ id: orders.id })
-      .from(orders)
-      .where(
-        and(
-          eq(orders.ticketId, ticketId),
-          eq(orders.eventType, eventType),
-          eq(orders.eventTimestamp, timestamp),
-        ),
-      )
-      .limit(1);
-
-    return result.length > 0;
+    // TEST events are used for webhook endpoint testing - no business logic needed
+    // Just log the event for verification purposes
   }
 }

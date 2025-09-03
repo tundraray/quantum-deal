@@ -16,18 +16,20 @@ export const drizzleProvider = [
       const logger = new Logger('DrizzleProvider');
 
       try {
+        // Get the database configuration using the proper namespace
         const connectionString =
-          configService.get<string>('DATABASE_URL') ||
-          configService.get<string>('database.url');
+          configService.getOrThrow<string>('DATABASE_URL');
 
-        if (!connectionString) {
-          throw new Error(
-            'DATABASE_URL environment variable is required for database connection',
-          );
-        }
+        // Create the connection pool with the configuration
+        const pool = new Pool({
+          connectionString: connectionString,
+        });
 
-        const pool = new Pool({ connectionString });
-        const client = drizzle(pool, { schema, casing: 'snake_case' });
+        // Create the Drizzle client
+        const client = drizzle(pool, {
+          schema,
+          casing: 'snake_case',
+        });
 
         logger.log('Drizzle database client created successfully');
 
