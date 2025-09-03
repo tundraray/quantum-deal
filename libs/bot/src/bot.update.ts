@@ -1,4 +1,4 @@
-import { UseFilters, UseInterceptors } from '@nestjs/common';
+import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
 
 import { Help, InjectBot, On, Message, Start, Update } from 'nestjs-telegraf';
 import { Context, Telegraf } from 'telegraf';
@@ -14,6 +14,7 @@ import { BotService } from './bot.service';
 @UseInterceptors(ResponseTimeInterceptor)
 @UseFilters(TelegrafExceptionFilter)
 export class BotUpdate {
+  private readonly logger = new Logger(BotUpdate.name);
   constructor(
     @InjectBot('QuantumDealBot')
     private readonly bot: Telegraf<Context>,
@@ -23,6 +24,10 @@ export class BotUpdate {
   @Start()
   async onStart(): Promise<string> {
     const me = await this.bot.telegram.getMe();
+    this.bot.telegram
+      .sendChatAction(me.id, 'typing')
+      .catch(this.logger.error.bind(this.logger));
+
     return `Hey, I'm ${me.first_name}`;
   }
 
