@@ -2,6 +2,7 @@ import {
   CallHandler,
   ExecutionContext,
   Injectable,
+  Logger,
   NestInterceptor,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
@@ -10,11 +11,11 @@ import { tap } from 'rxjs/operators';
 @Injectable()
 export class ResponseTimeInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    console.log('Before...');
+    Logger.debug('Starting...');
 
     const start = Date.now();
     return next
       .handle()
-      .pipe(tap(() => console.log(`Response time: ${Date.now() - start}ms`)));
+      .pipe(tap(() => Logger.debug(`Response time: ${Date.now() - start}ms`)));
   }
 }

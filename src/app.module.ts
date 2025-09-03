@@ -3,29 +3,44 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { BotModule, BotName } from '@quantumdeal/bot';
+import { BotModule, BotName, UserManagementMiddleware } from '@quantumdeal/bot';
 import { MasterbotModule } from '@quantumdeal/masterbot';
 import { DbModule } from '@quantumdeal/db';
 import { FrameworkModule } from '@quantumdeal/framework';
+import { session } from 'telegraf';
 
+export const sessionMiddleware = session();
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
     }),
+
+    BotModule,
+    MasterbotModule,
     DbModule,
     FrameworkModule,
     TelegrafModule.forRootAsync({
       botName: BotName,
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
+      imports: [ConfigModule, BotModule],
+      inject: [ConfigService, UserManagementMiddleware],
+
+      useFactory: (
+        configService: ConfigService,
+        userMiddleware: UserManagementMiddleware,
+      ) => ({
         token: configService.getOrThrow<string>('TELEGRAM_BOT_TOKEN'),
+        middlewares: [
+          userMiddleware.use.bind(userMiddleware),
+          sessionMiddleware,
+        ],
+
         webhook: {
           domain: configService.getOrThrow<string>(
             'TELEGRAM_BOT_WEBHOOK_DOMAIN',
           ),
+          allowedUpdates: ['message', 'callback_query', 'inline_query'],
           port: configService.get<number>('TELEGRAM_BOT_WEBHOOK_PORT', 443),
           path: '/bot',
         },
@@ -41,8 +56,6 @@ import { FrameworkModule } from '@quantumdeal/framework';
       }),
     }),
     */
-    BotModule,
-    MasterbotModule,
   ],
   controllers: [AppController],
   providers: [AppService],
