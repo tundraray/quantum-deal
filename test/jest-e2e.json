@@ -1,9 +1,23 @@
 {
-  "moduleFileExtensions": ["js", "json", "ts"],
+  "moduleFileExtensions": [
+    "js",
+    "json",
+    "ts"
+  ],
   "rootDir": ".",
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "@quantumdeal/bot": "<rootDir>/../libs/bot/src",
+    "@quantumdeal/bot/(.*)": "<rootDir>/../libs/bot/src/$1",
+    "@quantumdeal/db": "<rootDir>/../libs/db/src",
+    "@quantumdeal/db/(.*)": "<rootDir>/../libs/db/src/$1",
+    "@quantumdeal/framework": "<rootDir>/../libs/framework/src",
+    "@quantumdeal/framework/(.*)": "<rootDir>/../libs/framework/src/$1",
+    "@quantumdeal/masterbot": "<rootDir>/../libs/masterbot/src",
+    "@quantumdeal/masterbot/(.*)": "<rootDir>/../libs/masterbot/src/$1"
   }
 }

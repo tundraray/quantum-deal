@@ -3,6 +3,45 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
-    "deleteOutDir": true
+    "deleteOutDir": true,
+    "webpack": true
+  },
+  "projects": {
+    "bot": {
+      "type": "library",
+      "root": "libs/bot",
+      "entryFile": "index",
+      "sourceRoot": "libs/bot/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/bot/tsconfig.lib.json"
+      }
+    },
+    "db": {
+      "type": "library",
+      "root": "libs/db",
+      "entryFile": "index",
+      "sourceRoot": "libs/db/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/db/tsconfig.lib.json"
+      }
+    },
+    "framework": {
+      "type": "library",
+      "root": "libs/framework",
+      "entryFile": "index",
+      "sourceRoot": "libs/framework/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/framework/tsconfig.lib.json"
+      }
+    },
+    "masterbot": {
+      "type": "library",
+      "root": "libs/masterbot",
+      "entryFile": "index",
+      "sourceRoot": "libs/masterbot/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/masterbot/tsconfig.lib.json"
+      }
+    }
   }
 }

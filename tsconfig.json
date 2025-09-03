@@ -20,6 +20,32 @@
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": false,
     "strictBindCallApply": false,
-    "noFallthroughCasesInSwitch": false
+    "noFallthroughCasesInSwitch": false,
+    "paths": {
+      "@quantumdeal/bot": [
+        "libs/bot/src"
+      ],
+      "@quantumdeal/bot/*": [
+        "libs/bot/src/*"
+      ],
+      "@quantumdeal/db": [
+        "libs/db/src"
+      ],
+      "@quantumdeal/db/*": [
+        "libs/db/src/*"
+      ],
+      "@quantumdeal/framework": [
+        "libs/framework/src"
+      ],
+      "@quantumdeal/framework/*": [
+        "libs/framework/src/*"
+      ],
+      "@quantumdeal/masterbot": [
+        "libs/masterbot/src"
+      ],
+      "@quantumdeal/masterbot/*": [
+        "libs/masterbot/src/*"
+      ]
+    }
   }
 }
