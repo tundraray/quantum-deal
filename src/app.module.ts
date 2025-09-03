@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
+import { WebhookController } from './webhook.controller';
 import { AppService } from './app.service';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -57,7 +57,7 @@ export const sessionMiddleware = session();
     }),
     */
   ],
-  controllers: [AppController],
+  controllers: [WebhookController],
   providers: [AppService],
 })
 export class AppModule {}
