@@ -1,2 +1,11 @@
+// Module exports
 export * from './db.module';
-export * from './db.service';
+
+// Provider exports
+export * from './database.provider';
+
+// Repository exports
+export * from './repositories';
+
+// Schema exports
+export * from './schema';
