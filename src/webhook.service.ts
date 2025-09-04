@@ -1,14 +1,22 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { InjectBot } from 'nestjs-telegraf';
+import { Context, Telegraf } from 'telegraf';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { OrdersRepository, Order, NewOrder } from '@quantumdeal/db';
+import { NotificationService, BotName } from '@quantumdeal/bot';
+import { MessageType } from '@quantumdeal/db/schema';
 import { BaseMT5EventDto, MT5EventType, MT5EventDto } from './dto';
 
 @Injectable()
 export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
 
-  constructor(private readonly ordersRepository: OrdersRepository) {}
+  constructor(
+    private readonly ordersRepository: OrdersRepository,
+    private readonly notificationService: NotificationService,
+    @InjectBot(BotName) private readonly bot: Telegraf<Context>,
+  ) {}
 
   /**
    * Process MT5 trading event
@@ -28,13 +36,13 @@ export class WebhookService {
       const validatedEvent = await this.validateAndTransformEvent(rawData);
 
       // Handle order creation/update (skip for TEST events)
-      let savedEvent: { id?: number } = { id: undefined };
+      let savedEvent: Order | undefined;
       if (validatedEvent.event !== MT5EventType.TEST) {
         savedEvent = await this.handleOrderEvent(validatedEvent);
-      }
 
-      // Process event-specific business logic
-      await this.processEventSpecificLogic(validatedEvent);
+        // Process event-specific business logic
+        await this.processEventSpecificLogic(validatedEvent.event, savedEvent);
+      }
 
       this.logger.log(
         `Successfully processed ${validatedEvent.event} event for ticket ${validatedEvent.ticket}`,
@@ -42,7 +50,7 @@ export class WebhookService {
 
       return {
         success: true,
-        eventId: savedEvent.id,
+        eventId: savedEvent?.id,
         message: 'Event processed and order updated successfully',
       };
     } catch (error: unknown) {
@@ -235,21 +243,25 @@ export class WebhookService {
   /**
    * Process event-specific business logic
    */
-  private async processEventSpecificLogic(event: MT5EventDto): Promise<void> {
-    switch (event.event) {
+  private async processEventSpecificLogic(
+    eventType: MT5EventType,
+    order: Order,
+  ): Promise<void> {
+    switch (eventType) {
       case MT5EventType.OPEN:
-        await this.handlePositionOpen(event);
+        await this.handlePositionOpen(order);
         break;
       case MT5EventType.CLOSE:
-        await this.handlePositionClose(event);
+        await this.handlePositionClose(order);
         break;
-      case MT5EventType.TEST:
-        await this.handleTestEvent(event);
+      case MT5EventType.ORDER_SLTP_UPDATE:
+      case MT5EventType.POSITION_SLTP_UPDATE:
+        await this.handleSLTPUpdate(order);
         break;
       default:
         // For other event types, just log for now
         this.logger.debug(
-          `Event ${event.event} processed and order updated with basic info`,
+          `Event ${eventType} processed and order updated with basic info`,
         );
     }
   }
@@ -257,44 +269,118 @@ export class WebhookService {
   /**
    * Handle position opening
    */
-  private async handlePositionOpen(event: BaseMT5EventDto): Promise<void> {
-    await Promise.resolve(); // Add await expression for ESLint
+  private async handlePositionOpen(order: Order): Promise<void> {
     this.logger.debug(
-      `Position opened/updated: ${event.symbol} ${event.type || 'unknown'} ${event.volume || 0} lots at ${event.price || 0}`,
+      `Position opened/updated: ${order.symbol} ${order.lots || 0} lots at ${order.openPrice || 0}`,
     );
 
-    // TODO: Implement specific logic for position opening:
+    // Send notifications for position opening
+    try {
+      const notificationResult =
+        await this.notificationService.sendOrderNotifications(
+          order,
+          'open' as MessageType,
+          this.bot,
+        );
+
+      this.logger.log(
+        `OPEN notifications sent: ${notificationResult.sentCount} successful, ${notificationResult.failedCount} failed`,
+      );
+
+      if (notificationResult.errors.length > 0) {
+        this.logger.warn(
+          `OPEN notification errors: ${JSON.stringify(notificationResult.errors)}`,
+        );
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to send OPEN notifications: ${err.message}`,
+        err.stack,
+      );
+    }
+
+    // TODO: Implement additional logic for position opening:
     // - Update portfolio statistics
-    // - Send notifications if configured
     // - Update risk management metrics
   }
 
   /**
    * Handle position closing
    */
-  private async handlePositionClose(event: BaseMT5EventDto): Promise<void> {
-    await Promise.resolve(); // Add await expression for ESLint
+  private async handlePositionClose(order: Order): Promise<void> {
     this.logger.debug(
-      `Position closed/updated: ${event.symbol} with profit ${event.total_profit || 0}`,
+      `Position closed/updated: ${order.symbol} with profit ${order.profit || 0}`,
     );
 
-    // TODO: Implement specific logic for position closing:
+    // Send notifications for position closing
+    try {
+      const notificationResult =
+        await this.notificationService.sendOrderNotifications(
+          order,
+          order.profit && order.profit > 0
+            ? ('close_plus' as MessageType)
+            : ('close_minus' as MessageType),
+          this.bot,
+        );
+
+      this.logger.log(
+        `CLOSE notifications sent: ${notificationResult.sentCount} successful, ${notificationResult.failedCount} failed`,
+      );
+
+      if (notificationResult.errors.length > 0) {
+        this.logger.warn(
+          `CLOSE notification errors: ${JSON.stringify(notificationResult.errors)}`,
+        );
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to send CLOSE notifications: ${err.message}`,
+        err.stack,
+      );
+    }
+
+    // TODO: Implement additional logic for position closing:
     // - Update portfolio statistics
     // - Calculate performance metrics
-    // - Send profit/loss notifications
     // - Update risk management metrics
   }
 
   /**
-   * Handle test event
+   * Handle SL/TP update event
    */
-  private async handleTestEvent(event: BaseMT5EventDto): Promise<void> {
-    await Promise.resolve(); // Add await expression for ESLint
+  private async handleSLTPUpdate(order: Order): Promise<void> {
     this.logger.log(
-      `TEST event received: ticket=${event.ticket}, symbol=${event.symbol}, account=${event.account}, broker=${event.broker}`,
+      `SLTP update event received: ticket=${order.ticketId}, symbol=${order.symbol}, account=${order.account}, broker=${order.broker}`,
     );
 
-    // TEST events are used for webhook endpoint testing - no business logic needed
-    // Just log the event for verification purposes
+    // Send notifications for SL/TP update
+    try {
+      const notificationResult =
+        await this.notificationService.sendOrderNotifications(
+          order,
+          'position_sltp_update' as MessageType,
+          this.bot,
+        );
+
+      this.logger.log(
+        `SLTP_UPDATE notifications sent: ${notificationResult.sentCount} successful, ${notificationResult.failedCount} failed`,
+      );
+
+      if (notificationResult.errors.length > 0) {
+        this.logger.warn(
+          `SLTP_UPDATE notification errors: ${JSON.stringify(notificationResult.errors)}`,
+        );
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to send SLTP_UPDATE notifications: ${err.message}`,
+        err.stack,
+      );
+    }
+
+    // Log the SL/TP update for verification purposes
   }
 }
