@@ -19,7 +19,7 @@ ALTER TABLE "orders" ALTER COLUMN "order_type" DROP DEFAULT;--> statement-breakp
 ALTER TABLE "orders" ALTER COLUMN "ticket_id" SET DATA TYPE varchar(50);--> statement-breakpoint
 ALTER TABLE "messages" ALTER COLUMN "lang" SET DATA TYPE varchar(10) USING lang::varchar(10);--> statement-breakpoint
 ALTER TABLE "messages" ALTER COLUMN "lang" DROP DEFAULT;--> statement-breakpoint
-ALTER TABLE "messages" ALTER COLUMN "type" SET DATA TYPE varchar(10) USING type::varchar(10);--> statement-breakpoint
+ALTER TABLE "messages" ALTER COLUMN "type" SET DATA TYPE varchar(30) USING type::varchar(30);--> statement-breakpoint
 ALTER TABLE "messages" ALTER COLUMN "type" DROP DEFAULT;--> statement-breakpoint
 ALTER TABLE "users" ALTER COLUMN "username" SET DATA TYPE varchar(100);--> statement-breakpoint
 ALTER TABLE "users" ALTER COLUMN "username" DROP DEFAULT;--> statement-breakpoint
