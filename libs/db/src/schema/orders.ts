@@ -73,3 +73,8 @@ export const orders = pgTable(
 
 export type Order = typeof orders.$inferSelect;
 export type NewOrder = typeof orders.$inferInsert;
+
+export type MergedOrder = NewOrder & {
+  oldTakeProfit: number;
+  oldStopLoss: number;
+};

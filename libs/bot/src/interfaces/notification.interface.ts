@@ -1,5 +1,4 @@
-import { Order } from '@quantumdeal/db';
-import { MessageType } from '@quantumdeal/db/schema';
+import { MergedOrder, MessageType } from '@quantumdeal/db/schema';
 
 /**
  * User notification data including subscription and language preferences
@@ -22,14 +21,14 @@ export interface PreparedMessage {
   telegramId: number;
   messageText: string;
   messageType: MessageType;
-  order: Order;
+  order: MergedOrder;
 }
 
 /**
  * Notification context containing all relevant order and event data
  */
 export interface NotificationContext {
-  order: Order;
+  order: MergedOrder;
   eventType: MessageType;
   placeholders: OrderPlaceholders;
 }
@@ -39,12 +38,14 @@ export interface NotificationContext {
  */
 export interface OrderPlaceholders {
   symbol: string;
-  type: string;
+  order_type: string;
   lots: string;
   open_price: string;
   close_price?: string;
   stop_loss?: string;
+  old_stop_loss?: string;
   take_profit: string;
+  old_take_profit?: string;
   profit?: string;
   ticketId: string;
   sector?: string;

@@ -3,9 +3,9 @@ import { InjectBot } from 'nestjs-telegraf';
 import { Context, Telegraf } from 'telegraf';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { OrdersRepository, Order, NewOrder } from '@quantumdeal/db';
+import { OrdersRepository } from '@quantumdeal/db';
 import { NotificationService, BotName } from '@quantumdeal/bot';
-import { MessageType } from '@quantumdeal/db/schema';
+import { MergedOrder, MessageType } from '@quantumdeal/db/schema';
 import { BaseMT5EventDto, MT5EventType, MT5EventDto } from './dto';
 
 @Injectable()
@@ -36,7 +36,7 @@ export class WebhookService {
       const validatedEvent = await this.validateAndTransformEvent(rawData);
 
       // Handle order creation/update (skip for TEST events)
-      let savedEvent: Order | undefined;
+      let savedEvent: MergedOrder | null = null;
       if (validatedEvent.event !== MT5EventType.TEST) {
         savedEvent = await this.handleOrderEvent(validatedEvent);
 
@@ -103,17 +103,19 @@ export class WebhookService {
   /**
    * Handle order creation or update based on event type
    */
-  private async handleOrderEvent(validatedEvent: MT5EventDto) {
-    const existingOrder = await this.ordersRepository.findOneByTicket(
-      validatedEvent.ticket,
-    );
+  private async handleOrderEvent(
+    validatedEvent: MT5EventDto,
+  ): Promise<MergedOrder> {
+    const existingOrder = (await this.ordersRepository.findOneByTicket(
+      validatedEvent.position_id || validatedEvent.ticket,
+    )) as MergedOrder | null;
 
     if (existingOrder) {
       // Update existing order
-      return await this.updateExistingOrder(existingOrder, validatedEvent);
+      return this.updateExistingOrder(existingOrder, validatedEvent);
     } else {
       // Create new order
-      return await this.createNewOrder(validatedEvent);
+      return this.createNewOrder(validatedEvent);
     }
   }
 
@@ -157,14 +159,14 @@ export class WebhookService {
       comment: validatedEvent.comment || null,
     };
 
-    return await this.ordersRepository.create(newOrder);
+    return this.ordersRepository.create(newOrder) as Promise<MergedOrder>;
   }
 
   /**
    * Update existing order with new event data
    */
   private async updateExistingOrder(
-    existingOrder: Order,
+    existingOrder: MergedOrder,
     validatedEvent: MT5EventDto,
   ) {
     const eventTimestamp = new Date(validatedEvent.timestamp);
@@ -175,22 +177,22 @@ export class WebhookService {
     );
 
     const updatedOrders = await this.ordersRepository.updateByTicketId(
-      validatedEvent.ticket,
+      validatedEvent.position_id || validatedEvent.ticket,
       updates,
     );
 
-    return updatedOrders[0] || existingOrder;
+    return updatedOrders || existingOrder;
   }
 
   /**
    * Build update object based on event type
    */
   private buildOrderUpdates(
-    existingOrder: Order,
+    existingOrder: MergedOrder,
     validatedEvent: MT5EventDto,
     eventTimestamp: Date,
-  ): Partial<NewOrder> {
-    const baseUpdates: Partial<NewOrder> = {
+  ): Partial<MergedOrder> {
+    const baseUpdates: Partial<MergedOrder> = {
       eventTimestamp,
       updatedAt: new Date(),
     };
@@ -214,6 +216,8 @@ export class WebhookService {
       case MT5EventType.ORDER_SLTP_UPDATE:
         return {
           ...baseUpdates,
+          oldStopLoss: existingOrder.stopLoss || 0,
+          oldTakeProfit: existingOrder.takeProfit || 0,
           stopLoss: validatedEvent.sl || existingOrder.stopLoss,
           takeProfit: validatedEvent.tp || existingOrder.takeProfit,
           comment: validatedEvent.comment || existingOrder.comment,
@@ -226,8 +230,8 @@ export class WebhookService {
           orderType: validatedEvent.type || existingOrder.orderType,
           lots: validatedEvent.volume || existingOrder.lots,
           openPrice: validatedEvent.price || existingOrder.openPrice,
-          stopLoss: validatedEvent.sl || existingOrder.stopLoss,
-          takeProfit: validatedEvent.tp || existingOrder.takeProfit,
+          stopLoss: validatedEvent.sl || existingOrder.stopLoss || 0,
+          takeProfit: validatedEvent.tp || existingOrder.takeProfit || 0,
           comment: validatedEvent.comment || existingOrder.comment,
         };
 
@@ -245,7 +249,7 @@ export class WebhookService {
    */
   private async processEventSpecificLogic(
     eventType: MT5EventType,
-    order: Order,
+    order: MergedOrder,
   ): Promise<void> {
     switch (eventType) {
       case MT5EventType.OPEN:
@@ -269,7 +273,7 @@ export class WebhookService {
   /**
    * Handle position opening
    */
-  private async handlePositionOpen(order: Order): Promise<void> {
+  private async handlePositionOpen(order: MergedOrder): Promise<void> {
     this.logger.debug(
       `Position opened/updated: ${order.symbol} ${order.lots || 0} lots at ${order.openPrice || 0}`,
     );
@@ -308,7 +312,7 @@ export class WebhookService {
   /**
    * Handle position closing
    */
-  private async handlePositionClose(order: Order): Promise<void> {
+  private async handlePositionClose(order: MergedOrder): Promise<void> {
     this.logger.debug(
       `Position closed/updated: ${order.symbol} with profit ${order.profit || 0}`,
     );
@@ -350,7 +354,7 @@ export class WebhookService {
   /**
    * Handle SL/TP update event
    */
-  private async handleSLTPUpdate(order: Order): Promise<void> {
+  private async handleSLTPUpdate(order: MergedOrder): Promise<void> {
     this.logger.log(
       `SLTP update event received: ticket=${order.ticketId}, symbol=${order.symbol}, account=${order.account}, broker=${order.broker}`,
     );

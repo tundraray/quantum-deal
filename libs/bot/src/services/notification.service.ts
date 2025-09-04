@@ -6,10 +6,9 @@ import {
   UsersRepository,
   SubscriptionsRepository,
   MessagesRepository,
-  Order,
   users,
 } from '@quantumdeal/db';
-import { MessageType } from '@quantumdeal/db/schema';
+import { MessageType, MergedOrder } from '@quantumdeal/db/schema';
 import {
   NotificationUser,
   PreparedMessage,
@@ -84,7 +83,7 @@ export class NotificationService {
    * Main method to send notifications for order events
    */
   async sendOrderNotifications(
-    order: Order,
+    order: MergedOrder,
     eventType: MessageType,
     bot: Telegraf<Context>,
   ): Promise<NotificationResult> {
@@ -164,7 +163,9 @@ export class NotificationService {
   /**
    * Get users eligible for notifications based on order sector
    */
-  private async getEligibleUsers(order: Order): Promise<NotificationUser[]> {
+  private async getEligibleUsers(
+    order: MergedOrder,
+  ): Promise<NotificationUser[]> {
     if (!order.sector) {
       this.logger.debug('Order has no sector, no notifications will be sent');
       return [];
@@ -233,7 +234,7 @@ export class NotificationService {
   private async prepareMessages(
     users: NotificationUser[],
     eventType: MessageType,
-    order: Order,
+    order: MergedOrder,
   ): Promise<PreparedMessage[]> {
     const preparedMessages: PreparedMessage[] = [];
     const placeholders = this.createOrderPlaceholders(order);
@@ -279,14 +280,16 @@ export class NotificationService {
   /**
    * Create placeholder values from order data
    */
-  private createOrderPlaceholders(order: Order): OrderPlaceholders {
+  private createOrderPlaceholders(order: MergedOrder): OrderPlaceholders {
     return {
-      symbol: order.symbol,
-      type: order.orderType,
+      symbol: `#${order.symbol}`,
+      order_type: `#${order.orderType}`,
       lots: order.lots?.toString() || '0',
       close_price: order.closePrice?.toString(),
       open_price: order.openPrice?.toString(),
       profit: order.profit?.toString(),
+      old_take_profit: order.oldTakeProfit?.toString(),
+      old_stop_loss: order.oldStopLoss?.toString(),
       stop_loss: order.stopLoss?.toString() || '0',
       take_profit: order.takeProfit?.toString() || '0',
       ticketId: order.ticketId.toString(),

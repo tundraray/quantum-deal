@@ -2,7 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { BaseRepository } from './base.repository';
 import { DRIZZLE_CLIENT, type DrizzleClient } from '../database.provider';
-import { orders, Order, NewOrder } from '../schema/orders';
+import { orders, Order, NewOrder, MergedOrder } from '../schema/orders';
 
 @Injectable()
 export class OrdersRepository extends BaseRepository<Order, NewOrder, number> {
@@ -50,14 +50,20 @@ export class OrdersRepository extends BaseRepository<Order, NewOrder, number> {
    */
   async updateByTicketId(
     ticketId: number,
-    updates: Partial<NewOrder>,
-  ): Promise<Order[]> {
+    updates: Partial<MergedOrder>,
+  ): Promise<MergedOrder | null> {
     const updatedOrders = await this.db
       .update(orders)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(orders.ticketId, ticketId))
       .returning();
 
-    return updatedOrders;
+    return updatedOrders.length > 0
+      ? ({
+          ...updatedOrders[0],
+          oldStopLoss: updates.oldStopLoss,
+          oldTakeProfit: updates.oldTakeProfit,
+        } as MergedOrder)
+      : null;
   }
 }
