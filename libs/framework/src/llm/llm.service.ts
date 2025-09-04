@@ -178,9 +178,9 @@ export class LLMService {
         apiKey: this.configService.openaiApiKey,
       });
 
-      this.registerModel('gpt-4-turbo', {
+      this.registerModel('gpt-5', {
         provider: 'openai',
-        model: 'gpt-4-turbo',
+        model: 'gpt-5',
         apiKey: this.configService.openaiApiKey,
       });
     }
