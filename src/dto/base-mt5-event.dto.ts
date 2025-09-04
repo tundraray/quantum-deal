@@ -27,11 +27,6 @@ export enum MT5OrderType {
   SELL_STOP_LIMIT = 'SELL_STOP_LIMIT',
 }
 
-export enum MT5DealType {
-  BUY = 'BUY',
-  SELL = 'SELL',
-}
-
 export class BaseMT5EventDto {
   @IsEnum(MT5EventType)
   event: MT5EventType;

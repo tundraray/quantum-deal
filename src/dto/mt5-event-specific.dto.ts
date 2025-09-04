@@ -5,13 +5,9 @@
 
 import { BaseMT5EventDto } from './base-mt5-event.dto';
 
-// For now, we'll use BaseMT5EventDto directly since it handles all event types
+// Type aliases for the supported MT5 event types
 export type MT5OpenEventDto = BaseMT5EventDto;
 export type MT5CloseEventDto = BaseMT5EventDto;
-export type MT5PartialCloseEventDto = BaseMT5EventDto;
-export type MT5PendingEventDto = BaseMT5EventDto;
-export type MT5ActivatedEventDto = BaseMT5EventDto;
-export type MT5OrderStateChangeEventDto = BaseMT5EventDto;
 export type MT5OrderSLTPUpdateEventDto = BaseMT5EventDto;
 export type MT5PositionSLTPUpdateEventDto = BaseMT5EventDto;
 
