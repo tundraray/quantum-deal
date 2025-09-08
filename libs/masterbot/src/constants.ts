@@ -2,8 +2,10 @@
  * Master bot constants and configuration
  */
 
+export const MASTERBOT_BOT_NAME = 'QuantumDealMasterBot';
+
 export const MASTERBOT_CONSTANTS = {
-  BOT_NAME: 'QuantumDealMasterBot',
+  BOT_NAME: MASTERBOT_BOT_NAME,
   COMMANDS: {
     START: '/start',
     STATS: '/stats',
@@ -18,6 +20,10 @@ export const MASTERBOT_CONSTANTS = {
   },
   CALLBACK_ACTIONS: {
     SUBSCRIPTION_PREFIX: 'subscription_',
+    MENU_STATS: 'menu_stats',
+    MENU_CODE: 'menu_code',
+    MENU_HELP: 'menu_help',
+    MENU_MAIN: 'menu_main',
   },
 } as const;
 

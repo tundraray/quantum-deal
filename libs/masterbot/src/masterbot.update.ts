@@ -14,11 +14,9 @@ import {
   TelegrafExceptionFilter,
 } from '@quantumdeal/framework';
 import { SubscriptionsRepository, CodesRepository } from '@quantumdeal/db';
-import { BotName, UserContext as BotUserContext } from '@quantumdeal/bot';
 import { MasterbotService } from './masterbot.service';
 import type { UserContext } from './interfaces';
-import { MASTERBOT_CONSTANTS } from './constants';
-import { ConfigService } from '@nestjs/config';
+import { MASTERBOT_CONSTANTS, MASTERBOT_BOT_NAME } from './constants';
 import { Telegraf } from 'telegraf';
 
 @Update()
@@ -28,12 +26,11 @@ export class MasterbotUpdate {
   private readonly logger = new Logger(MasterbotUpdate.name);
 
   constructor(
-    @InjectBot(BotName)
-    private readonly bot: Telegraf<BotUserContext>,
+    @InjectBot(MASTERBOT_BOT_NAME)
+    private readonly bot: Telegraf<UserContext>,
     private readonly masterbotService: MasterbotService,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly codesRepository: CodesRepository,
-    private readonly configService: ConfigService,
   ) {}
 
   @Start()
@@ -49,11 +46,11 @@ export class MasterbotUpdate {
       // Show typing indicator
       await ctx.sendChatAction('typing');
 
-      // Log manager action
-      this.masterbotService.logManagerAction(manager, 'START_COMMAND');
-
       const welcomeMessage = this.masterbotService.onStart(manager);
-      await ctx.reply(welcomeMessage, { parse_mode: 'Markdown' });
+
+      await ctx.reply(welcomeMessage, {
+        parse_mode: 'Markdown',
+      });
     } catch (error) {
       this.logger.error('Error in start command', error);
       await ctx.reply(MASTERBOT_CONSTANTS.MESSAGES.ERROR_GENERIC);
@@ -85,7 +82,10 @@ export class MasterbotUpdate {
       const formattedMessage =
         this.masterbotService.formatUserStatistics(stats);
 
-      await ctx.reply(formattedMessage, { parse_mode: 'Markdown' });
+      await ctx.reply(formattedMessage, {
+        parse_mode: 'Markdown',
+        reply_markup: this.createBackToMenuKeyboard(),
+      });
     } catch (error) {
       this.logger.error('Error in stats command', error);
       await ctx.reply(
@@ -115,7 +115,10 @@ export class MasterbotUpdate {
       `This bot provides administrative tools for monitoring the QuantumDeal bot ecosystem.\n\n` +
       `_Logged in as: ${manager.username || manager.firstName || `Manager ${manager.telegramId}`}_`;
 
-    await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
+    await ctx.reply(helpMessage, {
+      parse_mode: 'Markdown',
+      reply_markup: this.createBackToMenuKeyboard(),
+    });
   }
 
   @Command('code')
@@ -149,13 +152,23 @@ export class MasterbotUpdate {
       }
 
       // Create inline keyboard with subscription options
+      const subscriptionButtons = availableSubscriptions.map((subscription) => [
+        {
+          text: subscription.name,
+          callback_data: `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.SUBSCRIPTION_PREFIX}${subscription.id}`,
+        },
+      ]);
+
+      // Add back to menu button
+      subscriptionButtons.push([
+        {
+          text: '🔙 Back to Menu',
+          callback_data: MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.MENU_MAIN,
+        },
+      ]);
+
       const keyboard = {
-        inline_keyboard: availableSubscriptions.map((subscription) => [
-          {
-            text: subscription.name,
-            callback_data: `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.SUBSCRIPTION_PREFIX}${subscription.id}`,
-          },
-        ]),
+        inline_keyboard: subscriptionButtons,
       };
 
       await ctx.reply(
@@ -184,6 +197,20 @@ export class MasterbotUpdate {
     }
 
     return result;
+  }
+
+  // Helper method to create back to menu keyboard
+  private createBackToMenuKeyboard() {
+    return {
+      inline_keyboard: [
+        [
+          {
+            text: '🔙 Back to Menu',
+            callback_data: MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.MENU_MAIN,
+          },
+        ],
+      ],
+    };
   }
 
   @Action(/^subscription_(\d+)$/)
@@ -269,7 +296,10 @@ export class MasterbotUpdate {
         `📅 **Generated:** ${new Date().toLocaleString()}\n\n` +
         `🎫 **Code URL:**\n \`${codeUrl}\``;
 
-      await ctx.sendMessage(successMessage, { parse_mode: 'Markdown' });
+      await ctx.sendMessage(successMessage, {
+        parse_mode: 'Markdown',
+        reply_markup: this.createBackToMenuKeyboard(),
+      });
 
       // Answer the callback query to stop the loading indicator
       await ctx.answerCbQuery('Code generated successfully! ✅');
@@ -284,5 +314,29 @@ export class MasterbotUpdate {
         this.logger.error('Error answering callback query', cbError);
       }
     }
+  }
+
+  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.MENU_STATS)
+  async onMenuStats(@Ctx() ctx: UserContext): Promise<void> {
+    await ctx.answerCbQuery('Loading statistics...');
+    await this.onStats(ctx);
+  }
+
+  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.MENU_CODE)
+  async onMenuCode(@Ctx() ctx: UserContext): Promise<void> {
+    await ctx.answerCbQuery('Loading code generator...');
+    await this.onCode(ctx);
+  }
+
+  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.MENU_HELP)
+  async onMenuHelp(@Ctx() ctx: UserContext): Promise<void> {
+    await ctx.answerCbQuery('Loading help...');
+    await this.onHelp(ctx);
+  }
+
+  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.MENU_MAIN)
+  async onMenuMain(@Ctx() ctx: UserContext): Promise<void> {
+    await ctx.answerCbQuery('Loading main menu...');
+    await this.onStart(ctx);
   }
 }
