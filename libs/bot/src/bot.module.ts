@@ -4,6 +4,7 @@ import { BotUpdate } from './bot.update';
 import { RandomNumberScene } from './scenes/random-number.scene';
 import { UserManagementMiddleware } from './middleware';
 import { NotificationService } from './services/notification.service';
+import { WeekReportService } from './scheduling/week-report.service';
 import { DbModule } from '@quantumdeal/db';
 import { FrameworkModule } from '@quantumdeal/framework';
 
@@ -15,6 +16,7 @@ import { FrameworkModule } from '@quantumdeal/framework';
     RandomNumberScene,
     UserManagementMiddleware,
     NotificationService,
+    WeekReportService,
   ],
   exports: [
     BotService,
@@ -22,6 +24,7 @@ import { FrameworkModule } from '@quantumdeal/framework';
     RandomNumberScene,
     UserManagementMiddleware,
     NotificationService,
+    WeekReportService,
   ],
 })
 export class BotModule {}
