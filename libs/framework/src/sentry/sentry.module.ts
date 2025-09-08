@@ -10,6 +10,8 @@ import { SentryService } from './sentry.service';
   imports: [ConfigModule],
   providers: [
     SentryService,
+    SentryGlobalExceptionFilter,
+    SentryPerformanceInterceptor,
     {
       provide: APP_FILTER,
       useClass: SentryGlobalExceptionFilter,

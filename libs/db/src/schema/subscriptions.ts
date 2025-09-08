@@ -9,7 +9,7 @@ import {
 export const subscriptions = pgTable('subscriptions', {
   id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
   name: varchar('name').notNull(),
-  scope: jsonb('scope'),
+  scope: jsonb('scope').$type<string[] | null>(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

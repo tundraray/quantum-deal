@@ -66,18 +66,19 @@ export abstract class BaseRepository<TSelect = any, TInsert = any, TKey = any>
     return (result.rowCount ?? 0) > 0;
   }
 
-  async findBy(condition: SQL): Promise<TSelect[]> {
-    return this.db.select().from(this.table).where(condition) as Promise<
-      TSelect[]
-    >;
+  async findBy(condition?: SQL): Promise<TSelect[]> {
+    if (condition) {
+      return this.db.select().from(this.table).where(condition) as Promise<
+        TSelect[]
+      >;
+    }
+    return this.db.select().from(this.table) as Promise<TSelect[]>;
   }
 
-  async findOneBy(condition: SQL): Promise<TSelect | null> {
-    const result = await this.db
-      .select()
-      .from(this.table)
-      .where(condition)
-      .limit(1);
+  async findOneBy(condition?: SQL): Promise<TSelect | null> {
+    const result = condition
+      ? await this.db.select().from(this.table).where(condition).limit(1)
+      : await this.db.select().from(this.table).limit(1);
 
     return (result[0] as TSelect) || null;
   }

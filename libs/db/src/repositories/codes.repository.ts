@@ -16,6 +16,6 @@ export class CodesRepository extends BaseRepository<Code, NewCode, number> {
   public async findByCode(code: string) {
     const condition = and(eq(this.table.code, code), isNull(this.table.userId));
 
-    return this.findOneBy(condition!);
+    return this.findOneBy(condition);
   }
 }

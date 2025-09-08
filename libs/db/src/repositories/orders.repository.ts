@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, gte, lte, isNotNull, inArray } from 'drizzle-orm';
 import { BaseRepository } from './base.repository';
 import { DRIZZLE_CLIENT, type DrizzleClient } from '../database.provider';
 import { orders, Order, NewOrder, MergedOrder } from '../schema/orders';
@@ -34,15 +34,39 @@ export class OrdersRepository extends BaseRepository<Order, NewOrder, number> {
     return this.findBy(eq(orders.positionId, positionId));
   }
 
-  /**
-   * Check if an event already exists (to prevent duplicates)
-   * @deprecated Use findOneByTicket instead for update scenarios
-   */
-  async eventExists(ticketId: number): Promise<boolean> {
-    const condition = and(eq(orders.ticketId, ticketId));
+  findAllByPeriod(startDate: Date, endDate: Date): Promise<Order[]> {
+    return this.findBy(
+      and(
+        gte(orders.closeTime, startDate),
+        lte(orders.closeTime, endDate),
+        isNotNull(orders.closeTime),
+      ),
+    );
+  }
 
-    const result = await this.findOneBy(condition!);
-    return result !== null;
+  /**
+   * Find orders by event timestamp period with optional sector filtering
+   */
+  async findByEventPeriod(
+    startDate: Date,
+    endDate: Date,
+    allowedSectors?: string[],
+  ): Promise<Order[]> {
+    if (Array.isArray(allowedSectors) && allowedSectors.length === 0) {
+      return [];
+    }
+
+    const baseCondition = and(
+      gte(orders.eventTimestamp, startDate),
+      lte(orders.eventTimestamp, endDate),
+    );
+
+    const condition =
+      Array.isArray(allowedSectors) && allowedSectors.length > 0
+        ? and(baseCondition, inArray(orders.sector, allowedSectors))
+        : baseCondition;
+
+    return this.findBy(condition);
   }
 
   /**
