@@ -242,12 +242,12 @@ export class NotificationService {
     for (const user of users) {
       try {
         // Get a random message template for the user's language
-        const messageTemplate = await this.messagesRepository.findByTypeAndLang(
+        const messageTemplate = await this.messagesRepository.getReportTemplate(
           eventType,
           user.lang || 'en',
         );
 
-        if (!messageTemplate || !messageTemplate.message) {
+        if (!messageTemplate) {
           this.logger.warn(
             `No message template found for type: ${eventType}, lang: ${user.lang}`,
           );
@@ -256,7 +256,7 @@ export class NotificationService {
 
         // Replace placeholders in the message
         const messageText = this.replacePlaceholders(
-          messageTemplate.message,
+          messageTemplate,
           placeholders,
         );
 
