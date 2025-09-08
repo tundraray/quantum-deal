@@ -55,20 +55,18 @@ export const orders = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => ({
+  (table) => [
     // Indexes for better performance
-    ticketIdIdx: index('orders_ticket_id_idx').on(table.ticketId),
-    accountIdx: index('orders_account_idx').on(table.account),
-    symbolIdx: index('orders_symbol_idx').on(table.symbol),
-    eventTimestampIdx: index('orders_event_timestamp_idx').on(
-      table.eventTimestamp,
-    ),
-    accountEventTimestampIdx: index('orders_account_event_timestamp_idx').on(
+    index('orders_ticket_id_idx').on(table.ticketId),
+    index('orders_account_idx').on(table.account),
+    index('orders_symbol_idx').on(table.symbol),
+    index('orders_event_timestamp_idx').on(table.eventTimestamp),
+    index('orders_account_event_timestamp_idx').on(
       table.account,
       table.eventTimestamp,
     ),
-    positionIdIdx: index('orders_position_id_idx').on(table.positionId),
-  }),
+    index('orders_position_id_idx').on(table.positionId),
+  ],
 );
 
 export type Order = typeof orders.$inferSelect;
