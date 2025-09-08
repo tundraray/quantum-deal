@@ -3,6 +3,7 @@ import { WebhookController } from './webhook.controller';
 import { WebhookService } from './webhook.service';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import {
   BotModule,
   BotName,
@@ -11,7 +12,7 @@ import {
 } from '@quantumdeal/bot';
 import { MasterbotModule } from '@quantumdeal/masterbot';
 import { DbModule, OrdersRepository } from '@quantumdeal/db';
-import { FrameworkModule } from '@quantumdeal/framework';
+import { FrameworkModule, SentryModule } from '@quantumdeal/framework';
 import { session } from 'telegraf';
 
 export const sessionMiddleware = session();
@@ -21,6 +22,8 @@ export const sessionMiddleware = session();
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(),
+    SentryModule,
 
     BotModule,
     MasterbotModule,
