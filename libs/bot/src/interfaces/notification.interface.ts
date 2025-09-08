@@ -56,6 +56,78 @@ export interface OrderPlaceholders {
 }
 
 /**
+ * Message priority levels for queue processing
+ */
+export enum MessagePriority {
+  LOW = 1,
+  NORMAL = 5,
+  HIGH = 10,
+  CRITICAL = 15,
+}
+
+/**
+ * Message types for different notification scenarios
+ */
+export enum QueuedMessageType {
+  TEXT = 'text',
+  HTML = 'html',
+  MARKDOWN = 'markdown',
+}
+
+/**
+ * Queue message status for tracking
+ */
+export enum QueueMessageStatus {
+  PENDING = 'pending',
+  PROCESSING = 'processing',
+  SENT = 'sent',
+  FAILED = 'failed',
+  RETRY = 'retry',
+}
+
+/**
+ * Queued message interface for the notification system
+ */
+export interface QueuedMessage {
+  id: string;
+  userId: number;
+  message: string;
+  messageType: QueuedMessageType;
+  priority: MessagePriority;
+  status: QueueMessageStatus;
+  retryCount: number;
+  maxRetries: number;
+  createdAt: Date;
+  scheduledAt?: Date;
+  processedAt?: Date;
+  error?: string;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Message options for sending notifications
+ */
+export interface MessageOptions {
+  messageType?: QueuedMessageType;
+  priority?: MessagePriority;
+  maxRetries?: number;
+  scheduledAt?: Date;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Queue statistics interface
+ */
+export interface QueueStats {
+  totalMessages: number;
+  pendingMessages: number;
+  processingMessages: number;
+  sentMessages: number;
+  failedMessages: number;
+  retryMessages: number;
+}
+
+/**
  * Rate limiting configuration for notifications
  */
 export interface RateLimitConfig {
@@ -67,13 +139,35 @@ export interface RateLimitConfig {
 }
 
 /**
+ * Bottleneck configuration for different message types
+ */
+export interface BottleneckConfig {
+  default: RateLimitConfig;
+  high?: RateLimitConfig;
+  critical?: RateLimitConfig;
+}
+
+/**
  * Notification sending result
  */
 export interface NotificationResult {
   success: boolean;
   sentCount: number;
   failedCount: number;
+  retryCount: number;
   errors: NotificationError[];
+  processedIds: string[];
+}
+
+/**
+ * Batch message sending result
+ */
+export interface BatchSendResult {
+  queuedCount: number;
+  duplicateCount: number;
+  errorCount: number;
+  queuedIds: string[];
+  errors: string[];
 }
 
 /**

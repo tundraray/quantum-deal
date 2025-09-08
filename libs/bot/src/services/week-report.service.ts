@@ -11,7 +11,11 @@ import {
   Order,
   MessageType,
 } from '@quantumdeal/db';
-import { Telegraf, Context } from 'telegraf';
+import { NotificationService } from './notification.service';
+import {
+  MessagePriority,
+  QueuedMessageType,
+} from '../interfaces/notification.interface';
 
 enum ReportType {
   WEEKLY = 'weekly',
@@ -112,6 +116,7 @@ export class WeekReportService {
     private readonly ordersRepository: OrdersRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly messagesRepository: MessagesRepository,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -165,9 +170,7 @@ export class WeekReportService {
   /**
    * Generate client-specific weekly reports for all active subscribers
    */
-  async generateClientWeeklyReports(
-    bot?: Telegraf<Context>,
-  ): Promise<ClientReportResult> {
+  async generateClientWeeklyReports(): Promise<ClientReportResult> {
     this.logger.log('Starting client-specific weekly reports generation');
 
     try {
@@ -190,7 +193,7 @@ export class WeekReportService {
       );
 
       const results = await Promise.allSettled(
-        activeClients.map((client) => this.generateClientReport(client, bot)),
+        activeClients.map((client) => this.generateClientReport(client)),
       );
 
       // Process results
@@ -289,9 +292,7 @@ export class WeekReportService {
    * Generate client-specific monthly reports for all active subscribers
    * Uses shared data approach - calculates data once and formats per client's language
    */
-  async generateClientMonthlyReports(
-    bot?: Telegraf<Context>,
-  ): Promise<ClientReportResult> {
+  async generateClientMonthlyReports(): Promise<ClientReportResult> {
     this.logger.log(
       'Starting client-specific monthly reports generation (optimized approach)',
     );
@@ -322,11 +323,7 @@ export class WeekReportService {
       // Generate personalized reports using the shared data (only template/language differs)
       const results = await Promise.allSettled(
         activeClients.map((client) =>
-          this.sendClientMonthlyReportWithSharedData(
-            client,
-            sharedMonthlyData,
-            bot,
-          ),
+          this.sendClientMonthlyReportWithSharedData(client, sharedMonthlyData),
         ),
       );
 
@@ -503,7 +500,6 @@ export class WeekReportService {
    */
   private async generateClientReport(
     client: ClientSubscription,
-    bot?: Telegraf<Context>,
   ): Promise<boolean> {
     try {
       const { startDate, endDate } = this.calculateWeeklyPeriod();
@@ -535,7 +531,7 @@ export class WeekReportService {
       };
 
       // Always send personalized report (saves to messages table)
-      await this.sendClientReport(clientReport, bot);
+      await this.sendClientReport(clientReport);
 
       this.logger.debug(
         `Generated personalized report for client ${client.telegramId}`,
@@ -772,20 +768,18 @@ export class WeekReportService {
 
   private async sendClientReport(
     clientReport: ClientWeeklyReportData,
-    bot?: Telegraf<Context>,
   ): Promise<void> {
     try {
       const reportMessage = await this.formatClientWeeklyReport(clientReport);
-      if (bot) {
-        await bot.telegram.sendMessage(
-          clientReport.client.telegramId,
-          reportMessage,
-          {
-            parse_mode: 'HTML',
-            link_preview_options: { is_disabled: true },
-          },
-        );
-      }
+
+      this.notificationService.addMessage(
+        clientReport.client.telegramId,
+        reportMessage,
+        {
+          messageType: QueuedMessageType.HTML,
+          priority: MessagePriority.NORMAL,
+        },
+      );
 
       this.logger.debug(
         `Successfully saved and sent weekly report to client ${clientReport.client.telegramId}`,
@@ -806,7 +800,6 @@ export class WeekReportService {
   private async sendClientMonthlyReportWithSharedData(
     client: ClientSubscription,
     sharedData: SharedMonthlyReportData,
-    bot?: Telegraf<Context>,
   ): Promise<boolean> {
     try {
       // Build client-specific report structure for formatting
@@ -830,12 +823,11 @@ export class WeekReportService {
       };
 
       const reportMessage = await this.formatClientMonthlyReport(clientReport);
-      if (bot) {
-        await bot.telegram.sendMessage(client.telegramId, reportMessage, {
-          parse_mode: 'HTML',
-          link_preview_options: { is_disabled: true },
-        });
-      }
+
+      this.notificationService.addMessage(client.telegramId, reportMessage, {
+        messageType: QueuedMessageType.HTML,
+        priority: MessagePriority.NORMAL,
+      });
 
       this.logger.debug(
         `Successfully sent monthly report to client ${client.telegramId} using shared data`,

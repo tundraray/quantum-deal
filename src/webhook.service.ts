@@ -4,7 +4,7 @@ import { Context, Telegraf } from 'telegraf';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { OrdersRepository } from '@quantumdeal/db';
-import { NotificationService, BotName } from '@quantumdeal/bot';
+import { WebhookProcessorService, BotName } from '@quantumdeal/bot';
 import { MergedOrder, MessageType } from '@quantumdeal/db/schema';
 import { BaseMT5EventDto, MT5EventType, MT5EventDto } from './dto';
 import { SentryService } from '@quantumdeal/framework';
@@ -15,7 +15,7 @@ export class WebhookService {
 
   constructor(
     private readonly ordersRepository: OrdersRepository,
-    private readonly notificationService: NotificationService,
+    private readonly notificationService: WebhookProcessorService,
     @InjectBot(BotName) private readonly bot: Telegraf<Context>,
     private readonly sentryService: SentryService,
   ) {}
@@ -329,7 +329,6 @@ export class WebhookService {
         await this.notificationService.sendOrderNotifications(
           order,
           'open' as MessageType,
-          this.bot,
         );
 
       this.logger.log(
@@ -370,7 +369,6 @@ export class WebhookService {
           order.profit && order.profit > 0
             ? ('close_plus' as MessageType)
             : ('close_minus' as MessageType),
-          this.bot,
         );
 
       this.logger.log(
@@ -410,7 +408,6 @@ export class WebhookService {
         await this.notificationService.sendOrderNotifications(
           order,
           'position_sltp_update' as MessageType,
-          this.bot,
         );
 
       this.logger.log(
