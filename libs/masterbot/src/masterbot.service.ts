@@ -127,6 +127,6 @@ export class MasterbotService {
       ...details,
     };
 
-    this.logger.log(`Manager Action: ${action}`, logData);
+    this.logger.debug(`Manager Action: ${action}`, logData);
   }
 }
