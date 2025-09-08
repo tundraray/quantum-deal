@@ -84,11 +84,4 @@ export class BotUpdate {
       }
     }
   }
-
-  @On('text')
-  onMessage(
-    @Message('text', new ReverseTextPipe()) reversedText: string,
-  ): string {
-    return this.botService.echo(reversedText);
-  }
 }

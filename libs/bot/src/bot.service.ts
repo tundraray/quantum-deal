@@ -58,8 +58,4 @@ export class BotService {
     }
     return user;
   }
-
-  echo(text: string): string {
-    return `Echo: ${text}`;
-  }
 }

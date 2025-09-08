@@ -1,4 +1,5 @@
 // Export all schema tables and types
+export * from './enums';
 export * from './users';
 export * from './managers';
 export * from './orders';

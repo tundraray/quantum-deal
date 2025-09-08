@@ -1,6 +1,7 @@
 import { pgTable, timestamp, varchar, bigint } from 'drizzle-orm/pg-core';
 import { subscriptions } from './subscriptions';
 import { users } from './users';
+import { managers } from './managers';
 
 export const codes = pgTable('codes', {
   id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
@@ -10,6 +11,9 @@ export const codes = pgTable('codes', {
     .references(() => subscriptions.id),
   userId: bigint('user_id', { mode: 'number' }).references(
     () => users.telegramId,
+  ),
+  managerId: bigint('manager_id', { mode: 'number' }).references(
+    () => managers.telegramId,
   ),
   activationDate: timestamp('activation_date'),
   expirationDate: timestamp('expiration_date'),
