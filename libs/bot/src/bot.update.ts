@@ -14,7 +14,6 @@ import { deunionize, Telegraf } from 'telegraf';
 import {
   ResponseTimeInterceptor,
   TelegrafExceptionFilter,
-  ReverseTextPipe,
   CallbackQueryData,
   SplitCommandPipe,
 } from '@quantumdeal/framework';
