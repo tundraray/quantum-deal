@@ -6,3 +6,4 @@ export * from './filters/telegraf-exception.filter';
 export * from './interfaces/context.interface';
 export * from './decorators';
 export * from './llm';
+export * from './sentry';

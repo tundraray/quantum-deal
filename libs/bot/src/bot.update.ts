@@ -14,7 +14,6 @@ import { deunionize, Telegraf } from 'telegraf';
 import {
   ResponseTimeInterceptor,
   TelegrafExceptionFilter,
-  ReverseTextPipe,
   CallbackQueryData,
   SplitCommandPipe,
 } from '@quantumdeal/framework';
@@ -83,12 +82,5 @@ export class BotUpdate {
           break;
       }
     }
-  }
-
-  @On('text')
-  onMessage(
-    @Message('text', new ReverseTextPipe()) reversedText: string,
-  ): string {
-    return this.botService.echo(reversedText);
   }
 }

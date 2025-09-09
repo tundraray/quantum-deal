@@ -1,0 +1,10 @@
+[defaults]
+org=SENTRY_ORG
+project=SENTRY_PROJECT
+
+[auth]
+token=SENTRY_AUTH_TOKEN
+
+[cli]
+# Path to the sentry-cli binary
+path=./node_modules/.bin/sentry-cli

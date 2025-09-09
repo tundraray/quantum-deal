@@ -1,0 +1,21 @@
+{
+  "name": "@quantumdeal/framework",
+  "version": "0.0.1",
+  "description": "Framework utilities and shared components for QuantumDeal",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "private": true,
+  "dependencies": {
+    "@sentry/nestjs": "^10.10.0",
+    "@sentry/profiling-node": "^10.10.0"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/config": "^4.0.0",
+    "rxjs": "^7.8.0",
+    "reflect-metadata": "^0.2.0",
+    "class-transformer": "^0.5.0",
+    "class-validator": "^0.14.0"
+  }
+}

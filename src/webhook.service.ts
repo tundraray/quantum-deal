@@ -4,9 +4,10 @@ import { Context, Telegraf } from 'telegraf';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { OrdersRepository } from '@quantumdeal/db';
-import { NotificationService, BotName } from '@quantumdeal/bot';
+import { WebhookProcessorService, BotName } from '@quantumdeal/bot';
 import { MergedOrder, MessageType } from '@quantumdeal/db/schema';
 import { BaseMT5EventDto, MT5EventType, MT5EventDto } from './dto';
+import { SentryService } from '@quantumdeal/framework';
 
 @Injectable()
 export class WebhookService {
@@ -14,8 +15,9 @@ export class WebhookService {
 
   constructor(
     private readonly ordersRepository: OrdersRepository,
-    private readonly notificationService: NotificationService,
+    private readonly notificationService: WebhookProcessorService,
     @InjectBot(BotName) private readonly bot: Telegraf<Context>,
+    private readonly sentryService: SentryService,
   ) {}
 
   /**
@@ -26,11 +28,30 @@ export class WebhookService {
     eventId?: number;
     message: string;
   }> {
+    const startTime = Date.now();
+
     try {
       const data = rawData as { event?: string; ticket?: string };
       this.logger.debug(
         `Processing MT5 event: ${data.event || 'unknown'} for ticket ${data.ticket || 'unknown'}`,
       );
+
+      // Add Sentry breadcrumb for tracking
+      this.sentryService.addBreadcrumb({
+        message: `Processing MT5 event: ${data.event}`,
+        category: 'webhook',
+        level: 'info',
+        data: {
+          event_type: data.event,
+          ticket: data.ticket,
+        },
+      });
+
+      // Track webhook event
+      this.sentryService.trackWebhookEvent(data.event || 'unknown', {
+        ticket: data.ticket,
+        timestamp: new Date().toISOString(),
+      });
 
       // Validate and transform the incoming data
       const validatedEvent = await this.validateAndTransformEvent(rawData);
@@ -44,9 +65,23 @@ export class WebhookService {
         await this.processEventSpecificLogic(validatedEvent.event, savedEvent);
       }
 
+      const processingTime = Date.now() - startTime;
       this.logger.log(
-        `Successfully processed ${validatedEvent.event} event for ticket ${validatedEvent.ticket}`,
+        `Successfully processed ${validatedEvent.event} event for ticket ${validatedEvent.ticket} in ${processingTime}ms`,
       );
+
+      // Track successful processing
+      this.sentryService.addBreadcrumb({
+        message: `Successfully processed ${validatedEvent.event} event`,
+        category: 'webhook',
+        level: 'info',
+        data: {
+          event_type: validatedEvent.event,
+          ticket: validatedEvent.ticket,
+          processing_time_ms: processingTime,
+          order_id: savedEvent?.id,
+        },
+      });
 
       return {
         success: true,
@@ -55,6 +90,16 @@ export class WebhookService {
       };
     } catch (error: unknown) {
       const err = error as Error;
+      const processingTime = Date.now() - startTime;
+
+      // Capture error with context in Sentry
+      this.sentryService.captureException(err, {
+        webhook_data: rawData,
+        processing_time_ms: processingTime,
+        service: 'WebhookService',
+        method: 'processTradeEvent',
+      });
+
       this.logger.error(
         `Error processing MT5 event: ${err.message}`,
         err.stack,
@@ -284,7 +329,6 @@ export class WebhookService {
         await this.notificationService.sendOrderNotifications(
           order,
           'open' as MessageType,
-          this.bot,
         );
 
       this.logger.log(
@@ -325,7 +369,6 @@ export class WebhookService {
           order.profit && order.profit > 0
             ? ('close_plus' as MessageType)
             : ('close_minus' as MessageType),
-          this.bot,
         );
 
       this.logger.log(
@@ -365,7 +408,6 @@ export class WebhookService {
         await this.notificationService.sendOrderNotifications(
           order,
           'position_sltp_update' as MessageType,
-          this.bot,
         );
 
       this.logger.log(

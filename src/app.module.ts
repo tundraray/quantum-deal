@@ -1,18 +1,14 @@
 import { Module } from '@nestjs/common';
 import { WebhookController } from './webhook.controller';
-import { WebhookService } from './webhook.service';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import {
-  BotModule,
-  BotName,
-  UserManagementMiddleware,
-  NotificationService,
-} from '@quantumdeal/bot';
-import { MasterbotModule } from '@quantumdeal/masterbot';
+import { ScheduleModule } from '@nestjs/schedule';
+import { BotModule, BotName, UserManagementMiddleware } from '@quantumdeal/bot';
+import { ManagersMiddleware, MasterbotModule } from '@quantumdeal/masterbot';
 import { DbModule, OrdersRepository } from '@quantumdeal/db';
-import { FrameworkModule } from '@quantumdeal/framework';
+import { FrameworkModule, SentryModule } from '@quantumdeal/framework';
 import { session } from 'telegraf';
+import { WebhookService } from './webhook.service';
 
 export const sessionMiddleware = session();
 @Module({
@@ -21,6 +17,8 @@ export const sessionMiddleware = session();
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(),
+    SentryModule,
 
     BotModule,
     MasterbotModule,
@@ -52,17 +50,30 @@ export const sessionMiddleware = session();
         include: [BotModule],
       }),
     }),
-    /*
+
     TelegrafModule.forRootAsync({
-      botName: 'MasterQuantumDealBot',
-      useFactory: (configService: ConfigService) => ({
+      botName: 'QuantumDealMasterBot',
+      imports: [ConfigModule, MasterbotModule],
+      inject: [ConfigService, ManagersMiddleware],
+      useFactory: (
+        configService: ConfigService,
+        managersMiddleware: ManagersMiddleware,
+      ) => ({
         token: configService.getOrThrow<string>('TELEGRAM_MASTER_BOT_TOKEN'),
         include: [MasterbotModule],
+        middlewares: [managersMiddleware.use.bind(managersMiddleware)],
+        webhook: {
+          domain: configService.getOrThrow<string>(
+            'TELEGRAM_BOT_WEBHOOK_DOMAIN',
+          ),
+          allowedUpdates: ['message', 'callback_query', 'inline_query'],
+          port: configService.get<number>('TELEGRAM_BOT_WEBHOOK_PORT', 443),
+          path: '/masterbot',
+        },
       }),
     }),
-    */
   ],
   controllers: [WebhookController],
-  providers: [WebhookService, OrdersRepository, NotificationService],
+  providers: [WebhookService, OrdersRepository],
 })
 export class AppModule {}

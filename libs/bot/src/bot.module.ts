@@ -3,6 +3,8 @@ import { BotService } from './bot.service';
 import { BotUpdate } from './bot.update';
 import { RandomNumberScene } from './scenes/random-number.scene';
 import { UserManagementMiddleware } from './middleware';
+import { WebhookProcessorService } from './services/webhook.service';
+import { WeekReportService } from './services/week-report.service';
 import { NotificationService } from './services/notification.service';
 import { DbModule } from '@quantumdeal/db';
 import { FrameworkModule } from '@quantumdeal/framework';
@@ -14,6 +16,8 @@ import { FrameworkModule } from '@quantumdeal/framework';
     BotUpdate,
     RandomNumberScene,
     UserManagementMiddleware,
+    WebhookProcessorService,
+    WeekReportService,
     NotificationService,
   ],
   exports: [
@@ -21,6 +25,8 @@ import { FrameworkModule } from '@quantumdeal/framework';
     BotUpdate,
     RandomNumberScene,
     UserManagementMiddleware,
+    WebhookProcessorService,
+    WeekReportService,
     NotificationService,
   ],
 })
