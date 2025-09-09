@@ -257,7 +257,7 @@ export class WebhookProcessorService {
    */
   private createOrderPlaceholders(order: MergedOrder): OrderPlaceholders {
     return {
-      symbol: `#${order.symbol}`,
+      symbol: `**\`${order.symbol}\`**`,
       order_type: `#${order.orderType}`,
       lots: order.lots?.toString() || '0',
       close_price: order.closePrice?.toString(),
@@ -316,7 +316,7 @@ export class WebhookProcessorService {
           message.telegramId,
           message.messageText,
           {
-            messageType: QueuedMessageType.HTML,
+            messageType: QueuedMessageType.MARKDOWN,
             priority: MessagePriority.HIGH,
             maxRetries: 3,
           },

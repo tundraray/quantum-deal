@@ -221,6 +221,8 @@ export class WebhookService {
       eventTimestamp,
     );
 
+    this.logger.debug(`Updating existing order: ${JSON.stringify(updates)}`);
+
     const updatedOrders = await this.ordersRepository.updateByTicketId(
       validatedEvent.position_id || validatedEvent.ticket,
       updates,
@@ -252,6 +254,7 @@ export class WebhookService {
             validatedEvent.profit ||
             existingOrder.profit,
           closeTime: eventTimestamp,
+          sector: validatedEvent.sector || existingOrder.sector,
           swap: validatedEvent.swap || existingOrder.swap,
           commission: validatedEvent.commission || existingOrder.commission,
           comment: validatedEvent.comment || existingOrder.comment,
@@ -272,6 +275,7 @@ export class WebhookService {
         // OPEN events should create new orders, but if updating existing:
         return {
           ...baseUpdates,
+          sector: validatedEvent.sector || existingOrder.sector,
           orderType: validatedEvent.type || existingOrder.orderType,
           lots: validatedEvent.volume || existingOrder.lots,
           openPrice: validatedEvent.price || existingOrder.openPrice,
