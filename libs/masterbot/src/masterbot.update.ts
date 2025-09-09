@@ -16,8 +16,9 @@ import {
 import { SubscriptionsRepository, CodesRepository } from '@quantumdeal/db';
 import { MasterbotService } from './masterbot.service';
 import type { UserContext } from './interfaces';
-import { MASTERBOT_CONSTANTS, MASTERBOT_BOT_NAME } from './constants';
+import { MASTERBOT_CONSTANTS } from './constants';
 import { Telegraf } from 'telegraf';
+import { BotName } from '@quantumdeal/bot';
 
 @Update()
 @UseInterceptors(ResponseTimeInterceptor)
@@ -26,7 +27,7 @@ export class MasterbotUpdate {
   private readonly logger = new Logger(MasterbotUpdate.name);
 
   constructor(
-    @InjectBot(MASTERBOT_BOT_NAME)
+    @InjectBot(BotName)
     private readonly bot: Telegraf<UserContext>,
     private readonly masterbotService: MasterbotService,
     private readonly subscriptionsRepository: SubscriptionsRepository,

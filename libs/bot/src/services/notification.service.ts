@@ -9,6 +9,7 @@ import { Telegraf } from 'telegraf';
 import Bottleneck from 'bottleneck';
 import { v4 as uuidv4 } from 'uuid';
 import * as Sentry from '@sentry/nestjs';
+import telegramifyMarkdown from 'telegramify-markdown';
 import {
   QueuedMessage,
   MessageOptions,
@@ -16,53 +17,39 @@ import {
   QueuedMessageType,
   QueueMessageStatus,
   QueueStats,
-  NotificationResult,
   BatchSendResult,
-  BottleneckConfig,
 } from '../interfaces/notification.interface';
 import type { UserContext } from '../interfaces';
 
 /**
- * Production-ready notification service with queue system and rate limiting
- * Uses Bottleneck for Telegram API rate limiting and in-memory queue for message processing
+ * Production-ready notification service with rate limiting
+ * Uses Bottleneck for both Telegram API rate limiting and message queuing with priority support
  */
 @Injectable()
 export class NotificationService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NotificationService.name);
 
-  // In-memory message queue (can be replaced with Redis/DB for persistence)
-  private messageQueue: Map<string, QueuedMessage> = new Map();
+  // Single Bottleneck instance with priority support for direct message queuing
+  private limiter: Bottleneck;
 
-  // Bottleneck instances for different priority levels
-  private limiters: Map<MessagePriority, Bottleneck> = new Map();
+  // Message tracking for statistics (minimal overhead)
+  private messageStats = {
+    totalScheduled: 0,
+    successCount: 0,
+    failureCount: 0,
+    retryCount: 0,
+  };
 
-  // Processing state
-  private isProcessing = false;
-  private processingInterval: NodeJS.Timeout | null = null;
-
-  // Configuration
-  private readonly bottleneckConfig: BottleneckConfig = {
-    default: {
-      maxConcurrent: 1,
-      minTime: 1000, // 1 second between requests
-      reservoir: 30, // 30 messages per minute
-      reservoirRefreshAmount: 30,
-      reservoirRefreshInterval: 60 * 1000, // 1 minute
-    },
-    high: {
-      maxConcurrent: 2,
-      minTime: 500, // 500ms between requests for high priority
-      reservoir: 50,
-      reservoirRefreshAmount: 50,
-      reservoirRefreshInterval: 60 * 1000,
-    },
-    critical: {
-      maxConcurrent: 3,
-      minTime: 300, // 300ms between requests for critical
-      reservoir: 100,
-      reservoirRefreshAmount: 100,
-      reservoirRefreshInterval: 60 * 1000,
-    },
+  // Configuration for single Bottleneck with priority
+  private readonly bottleneckConfig = {
+    maxConcurrent: 1, // Process one message at a time
+    minTime: 1000, // 1 second between messages (Telegram limit)
+    reservoir: 30, // 30 messages per minute
+    reservoirRefreshAmount: 30,
+    reservoirRefreshInterval: 60 * 1000, // 1 minute
+    // Enable priority
+    highWater: 100, // Max queue size
+    strategy: Bottleneck.strategy.OVERFLOW_PRIORITY, // Use priority strategy
   };
 
   constructor(
@@ -72,20 +59,18 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.logger.log('Initializing NotificationService...');
-    this.initializeLimiters();
-    this.startQueueProcessor();
+    this.initializeLimiter();
     this.logger.log('NotificationService initialized successfully');
   }
 
   async onModuleDestroy() {
     this.logger.log('Shutting down NotificationService...');
-    this.stopQueueProcessor();
-    await this.closeLimiters();
+    await this.closeLimiter();
     this.logger.log('NotificationService shut down successfully');
   }
 
   /**
-   * Add a single message to the queue
+   * Schedule a single message directly with Bottleneck
    */
   addMessage(
     userId: number,
@@ -108,13 +93,22 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
         metadata: options.metadata,
       };
 
-      this.messageQueue.set(messageId, queuedMessage);
+      // Schedule message directly with Bottleneck (non-blocking)
+      try {
+        this.scheduleMessage(queuedMessage);
+      } catch (error) {
+        this.logger.error(
+          `Failed to initiate scheduling for message ${messageId}:`,
+          error,
+        );
+      }
+      this.messageStats.totalScheduled++;
 
-      this.logger.debug(`Message queued: ${messageId} for user ${userId}`);
+      this.logger.debug(`Message scheduled: ${messageId} for user ${userId}`);
 
-      // Track queue addition in Sentry
+      // Track message scheduling in Sentry
       Sentry.addBreadcrumb({
-        message: 'Message added to queue',
+        message: 'Message scheduled with Bottleneck',
         data: {
           messageId,
           userId,
@@ -126,7 +120,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
 
       return messageId;
     } catch (error) {
-      this.logger.error('Error adding message to queue', error);
+      this.logger.error('Error scheduling message', error);
       Sentry.captureException(error, {
         tags: { userId, service: 'notification' },
       });
@@ -172,264 +166,256 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Process the message queue
+   * Schedule a message with Bottleneck with retry logic
    */
-  async processQueue(): Promise<NotificationResult> {
-    if (this.isProcessing) {
-      this.logger.debug('Queue processing already in progress');
-      return {
-        success: false,
-        sentCount: 0,
-        failedCount: 0,
-        retryCount: 0,
-        errors: [],
-        processedIds: [],
-      };
+  private scheduleMessage(message: QueuedMessage): void {
+    // Check if message is scheduled for later
+    const delay = message.scheduledAt
+      ? Math.max(0, message.scheduledAt.getTime() - Date.now())
+      : 0;
+
+    if (delay > 0) {
+      // Handle scheduled messages with setTimeout
+      setTimeout(() => {
+        this.scheduleMessage({ ...message, scheduledAt: undefined });
+      }, delay);
+      return;
     }
 
-    this.isProcessing = true;
-    const result: NotificationResult = {
-      success: true,
-      sentCount: 0,
-      failedCount: 0,
-      retryCount: 0,
-      errors: [],
-      processedIds: [],
-    };
+    // Convert our priority enum to Bottleneck priority (higher is better)
+    const bottleneckPriority = this.convertToBotleneckPriority(
+      message.priority,
+    );
 
+    // Schedule with Bottleneck immediately
+    this.limiter
+      .schedule({ priority: bottleneckPriority }, () =>
+        this.processMessageWithRetry(message),
+      )
+      .catch((error) => {
+        this.logger.error(`Failed to schedule message ${message.id}:`, error);
+        this.messageStats.failureCount++;
+        Sentry.captureException(error, {
+          tags: {
+            service: 'notification',
+            messageId: message.id,
+            userId: message.userId.toString(),
+          },
+        });
+      });
+  }
+
+  /**
+   * Process a message with built-in retry logic
+   */
+  private async processMessageWithRetry(message: QueuedMessage): Promise<void> {
     try {
-      const pendingMessages = this.getPendingMessages();
+      message.status = QueueMessageStatus.PROCESSING;
+      message.processedAt = new Date();
 
-      // Only log if there are messages to process
-      if (pendingMessages.length > 0) {
+      await this.sendTelegramMessage(message);
+
+      // Success
+      message.status = QueueMessageStatus.SENT;
+      this.messageStats.successCount++;
+      this.logger.debug(`Message sent successfully: ${message.id}`);
+    } catch (error) {
+      this.logger.error(
+        `Error sending message ${message.id} to user ${message.userId}:`,
+        error,
+      );
+
+      // Check if this is a permanent error that shouldn't be retried
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const isPermanentError = this.isPermanentError(errorMessage);
+
+      // Check if we should retry (skip retry for permanent errors)
+      if (!isPermanentError && message.retryCount < message.maxRetries) {
+        message.retryCount++;
+        message.status = QueueMessageStatus.RETRY;
+        this.messageStats.retryCount++;
+
         this.logger.debug(
-          `Processing ${pendingMessages.length} pending messages`,
+          `Message ${message.id} scheduled for retry (${message.retryCount}/${message.maxRetries})`,
         );
-      }
 
-      for (const message of pendingMessages) {
-        try {
-          // Check if message is scheduled for later
-          if (message.scheduledAt && message.scheduledAt > new Date()) {
-            continue;
-          }
+        // Schedule retry with exponential backoff
+        const retryDelay = Math.min(
+          1000 * Math.pow(2, message.retryCount - 1),
+          30000,
+        );
+        setTimeout(() => {
+          this.scheduleMessage(message);
+        }, retryDelay);
+      } else {
+        // Max retries reached or permanent error
+        message.status = QueueMessageStatus.FAILED;
+        message.error = errorMessage;
+        this.messageStats.failureCount++;
 
-          // Update status to processing
-          message.status = QueueMessageStatus.PROCESSING;
-          message.processedAt = new Date();
-
-          // Get appropriate limiter based on priority
-          const limiter = this.getLimiterForPriority(message.priority);
-
-          // Send message through bottleneck
-          await limiter.schedule(() => this.sendTelegramMessage(message));
-
-          // Mark as sent
-          message.status = QueueMessageStatus.SENT;
-          result.sentCount++;
-          result.processedIds.push(message.id);
-
-          this.logger.debug(`Message sent successfully: ${message.id}`);
-        } catch (error) {
-          this.handleMessageError(message, error, result);
+        if (isPermanentError) {
+          this.logger.warn(
+            `Message ${message.id} failed with permanent error (no retry): ${errorMessage}`,
+          );
+        } else {
+          this.logger.error(
+            `Message ${message.id} failed after ${message.maxRetries} retries: ${errorMessage}`,
+          );
         }
       }
 
-      // Clean up sent messages
-      this.cleanupSentMessages();
-
-      // Only log if there was actual activity
-      if (
-        result.sentCount > 0 ||
-        result.failedCount > 0 ||
-        result.retryCount > 0
-      ) {
-        this.logger.log(
-          `Queue processing completed: ${result.sentCount} sent, ${result.failedCount} failed, ${result.retryCount} retries`,
-        );
-      }
-    } catch (error) {
-      this.logger.error('Error during queue processing', error);
+      // Report to Sentry
       Sentry.captureException(error, {
-        tags: { service: 'notification', operation: 'processQueue' },
+        tags: {
+          service: 'notification',
+          userId: message.userId.toString(),
+          messageId: message.id,
+        },
+        extra: {
+          retryCount: message.retryCount,
+          maxRetries: message.maxRetries,
+          priority: message.priority,
+        },
       });
-      result.success = false;
-    } finally {
-      this.isProcessing = false;
-    }
 
-    return result;
+      // Re-throw if no more retries
+      if (message.retryCount >= message.maxRetries) {
+        throw error;
+      }
+    }
   }
 
   /**
-   * Get queue statistics
+   * Get queue statistics from Bottleneck and internal counters
    */
   getQueueStatus(): QueueStats {
-    const stats: QueueStats = {
-      totalMessages: this.messageQueue.size,
-      pendingMessages: 0,
-      processingMessages: 0,
-      sentMessages: 0,
-      failedMessages: 0,
-      retryMessages: 0,
+    const counts = this.limiter.counts();
+
+    return {
+      totalMessages: this.messageStats.totalScheduled,
+      pendingMessages: counts.QUEUED || 0,
+      processingMessages: counts.RUNNING || 0,
+      sentMessages: this.messageStats.successCount,
+      failedMessages: this.messageStats.failureCount,
+      retryMessages: this.messageStats.retryCount,
     };
-
-    for (const message of this.messageQueue.values()) {
-      switch (message.status) {
-        case QueueMessageStatus.PENDING:
-          stats.pendingMessages++;
-          break;
-        case QueueMessageStatus.PROCESSING:
-          stats.processingMessages++;
-          break;
-        case QueueMessageStatus.SENT:
-          stats.sentMessages++;
-          break;
-        case QueueMessageStatus.FAILED:
-          stats.failedMessages++;
-          break;
-        case QueueMessageStatus.RETRY:
-          stats.retryMessages++;
-          break;
-      }
-    }
-
-    return stats;
   }
 
   /**
-   * Clear the entire queue
+   * Clear the Bottleneck queue and reset statistics
    */
-  clearQueue(): void {
-    this.logger.warn('Clearing message queue');
-    this.messageQueue.clear();
+  async clearQueue(): Promise<void> {
+    this.logger.warn('Clearing Bottleneck queue and resetting statistics');
+
+    // Stop all jobs and clear the queue
+    await this.limiter.stop({ dropWaitingJobs: true });
+
+    // Reset statistics
+    this.messageStats = {
+      totalScheduled: 0,
+      successCount: 0,
+      failureCount: 0,
+      retryCount: 0,
+    };
+
+    // Reinitialize the limiter
+    this.initializeLimiter();
 
     Sentry.addBreadcrumb({
-      message: 'Message queue cleared',
+      message: 'Bottleneck queue cleared and statistics reset',
       level: 'warning',
     });
   }
 
   /**
-   * Remove a specific message from the queue
+   * Initialize single Bottleneck limiter with priority support
    */
-  removeMessage(messageId: string): boolean {
-    const removed = this.messageQueue.delete(messageId);
-    if (removed) {
-      this.logger.debug(`Message removed from queue: ${messageId}`);
-    }
-    return removed;
-  }
-
-  /**
-   * Get message by ID
-   */
-  getMessage(messageId: string): QueuedMessage | undefined {
-    return this.messageQueue.get(messageId);
-  }
-
-  /**
-   * Initialize Bottleneck limiters for different priority levels
-   */
-  private initializeLimiters(): void {
-    // Default limiter for normal and low priority
-    this.limiters.set(
-      MessagePriority.LOW,
-      new Bottleneck(this.bottleneckConfig.default),
-    );
-    this.limiters.set(
-      MessagePriority.NORMAL,
-      new Bottleneck(this.bottleneckConfig.default),
-    );
-
-    // High priority limiter
-    this.limiters.set(
-      MessagePriority.HIGH,
-      new Bottleneck(this.bottleneckConfig.high),
-    );
-
-    // Critical priority limiter
-    this.limiters.set(
-      MessagePriority.CRITICAL,
-      new Bottleneck(this.bottleneckConfig.critical),
-    );
+  private initializeLimiter(): void {
+    this.limiter = new Bottleneck(this.bottleneckConfig);
 
     // Add error handlers
-    for (const [priority, limiter] of this.limiters) {
-      limiter.on('error', (error) => {
-        this.logger.error(`Bottleneck error for priority ${priority}:`, error);
-        Sentry.captureException(error, {
-          tags: { service: 'notification', priority: priority.toString() },
-        });
+    this.limiter.on('error', (error) => {
+      this.logger.error('Bottleneck error:', error);
+      Sentry.captureException(error, {
+        tags: { service: 'notification' },
       });
+    });
 
-      limiter.on('failed', (error: unknown, jobInfo: unknown) => {
-        this.logger.warn(`Job failed for priority ${priority}:`, {
+    this.limiter.on(
+      'failed',
+      (error: unknown, jobInfo: Record<string, unknown>) => {
+        this.logger.warn('Job failed:', {
           error,
           jobInfo,
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+          priority: (jobInfo as any)?.options?.priority,
         });
-      });
-    }
-  }
-
-  /**
-   * Start the automatic queue processor
-   */
-  private startQueueProcessor(): void {
-    // Process queue every 5 seconds
-    this.processingInterval = setInterval(() => {
-      this.processQueue().catch((error) => {
-        this.logger.error('Error in automatic queue processing', error);
-      });
-    }, 5000);
-  }
-
-  /**
-   * Stop the automatic queue processor
-   */
-  private stopQueueProcessor(): void {
-    if (this.processingInterval) {
-      clearInterval(this.processingInterval);
-      this.processingInterval = null;
-    }
-  }
-
-  /**
-   * Close all Bottleneck limiters
-   */
-  private async closeLimiters(): Promise<void> {
-    const closePromises = Array.from(this.limiters.values()).map((limiter) =>
-      limiter.stop({ dropWaitingJobs: false }),
+        // Note: Failure tracking is handled in processMessageWithRetry
+      },
     );
-    await Promise.all(closePromises);
+
+    // Log when queue is depleted
+    this.limiter.on('depleted', () => {
+      this.logger.debug('Bottleneck queue depleted');
+    });
+
+    // Log when hitting rate limits
+    this.limiter.on('dropped', (dropped) => {
+      this.logger.warn('Message dropped due to overflow:', dropped);
+    });
   }
 
   /**
-   * Get pending messages sorted by priority and creation time
+   * Close Bottleneck limiter
    */
-  private getPendingMessages(): QueuedMessage[] {
-    return Array.from(this.messageQueue.values())
-      .filter(
-        (msg) =>
-          msg.status === QueueMessageStatus.PENDING ||
-          msg.status === QueueMessageStatus.RETRY,
-      )
-      .sort((a, b) => {
-        // Sort by priority first (higher priority first)
-        if (a.priority !== b.priority) {
-          return b.priority - a.priority;
-        }
-        // Then by creation time (older first)
-        return a.createdAt.getTime() - b.createdAt.getTime();
-      });
+  private async closeLimiter(): Promise<void> {
+    if (this.limiter) {
+      await this.limiter.stop({ dropWaitingJobs: false });
+    }
   }
 
   /**
-   * Get appropriate limiter for message priority
+   * Convert our MessagePriority enum to Bottleneck priority
+   * Higher values get processed first in Bottleneck
    */
-  private getLimiterForPriority(priority: MessagePriority): Bottleneck {
-    return (
-      this.limiters.get(priority) || this.limiters.get(MessagePriority.NORMAL)!
+  private convertToBotleneckPriority(priority: MessagePriority): number {
+    switch (priority) {
+      case MessagePriority.CRITICAL:
+        return 5; // Highest priority
+      case MessagePriority.HIGH:
+        return 3;
+      case MessagePriority.NORMAL:
+        return 1;
+      case MessagePriority.LOW:
+        return 0; // Lowest priority
+      default:
+        return 1;
+    }
+  }
+
+  /**
+   * Check if an error is permanent and shouldn't be retried
+   */
+  private isPermanentError(errorMessage: string): boolean {
+    const permanentErrors = [
+      'chat not found',
+      'bot was blocked by the user',
+      'user is deactivated',
+      'bot was kicked from the group chat',
+      'bot was kicked from the supergroup chat',
+      'chat was deleted',
+      'group chat was upgraded to a supergroup',
+      'bot is not a member of the supergroup chat',
+      'bot is not a member of the channel chat',
+      'user not found',
+      'invalid user_id specified',
+      'forbidden: bot can\'t send messages to the user',
+      'forbidden: bot was blocked by the user',
+    ];
+
+    const lowerErrorMessage = errorMessage.toLowerCase();
+    return permanentErrors.some(permanentError => 
+      lowerErrorMessage.includes(permanentError)
     );
   }
 
@@ -437,85 +423,20 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
    * Send message via Telegram API
    */
   private async sendTelegramMessage(message: QueuedMessage): Promise<void> {
-    const parseMode =
-      message.messageType === QueuedMessageType.HTML
-        ? 'HTML'
-        : message.messageType === QueuedMessageType.MARKDOWN
-          ? 'MarkdownV2'
-          : undefined;
+    let messageText = message.message;
+    let parseMode: 'HTML' | 'MarkdownV2' | undefined;
 
-    await this.bot.telegram.sendMessage(message.userId, message.message, {
+    if (message.messageType === QueuedMessageType.HTML) {
+      parseMode = 'HTML';
+    } else if (message.messageType === QueuedMessageType.MARKDOWN) {
+      parseMode = 'MarkdownV2';
+      // Use telegramify-markdown to properly escape text for Telegram
+      // This library handles all edge cases including hashtags, mentions, etc.
+      messageText = telegramifyMarkdown(messageText, 'escape');
+    }
+
+    await this.bot.telegram.sendMessage(message.userId, messageText, {
       parse_mode: parseMode,
     });
-  }
-
-  /**
-   * Handle message sending errors
-   */
-  private handleMessageError(
-    message: QueuedMessage,
-    error: unknown,
-    result: NotificationResult,
-  ): void {
-    this.logger.error(
-      `Error sending message ${message.id} to user ${message.userId}:`,
-      error,
-    );
-
-    // Check if we should retry
-    if (message.retryCount < message.maxRetries) {
-      message.retryCount++;
-      message.status = QueueMessageStatus.RETRY;
-      result.retryCount++;
-
-      this.logger.debug(
-        `Message ${message.id} scheduled for retry (${message.retryCount}/${message.maxRetries})`,
-      );
-    } else {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      message.status = QueueMessageStatus.FAILED;
-      message.error = errorMessage;
-      result.failedCount++;
-
-      result.errors.push({
-        telegramId: message.userId,
-        error: errorMessage,
-        retry: false,
-      });
-    }
-
-    result.processedIds.push(message.id);
-
-    // Report to Sentry
-    Sentry.captureException(error, {
-      tags: {
-        service: 'notification',
-        userId: message.userId.toString(),
-        messageId: message.id,
-      },
-      extra: {
-        retryCount: message.retryCount,
-        maxRetries: message.maxRetries,
-        priority: message.priority,
-      },
-    });
-  }
-
-  /**
-   * Clean up sent messages (remove from queue after successful sending)
-   */
-  private cleanupSentMessages(): void {
-    const sentMessages = Array.from(this.messageQueue.entries()).filter(
-      ([, message]) => message.status === QueueMessageStatus.SENT,
-    );
-
-    for (const [messageId] of sentMessages) {
-      this.messageQueue.delete(messageId);
-    }
-
-    if (sentMessages.length > 0) {
-      this.logger.debug(`Cleaned up ${sentMessages.length} sent messages`);
-    }
   }
 }
