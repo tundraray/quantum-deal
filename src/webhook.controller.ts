@@ -6,7 +6,6 @@ import {
   HttpStatus,
   Logger,
   BadRequestException,
-  Get,
 } from '@nestjs/common';
 import { WebhookService } from './webhook.service';
 
@@ -15,11 +14,6 @@ export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
 
   constructor(private readonly webhookService: WebhookService) {}
-
-  @Get('/debug-sentry')
-  getError() {
-    throw new Error('My first Sentry error!');
-  }
 
   /**
    * Main endpoint to receive MT5 trading events
