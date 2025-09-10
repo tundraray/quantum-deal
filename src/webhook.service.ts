@@ -1,10 +1,8 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { InjectBot } from 'nestjs-telegraf';
-import { Context, Telegraf } from 'telegraf';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { OrdersRepository } from '@quantumdeal/db';
-import { WebhookProcessorService, BotName } from '@quantumdeal/bot';
+import { WebhookProcessorService } from '@quantumdeal/bot';
 import { MergedOrder, MessageType } from '@quantumdeal/db/schema';
 import { BaseMT5EventDto, MT5EventType, MT5EventDto } from './dto';
 import { SentryService } from '@quantumdeal/framework';
@@ -16,7 +14,6 @@ export class WebhookService {
   constructor(
     private readonly ordersRepository: OrdersRepository,
     private readonly notificationService: WebhookProcessorService,
-    @InjectBot(BotName) private readonly bot: Telegraf<Context>,
     private readonly sentryService: SentryService,
   ) {}
 
@@ -164,8 +161,8 @@ export class WebhookService {
       if (
         !(
           validatedEvent.event === MT5EventType.POSITION_SLTP_UPDATE &&
-          validatedEvent.sl === existingOrder.stopLoss &&
-          validatedEvent.tp === existingOrder.takeProfit
+          validatedEvent.sl == existingOrder.stopLoss &&
+          validatedEvent.tp == existingOrder.takeProfit
         )
       )
         return this.updateExistingOrder(existingOrder, validatedEvent);
@@ -194,9 +191,9 @@ export class WebhookService {
         validatedEvent.event === MT5EventType.CLOSE
           ? validatedEvent.price
           : null,
-      stopLoss: validatedEvent.sl || null,
-      takeProfit: validatedEvent.tp || null,
-      profit: validatedEvent.total_profit || validatedEvent.profit || null,
+      stopLoss: validatedEvent.sl || 0,
+      takeProfit: validatedEvent.tp || 0,
+      profit: validatedEvent.total_profit || validatedEvent.profit,
       closeTime:
         validatedEvent.event === MT5EventType.CLOSE ? eventTimestamp : null,
 
@@ -205,14 +202,14 @@ export class WebhookService {
       broker: validatedEvent.broker,
       schemaVersion: validatedEvent.schema_version,
       eaVersion: validatedEvent.ea_version,
-      sector: validatedEvent.sector || null,
-      positionId: validatedEvent.position_id || null,
+      sector: validatedEvent.sector,
+      positionId: validatedEvent.position_id,
       eventTimestamp,
 
       // Additional financial fields
-      swap: validatedEvent.swap || null,
-      commission: validatedEvent.commission || null,
-      comment: validatedEvent.comment || null,
+      swap: validatedEvent.swap,
+      commission: validatedEvent.commission,
+      comment: validatedEvent.comment,
     };
 
     return this.ordersRepository.create(newOrder) as Promise<MergedOrder>;
@@ -296,8 +293,8 @@ export class WebhookService {
           orderType: validatedEvent.type || existingOrder.orderType,
           lots: validatedEvent.volume || existingOrder.lots,
           openPrice: validatedEvent.price || existingOrder.openPrice,
-          stopLoss: validatedEvent.sl || existingOrder.stopLoss || 0,
-          takeProfit: validatedEvent.tp || existingOrder.takeProfit || 0,
+          stopLoss: validatedEvent.sl || existingOrder.stopLoss,
+          takeProfit: validatedEvent.tp || existingOrder.takeProfit,
           comment: validatedEvent.comment || existingOrder.comment,
         };
 
