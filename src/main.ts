@@ -1,8 +1,10 @@
 // Import and initialize Sentry before any other imports
 import * as Sentry from '@sentry/nestjs';
 import { createSentryConfig } from '@quantumdeal/framework';
+import { Logger } from '@nestjs/common';
 
 // Initialize Sentry early in the application lifecycle
+
 if (process.env.SENTRY_DSN) {
   Sentry.init(
     createSentryConfig({
@@ -21,11 +23,12 @@ if (process.env.SENTRY_DSN) {
       ),
     }),
   );
+} else {
+  new Logger('Bootstrap').warn('SENTRY_DSN is not set');
 }
 
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');

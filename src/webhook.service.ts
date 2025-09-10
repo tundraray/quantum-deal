@@ -57,12 +57,16 @@ export class WebhookService {
       const validatedEvent = await this.validateAndTransformEvent(rawData);
 
       // Handle order creation/update (skip for TEST events)
-      let savedEvent: MergedOrder | null = null;
+      let savedEvent: MergedOrder | null | undefined = null;
       if (validatedEvent.event !== MT5EventType.TEST) {
         savedEvent = await this.handleOrderEvent(validatedEvent);
 
         // Process event-specific business logic
-        await this.processEventSpecificLogic(validatedEvent.event, savedEvent);
+        if (savedEvent)
+          await this.processEventSpecificLogic(
+            validatedEvent.event,
+            savedEvent,
+          );
       }
 
       const processingTime = Date.now() - startTime;
@@ -150,14 +154,21 @@ export class WebhookService {
    */
   private async handleOrderEvent(
     validatedEvent: MT5EventDto,
-  ): Promise<MergedOrder> {
+  ): Promise<MergedOrder | undefined> {
     const existingOrder = (await this.ordersRepository.findOneByTicket(
       validatedEvent.position_id || validatedEvent.ticket,
     )) as MergedOrder | null;
 
     if (existingOrder) {
       // Update existing order
-      return this.updateExistingOrder(existingOrder, validatedEvent);
+      if (
+        !(
+          validatedEvent.event === MT5EventType.POSITION_SLTP_UPDATE &&
+          validatedEvent.sl === existingOrder.stopLoss &&
+          validatedEvent.tp === existingOrder.takeProfit
+        )
+      )
+        return this.updateExistingOrder(existingOrder, validatedEvent);
     } else {
       // Create new order
       return this.createNewOrder(validatedEvent);
@@ -266,8 +277,14 @@ export class WebhookService {
           ...baseUpdates,
           oldStopLoss: existingOrder.stopLoss || 0,
           oldTakeProfit: existingOrder.takeProfit || 0,
-          stopLoss: validatedEvent.sl || existingOrder.stopLoss,
-          takeProfit: validatedEvent.tp || existingOrder.takeProfit,
+          stopLoss:
+            validatedEvent.sl != null
+              ? validatedEvent.sl
+              : existingOrder.stopLoss,
+          takeProfit:
+            validatedEvent.tp != null
+              ? validatedEvent.tp
+              : existingOrder.takeProfit,
           comment: validatedEvent.comment || existingOrder.comment,
         };
 
