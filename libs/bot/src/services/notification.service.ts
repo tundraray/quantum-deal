@@ -226,7 +226,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       );
 
       // Check if this is a permanent error that shouldn't be retried
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       const isPermanentError = this.isPermanentError(errorMessage);
 
       // Check if we should retry (skip retry for permanent errors)
@@ -409,13 +410,13 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       'bot is not a member of the channel chat',
       'user not found',
       'invalid user_id specified',
-      'forbidden: bot can\'t send messages to the user',
+      "forbidden: bot can't send messages to the user",
       'forbidden: bot was blocked by the user',
     ];
 
     const lowerErrorMessage = errorMessage.toLowerCase();
-    return permanentErrors.some(permanentError => 
-      lowerErrorMessage.includes(permanentError)
+    return permanentErrors.some((permanentError) =>
+      lowerErrorMessage.includes(permanentError),
     );
   }
 
