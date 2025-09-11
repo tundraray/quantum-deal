@@ -42,14 +42,13 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
 
   // Configuration for single Bottleneck with priority
   private readonly bottleneckConfig = {
-    maxConcurrent: 1, // Process one message at a time
-    minTime: 1000, // 1 second between messages (Telegram limit)
-    reservoir: 30, // 30 messages per minute
-    reservoirRefreshAmount: 30,
-    reservoirRefreshInterval: 60 * 1000, // 1 minute
-    // Enable priority
-    highWater: 100, // Max queue size
-    strategy: Bottleneck.strategy.OVERFLOW_PRIORITY, // Use priority strategy
+    maxConcurrent: 4, // Process one message at a time
+    minTime: 30, // 30ms between messages; reservoir enforces 28/s cap
+    reservoir: 28, // 28 messages per second
+    reservoirRefreshAmount: 28,
+    reservoirRefreshInterval: 1000, // 1 second
+    highWater: 2000, // Max queue size
+    strategy: Bottleneck.strategy.LEAK, // Use priority strategy
   };
 
   constructor(
