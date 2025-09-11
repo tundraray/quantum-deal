@@ -47,9 +47,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
     reservoir: 30, // 30 messages per minute
     reservoirRefreshAmount: 30,
     reservoirRefreshInterval: 60 * 1000, // 1 minute
-    // Enable priority
-    highWater: 100, // Max queue size
-    strategy: Bottleneck.strategy.OVERFLOW_PRIORITY, // Use priority strategy
+    strategy: Bottleneck.strategy.LEAK, // Use priority strategy
   };
 
   constructor(
