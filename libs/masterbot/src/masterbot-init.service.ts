@@ -18,14 +18,14 @@ export class MasterbotInitService implements OnApplicationBootstrap {
       this.logger.log('Setting up masterbot commands...');
 
       // Set up menu button commands (next to text input)
-      const commands = await this.bot.telegram.setMyCommands([
+      await this.bot.telegram.setMyCommands([
         { command: 'start', description: '🏠 Main menu' },
         { command: 'stats', description: '📊 Statistics' },
         { command: 'code', description: '🎫 Generate Code' },
         { command: 'help', description: '💡 Help' },
       ]);
 
-      this.logger.log('Masterbot commands set up successfully', commands);
+      this.logger.log('Masterbot commands set up successfully');
     } catch (error) {
       this.logger.error('Failed to set up masterbot commands', error);
       // Don't throw the error to prevent application startup failure
