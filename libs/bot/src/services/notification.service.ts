@@ -20,6 +20,7 @@ import {
   BatchSendResult,
 } from '../interfaces/notification.interface';
 import type { UserContext } from '../interfaces';
+import { UsersRepository } from '@quantumdeal/db';
 
 /**
  * Production-ready notification service with rate limiting
@@ -47,13 +48,12 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
     reservoir: 28, // 28 messages per second
     reservoirRefreshAmount: 28,
     reservoirRefreshInterval: 1000, // 1 second
-    highWater: 2000, // Max queue size
-    strategy: Bottleneck.strategy.LEAK, // Use priority strategy
   };
 
   constructor(
     @InjectBot('QuantumDealBot')
     private readonly bot: Telegraf<UserContext>,
+    private readonly usersRepository: UsersRepository,
   ) {}
 
   onModuleInit() {
@@ -254,6 +254,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
         this.messageStats.failureCount++;
 
         if (isPermanentError) {
+          await this.usersRepository.deactivateUser(message.userId);
           this.logger.warn(
             `Message ${message.id} failed with permanent error (no retry): ${errorMessage}`,
           );

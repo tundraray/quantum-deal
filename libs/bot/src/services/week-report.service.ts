@@ -430,16 +430,9 @@ export class WeekReportService {
     ClientSubscription[]
   > {
     try {
-      const now = new Date();
-
       // Get all users with active subscriptions
-      const usersWithSubscriptions = await this.usersRepository.findBy(
-        and(
-          sql`${users.subscribeId} IS NOT NULL`,
-          sql`${users.subscribeExpirationDate} IS NOT NULL`,
-          gte(users.subscribeExpirationDate, now),
-        ),
-      );
+      const usersWithSubscriptions =
+        await this.usersRepository.findActiveUsersWithActiveSubscription();
 
       if (usersWithSubscriptions.length === 0) {
         return [];

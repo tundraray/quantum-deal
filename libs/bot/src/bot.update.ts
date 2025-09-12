@@ -20,7 +20,6 @@ import {
 import { BotService } from './bot.service';
 import { langKeyboard } from './lang';
 import type { UserContext } from './interfaces';
-import { UsersRepository } from '@quantumdeal/db';
 
 @Update()
 @UseInterceptors(ResponseTimeInterceptor)
@@ -31,7 +30,6 @@ export class BotUpdate {
     @InjectBot('QuantumDealBot')
     private readonly bot: Telegraf<UserContext>,
     private readonly botService: BotService,
-    private readonly usersRepository: UsersRepository,
   ) {}
 
   @Start()
