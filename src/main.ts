@@ -36,10 +36,7 @@ async function bootstrap() {
   try {
     const app = await NestFactory.create(AppModule, {
       // disable debug logs for production
-      logger:
-        process.env.NODE_ENV === 'production'
-          ? ['error', 'warn', 'log']
-          : ['error', 'warn', 'log', 'debug', 'verbose'],
+      logger: ['error', 'warn', 'log', 'debug', 'verbose'],
     });
 
     // Enable shutdown hooks for graceful shutdown

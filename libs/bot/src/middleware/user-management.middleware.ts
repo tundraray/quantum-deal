@@ -42,6 +42,9 @@ export class UserManagementMiddleware {
       if (!user) {
         user = await this.createNewUser(ctx.from!);
         this.logger.log(`Created new user with Telegram ID: ${telegramId}`);
+      } else if (!user.isActive) {
+        await this.usersRepository.activateUser(telegramId!);
+        return;
       }
 
       // Attach user to context (user is guaranteed to exist at this point)
@@ -74,6 +77,7 @@ export class UserManagementMiddleware {
       username: telegramUser.username || null,
       firstName: telegramUser.first_name || null,
       lastName: telegramUser.last_name || null,
+      isActive: true,
       lang: telegramUser.language_code || 'en',
       isPremium: telegramUser.is_premium || false,
     };

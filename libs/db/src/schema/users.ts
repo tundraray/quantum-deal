@@ -19,6 +19,7 @@ export const users = pgTable('users', {
   subscribeExpirationDate: timestamp('subscribe_expiration_date', {
     withTimezone: true,
   }),
+  isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

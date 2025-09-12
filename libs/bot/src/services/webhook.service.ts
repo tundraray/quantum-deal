@@ -1,10 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
 import {
   UsersRepository,
   SubscriptionsRepository,
   MessagesRepository,
-  users,
 } from '@quantumdeal/db';
 import { MessageType, MergedOrder } from '@quantumdeal/db/schema';
 import {
@@ -162,9 +160,8 @@ export class WebhookProcessorService {
       const now = new Date();
 
       for (const subscriptionId of subscriptionIds) {
-        const usersWithSubscription = await this.usersRepository.findBy(
-          eq(users.subscribeId, subscriptionId),
-        );
+        const usersWithSubscription =
+          await this.usersRepository.findBySubscription(subscriptionId);
 
         for (const user of usersWithSubscription) {
           // Check if subscription is still active
