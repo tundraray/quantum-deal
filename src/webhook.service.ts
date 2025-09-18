@@ -163,7 +163,8 @@ export class WebhookService {
           validatedEvent.event === MT5EventType.POSITION_SLTP_UPDATE &&
           validatedEvent.sl == existingOrder.stopLoss &&
           validatedEvent.tp == existingOrder.takeProfit
-        )
+        ) &&
+        !existingOrder.closePrice
       )
         return this.updateExistingOrder(existingOrder, validatedEvent);
     } else {
