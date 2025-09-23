@@ -156,15 +156,14 @@ export class WebhookService {
       validatedEvent.position_id || validatedEvent.ticket,
     )) as MergedOrder | null;
 
-    if (existingOrder) {
+    if (existingOrder && !existingOrder.closePrice) {
       // Update existing order
       if (
         !(
           validatedEvent.event === MT5EventType.POSITION_SLTP_UPDATE &&
           validatedEvent.sl == existingOrder.stopLoss &&
           validatedEvent.tp == existingOrder.takeProfit
-        ) &&
-        !existingOrder.closePrice
+        )
       )
         return this.updateExistingOrder(existingOrder, validatedEvent);
     } else {
