@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { OrdersRepository } from '@quantumdeal/db';
@@ -8,8 +13,12 @@ import { BaseMT5EventDto, MT5EventType, MT5EventDto } from './dto';
 import { SentryService } from '@quantumdeal/framework';
 
 @Injectable()
-export class WebhookService {
+export class WebhookService implements OnModuleDestroy {
   private readonly logger = new Logger(WebhookService.name);
+
+  // Debounce configuration
+  private static readonly DEBOUNCE_DELAY_MS = 5 * 1000; // 5 seconds debounce delay
+  private readonly debounceTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly ordersRepository: OrdersRepository,
@@ -18,9 +27,85 @@ export class WebhookService {
   ) {}
 
   /**
-   * Process MT5 trading event
+   * Generate debounce key for event
    */
-  async processTradeEvent(rawData: unknown): Promise<{
+  private generateDebounceKey(ticket: string, eventType: string): string {
+    return `${ticket}-${eventType}`;
+  }
+
+  /**
+   * Clear debounce timer for specific key
+   */
+  private clearDebounceTimer(key: string): void {
+    const timer = this.debounceTimers.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      this.debounceTimers.delete(key);
+    }
+  }
+
+  /**
+   * Clear all active debounce timers (cleanup method)
+   */
+  private clearAllDebounceTimers(): void {
+    for (const [, timer] of this.debounceTimers.entries()) {
+      clearTimeout(timer);
+    }
+    this.debounceTimers.clear();
+    this.logger.debug('All debounce timers cleared');
+  }
+
+  /**
+   * Cleanup method for graceful shutdown
+   */
+  onModuleDestroy(): void {
+    this.clearAllDebounceTimers();
+  }
+
+  /**
+   * Process MT5 trading event with debouncing
+   */
+  processTradeEvent(rawData: unknown): {
+    success: boolean;
+    eventId?: number;
+    message: string;
+  } {
+    const data = rawData as { event?: string; ticket?: string };
+    const ticket = data.ticket || 'unknown';
+    const eventType = data.event || 'unknown';
+
+    // Generate debounce key
+    const debounceKey = this.generateDebounceKey(ticket, eventType);
+
+    // Clear existing timer if any
+    this.clearDebounceTimer(debounceKey);
+
+    // Set new timer for debounced processing
+    const timer = setTimeout(() => {
+      this.debounceTimers.delete(debounceKey);
+      // Process asynchronously without blocking the response
+      this.processTradeEventDebounced(rawData).catch((error: unknown) => {
+        const err = error as Error;
+        this.logger.error(
+          `Error in debounced processing: ${err.message}`,
+          err.stack,
+        );
+      });
+    }, WebhookService.DEBOUNCE_DELAY_MS);
+
+    this.debounceTimers.set(debounceKey, timer);
+
+    // Return immediate response
+    return {
+      success: true,
+      message: `Event queued for processing with ${WebhookService.DEBOUNCE_DELAY_MS}ms debounce`,
+    };
+  }
+
+  /**
+   * Process MT5 trading event (actual implementation without debouncing)
+   */
+  private async processTradeEventDebounced(rawData: unknown): Promise<{
     success: boolean;
     eventId?: number;
     message: string;
@@ -98,7 +183,7 @@ export class WebhookService {
         webhook_data: rawData,
         processing_time_ms: processingTime,
         service: 'WebhookService',
-        method: 'processTradeEvent',
+        method: 'processTradeEventDebounced',
       });
 
       this.logger.error(
