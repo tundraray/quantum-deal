@@ -7,6 +7,7 @@ export interface AdminStats {
   totalUsers: number;
   activeSubscriptions: number;
   expiredSubscriptions: number;
+  blockedUsers: number;
   totalSubscriptions: number;
   recentUsers: User[];
   lastUpdated: Date;

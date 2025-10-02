@@ -105,5 +105,6 @@
       "^@quantumdeal/framework(|/.*)$": "<rootDir>/libs/framework/src/$1",
       "^@quantumdeal/masterbot(|/.*)$": "<rootDir>/libs/masterbot/src/$1"
     }
-  }
+  },
+  "packageManager": "pnpm@10.0.0"
 }

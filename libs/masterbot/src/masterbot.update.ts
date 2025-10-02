@@ -80,8 +80,7 @@ export class MasterbotUpdate {
 
       // Get user statistics
       const stats = await this.masterbotService.getUserStatistics();
-      const formattedMessage =
-        this.masterbotService.formatUserStatistics(stats);
+      const formattedMessage = this.masterbotService.formatUserStatistics(stats);
 
       await ctx.reply(formattedMessage, {
         parse_mode: 'Markdown',
