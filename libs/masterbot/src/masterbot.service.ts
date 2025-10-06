@@ -54,9 +54,7 @@ export class MasterbotService {
           new Date(user.subscribeExpirationDate) <= currentDate,
       );
 
-      const blockedUsers = allUsers.filter(
-        (user) => !user.isActive,
-      );
+      const blockedUsers = allUsers.filter((user) => !user.isActive);
 
       // Get recent users (last 7 days)
       const sevenDaysAgo = new Date(
