@@ -17,18 +17,28 @@ import {
   QueuedMessageType,
 } from '../interfaces/notification.interface';
 import { ConfigService } from '@nestjs/config';
+import { SentryService } from '@quantumdeal/framework';
 
 enum ReportType {
   WEEKLY = 'weekly',
 }
 
 interface TradingActivityStats {
+  // Aggregated statistics for client's subscription
   readonly totalOrders: number;
   readonly profitableOrders: number;
   readonly lossingOrders: number;
   readonly totalProfit: number;
   readonly totalLoss: number;
   readonly ordersBySymbol: Record<string, number>;
+
+  // VIP reference data (all sectors combined for comparison)
+  readonly vipTotalOrders: number;
+  readonly vipProfitableOrders: number;
+  readonly vipLossingOrders: number;
+  readonly vipTotalProfit: number;
+  readonly vipTotalLoss: number;
+  readonly vipNetResult: number;
 }
 
 interface ClientSubscription {
@@ -90,6 +100,7 @@ export class WeekReportService {
     private readonly notificationService: NotificationService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly configService: ConfigService,
+    private readonly sentryService: SentryService,
   ) {}
 
   /**
@@ -403,8 +414,13 @@ export class WeekReportService {
         `Client subscription allows sectors: ${isAllSectors ? 'ALL' : allowedSectors.join(', ')}`,
       );
 
+      const allTradingActivity = await this.ordersRepository.findByEventPeriod(
+        startDate,
+        endDate,
+      );
+
       const allOrders = isAllSectors
-        ? await this.ordersRepository.findByEventPeriod(startDate, endDate)
+        ? allTradingActivity
         : await this.ordersRepository.findByEventPeriod(
             startDate,
             endDate,
@@ -420,6 +436,11 @@ export class WeekReportService {
       const symbolBreakdown =
         this.calculateSymbolBreakdownFromOrders(closedOrdersOnly);
 
+      const vipProfitLossData =
+        this.calculateProfitLossFromOrders(allTradingActivity);
+      const vipNetResult =
+        vipProfitLossData.totalProfit + vipProfitLossData.totalLoss;
+
       return {
         totalOrders,
         profitableOrders: profitLossData.profitableOrders,
@@ -427,38 +448,19 @@ export class WeekReportService {
         totalProfit: profitLossData.totalProfit,
         totalLoss: profitLossData.totalLoss,
         ordersBySymbol: symbolBreakdown,
+
+        // VIP reference data (all sectors combined)
+        vipTotalOrders: allTradingActivity.length,
+        vipProfitableOrders: vipProfitLossData.profitableOrders,
+        vipLossingOrders: vipProfitLossData.lossingOrders,
+        vipTotalProfit: vipProfitLossData.totalProfit,
+        vipTotalLoss: vipProfitLossData.totalLoss,
+        vipNetResult,
       };
     } catch (error) {
       this.logger.error('Failed to gather client trading activity data', error);
       throw new Error('Failed to gather client trading activity data');
     }
-  }
-
-  // Monthly trading data aggregation moved to MonthReportService
-
-  /**
-   * Find the most profitable single trade from a list of orders
-   */
-  private findBestTrade(
-    orders: Order[],
-  ): { symbol: string; profit: number } | null {
-    const ordersWithProfit = orders.filter(
-      (order) =>
-        order.profit !== null && order.profit !== undefined && order.profit > 0,
-    );
-
-    if (ordersWithProfit.length === 0) {
-      return null;
-    }
-
-    const bestOrder = ordersWithProfit.reduce((best, current) => {
-      return (current.profit ?? 0) > (best.profit ?? 0) ? current : best;
-    });
-
-    return {
-      symbol: bestOrder.symbol || 'unknown',
-      profit: Math.round((bestOrder.profit ?? 0) * 100) / 100,
-    };
   }
 
   private extractAllowedSectors(subscriptionScope: unknown): string[] {
@@ -583,33 +585,59 @@ export class WeekReportService {
     const clientLang = data.client.lang || 'en';
     const profit = data.tradingActivity.totalProfit;
     const loss = data.tradingActivity.totalLoss;
-    const netResult = profit - loss;
+    const netResult = profit + loss; // loss is already negative
     const positiveTrades = data.tradingActivity.profitableOrders;
     const negativeTrades = data.tradingActivity.lossingOrders;
 
+    // VIP reference data
+    const vipProfit = data.tradingActivity.vipTotalProfit;
+    const vipLoss = data.tradingActivity.vipTotalLoss;
+    const vipNetResult = data.tradingActivity.vipNetResult;
+    const vipPositiveTrades = data.tradingActivity.vipProfitableOrders;
+    const vipNegativeTrades = data.tradingActivity.vipLossingOrders;
+    const templateName = `weekly_report_${data.client.subscription.id}`;
     try {
       const template = await this.messagesRepository.getReportTemplate(
-        'weekly_report' as MessageType,
+        templateName as MessageType,
         clientLang,
       );
 
       return template
         .replace(/\{profit\}/g, profit.toFixed(2))
-        .replace(/\{loss\}/g, loss.toFixed(2))
+        .replace(/\{loss\}/g, Math.abs(loss).toFixed(2))
         .replace(/\{net_result\}/g, netResult.toFixed(2))
         .replace(/\{positive_trades\}/g, positiveTrades.toString())
-        .replace(/\{negative_trades\}/g, negativeTrades.toString());
+        .replace(/\{negative_trades\}/g, negativeTrades.toString())
+        .replace(/\{vip_profit\}/g, vipProfit.toFixed(2))
+        .replace(/\{vip_loss\}/g, Math.abs(vipLoss).toFixed(2))
+        .replace(/\{vip_net_result\}/g, vipNetResult.toFixed(2))
+        .replace(/\{vip_positive_trades\}/g, vipPositiveTrades.toString())
+        .replace(/\{vip_negative_trades\}/g, vipNegativeTrades.toString());
     } catch (error) {
       const err = error as Error;
+      this.sentryService.captureException(err, {
+        client: data.client,
+        weekly_report: templateName,
+      });
+
       this.logger.error(
         `Failed to format weekly report for client ${data.client.telegramId}: ${err.message}`,
         err.stack,
       );
 
-      return `🤝 Weekly summary:
+      return `🤝 Weekly summary — ${data.client.subscription.name}:
 📈 Profit: ${profit.toFixed(2)} USD
-📉 Loss: ${loss.toFixed(2)} USD
+📉 Loss: ${Math.abs(loss).toFixed(2)} USD
 💹 Result: ${netResult.toFixed(2)} USD
+✅ Positive trades: ${positiveTrades}
+❌ Negative trades: ${negativeTrades}
+
+🟣 VIP reference:
+📈 Profit: ${vipProfit.toFixed(2)} USD
+📉 Loss: ${Math.abs(vipLoss).toFixed(2)} USD
+💹 Result: ${vipNetResult.toFixed(2)} USD
+✅ Positive trades: ${vipPositiveTrades}
+❌ Negative trades: ${vipNegativeTrades}
 The key is consistency.`;
     }
   }
