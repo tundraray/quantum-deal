@@ -49,4 +49,32 @@ export class UsersRepository extends BaseRepository<User, NewUser, number> {
       ),
     );
   }
+
+  /**
+   * Find active users whose subscription expires in exactly N days from now
+   * Used for sending expiration notifications at specific thresholds
+   *
+   * @param daysFromNow - Number of days from now (0 = today, 3 = 3 days from now, etc.)
+   * @returns Array of users with subscriptions expiring on the target date
+   */
+  public async findUsersWithExpiringSubscriptions(
+    daysFromNow: number,
+  ): Promise<User[]> {
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + daysFromNow);
+    targetDate.setHours(0, 0, 0, 0);
+
+    const nextDay = new Date(targetDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    return await this.findBy(
+      and(
+        eq(this.table.isActive, true),
+        sql`${users.subscribeId} IS NOT NULL`,
+        sql`${users.subscribeExpirationDate} IS NOT NULL`,
+        sql`${users.subscribeExpirationDate} >= ${targetDate}`,
+        sql`${users.subscribeExpirationDate} < ${nextDay}`,
+      ),
+    );
+  }
 }

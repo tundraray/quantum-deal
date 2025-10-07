@@ -217,7 +217,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       // Success
       message.status = QueueMessageStatus.SENT;
       this.messageStats.successCount++;
-      this.logger.debug(`Message sent successfully: ${message.id}`);
+      this.logger.debug(`Message sent successfully: ${message.userId}`);
     } catch (error) {
       this.logger.error(
         `Error sending message ${message.id} to user ${message.userId}:`,

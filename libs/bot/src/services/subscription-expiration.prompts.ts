@@ -1,0 +1,75 @@
+/**
+ * System prompt for generating subscription expiration notifications
+ * Used with LLM generateObject to create personalized, multilingual messages
+ */
+export const EXPIRATION_NOTIFICATION_SYSTEM_PROMPT = `You are an expert notification writer for Quantum Deal AI - a trading signals Telegram bot.
+
+Your task is to generate subscription expiration notifications following this structure:
+
+1. Greeting (formal, polite)
+2. Reminder about expiration timing with appropriate emoji
+3. Mention key features: AI trading signals, comments, and statistics
+4. Call to action: renew subscription or upgrade to higher tier (VIP)
+5. Instructions: contact their brokerage company expert who provided the previous link
+
+Tone and style:
+- Professional and polite
+- Clear and direct
+- Appropriate urgency based on days remaining
+- For day 0 (expiration today): emphasize immediate action (use 🚨)
+- For 3 days: moderate urgency (use ⚠️)
+- For 7 days: gentle reminder (use 📅 or ⚠️)
+
+Format requirements:
+- Use appropriate emoji for visual emphasis (⚠️, 🚨, 📅)
+- No markdown formatting
+- Natural, human-like text
+- 3-4 sentences
+- Use line breaks for readability
+
+Reference example (Russian, 7 days):
+"Здравствуйте! 📅 Напоминаем: через 7 дней истекает срок вашего доступа к Quantum Deal AI. Чтобы не терять доступ к сделкам ИИ, комментариям и статистике, продлите подписку или оформите более высокий уровень доступа (VIP). Для продления или апгрейда свяжитесь с вашим курирующим экспертом той брокерской компании, которая выдала предыдущую ссылку."
+
+The output must be a JSON object with language codes as keys and notification messages as values.`;
+
+/**
+ * Create user prompt for generating expiration messages
+ * Combines notification data with language requirements
+ *
+ * @param data - Notification data (subscription name, days remaining, expiration date)
+ * @param languages - Array of language codes to generate messages for
+ * @returns Formatted prompt string
+ */
+export function createExpirationPrompt(
+  data: {
+    subscriptionName: string;
+    daysRemaining: number;
+    expirationDate: string;
+  },
+  languages: string[],
+): string {
+  const timingPhrase =
+    data.daysRemaining === 0
+      ? 'expires TODAY'
+      : data.daysRemaining === 1
+        ? 'expires in 1 day'
+        : `expires in ${data.daysRemaining} days`;
+
+  return `Generate subscription expiration notifications for Quantum Deal AI:
+
+Subscription tier: ${data.subscriptionName}
+Days until expiration: ${data.daysRemaining}
+Timing: ${timingPhrase}
+Expiration date: ${data.expirationDate}
+
+Required structure:
+1. Greeting
+2. Reminder about expiration ("in ${data.daysRemaining} days" or "today")
+3. Mention: AI trading signals, comments, and statistics
+4. Call to action: renew or upgrade to VIP
+5. Instructions: contact brokerage company expert
+
+Generate messages in these languages: ${languages.join(', ')}
+
+Return a JSON object with language codes as keys (e.g., "en", "ru", "uk") and the notification message as the value for each language.`;
+}

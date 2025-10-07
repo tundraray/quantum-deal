@@ -7,6 +7,7 @@ import { WebhookProcessorService } from './services/webhook.service';
 import { WeekReportService } from './services/week-report.service';
 import { MonthReportService } from './services/month-report.service';
 import { NotificationService } from './services/notification.service';
+import { SubscriptionExpirationService } from './services/subscription-expiration.service';
 import { DbModule } from '@quantumdeal/db';
 import { FrameworkModule } from '@quantumdeal/framework';
 
@@ -21,6 +22,7 @@ import { FrameworkModule } from '@quantumdeal/framework';
     WeekReportService,
     MonthReportService,
     NotificationService,
+    SubscriptionExpirationService,
   ],
   exports: [
     BotService,
@@ -31,6 +33,7 @@ import { FrameworkModule } from '@quantumdeal/framework';
     WeekReportService,
     MonthReportService,
     NotificationService,
+    SubscriptionExpirationService,
   ],
 })
 export class BotModule {}

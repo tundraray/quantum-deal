@@ -1,0 +1,451 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
+import {
+  UsersRepository,
+  SubscriptionsRepository,
+  User,
+} from '@quantumdeal/db';
+import { LLMService, QuotaExceededException } from '@quantumdeal/framework';
+import { NotificationService } from './notification.service';
+import {
+  MessagePriority,
+  QueuedMessageType,
+} from '../interfaces/notification.interface';
+import {
+  ExpirationMessages,
+  FALLBACK_MESSAGES,
+  formatFallbackMessage,
+  ExpirationNotificationData,
+  expirationMessagesSchema,
+} from './subscription-expiration.schemas';
+import {
+  EXPIRATION_NOTIFICATION_SYSTEM_PROMPT,
+  createExpirationPrompt,
+} from './subscription-expiration.prompts';
+
+/**
+ * Result of processing expiration notifications
+ */
+interface NotificationResult {
+  readonly success: boolean;
+  readonly totalUsers: number;
+  readonly notificationsSent: number;
+  readonly notificationsSkipped: number;
+  readonly errors: Array<{
+    readonly userId: number;
+    readonly error: string;
+  }>;
+}
+
+/**
+ * Service for sending subscription expiration notifications
+ * Uses LLM to generate personalized, multilingual messages
+ * Implements cron scheduling
+ */
+@Injectable()
+export class SubscriptionExpirationService {
+  private readonly logger = new Logger(SubscriptionExpirationService.name);
+
+  constructor(
+    private readonly usersRepository: UsersRepository,
+    private readonly subscriptionsRepository: SubscriptionsRepository,
+    private readonly llmService: LLMService,
+    private readonly notificationService: NotificationService,
+    private readonly configService: ConfigService,
+    private readonly schedulerRegistry: SchedulerRegistry,
+  ) {}
+
+  /**
+   * Initialize cron job on module startup
+   */
+  onModuleInit(): void {
+    const enabled = this.configService.get<boolean>(
+      'EXPIRATION_CHECK_ENABLED',
+      true,
+    );
+    const cronExpression = this.configService.get<string>(
+      'EXPIRATION_CHECK_CRON',
+      '0 0 10 * * *',
+    );
+    const timezone = this.configService.get<string>(
+      'EXPIRATION_CHECK_TIMEZONE',
+      'Europe/Moscow',
+    );
+
+    if (enabled) {
+      try {
+        const job = new CronJob(
+          cronExpression,
+          () => this.checkExpiringSubscriptions(),
+          null,
+          false,
+          timezone,
+        );
+
+        this.schedulerRegistry.addCronJob('subscription-expiration', job);
+        job.start();
+
+        this.logger.log(
+          `Subscription expiration check scheduled: ${cronExpression} (${timezone})`,
+        );
+      } catch (error) {
+        const err = error as Error;
+        this.logger.error(
+          `Failed to register expiration check cron '${cronExpression}': ${err.message}`,
+          err.stack,
+        );
+      }
+    } else {
+      this.logger.log(
+        'Subscription expiration check disabled via EXPIRATION_CHECK_ENABLED',
+      );
+    }
+  }
+
+  /**
+   * Main method: Check for expiring subscriptions and send notifications
+   * Runs on cron schedule
+   */
+  async checkExpiringSubscriptions(): Promise<void> {
+    this.logger.log('Starting subscription expiration check');
+
+    try {
+      const warningDaysConfig = this.configService.get<string>(
+        'EXPIRATION_WARNING_DAYS',
+        '7,3,0',
+      );
+      const warningDays = warningDaysConfig
+        .split(',')
+        .map((d) => parseInt(d.trim(), 10))
+        .filter((d) => !isNaN(d));
+
+      this.logger.debug(
+        `Checking expiration for days: ${warningDays.join(', ')}`,
+      );
+
+      let totalSent = 0;
+      let totalSkipped = 0;
+      let totalErrors = 0;
+
+      for (const days of warningDays) {
+        const result = await this.processExpirationDay(days);
+        totalSent += result.notificationsSent;
+        totalSkipped += result.notificationsSkipped;
+        totalErrors += result.errors.length;
+
+        if (result.errors.length > 0) {
+          result.errors.forEach((err) => {
+            this.logger.warn(
+              `Failed to send notification to user ${err.userId}: ${err.error}`,
+            );
+          });
+        }
+      }
+
+      this.logger.log(
+        `Expiration check completed: ${totalSent} sent, ${totalSkipped} skipped, ${totalErrors} errors`,
+      );
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Subscription expiration check failed: ${err.message}`,
+        err.stack,
+      );
+    }
+  }
+
+  /**
+   * Process notifications for a specific expiration day threshold
+   */
+  private async processExpirationDay(
+    daysFromNow: number,
+  ): Promise<NotificationResult> {
+    this.logger.debug(
+      `Processing users with subscriptions expiring in ${daysFromNow} days`,
+    );
+
+    try {
+      // Find users with subscriptions expiring on this day
+      const users =
+        await this.usersRepository.findUsersWithExpiringSubscriptions(
+          daysFromNow,
+        );
+
+      if (users.length === 0) {
+        this.logger.debug(`No users found expiring in ${daysFromNow} days`);
+        return {
+          success: true,
+          totalUsers: 0,
+          notificationsSent: 0,
+          notificationsSkipped: 0,
+          errors: [],
+        };
+      }
+
+      this.logger.log(
+        `Found ${users.length} users with subscriptions expiring in ${daysFromNow} days`,
+      );
+
+      // Generate and send notifications
+      const result = await this.sendNotificationsToUsers(users, daysFromNow);
+
+      this.logger.log(
+        `Processed ${daysFromNow}-day notifications: ${result.notificationsSent} sent, ${result.notificationsSkipped} skipped`,
+      );
+
+      return result;
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to process ${daysFromNow}-day expiration: ${err.message}`,
+        err.stack,
+      );
+
+      return {
+        success: false,
+        totalUsers: 0,
+        notificationsSent: 0,
+        notificationsSkipped: 0,
+        errors: [{ userId: 0, error: err.message }],
+      };
+    }
+  }
+
+  /**
+   * Send notifications to multiple users
+   * Generates messages via LLM for all languages in one request
+   */
+  private async sendNotificationsToUsers(
+    users: User[],
+    daysFromNow: number,
+  ): Promise<NotificationResult> {
+    const errors: Array<{ userId: number; error: string }> = [];
+    let notificationsSent = 0;
+    let notificationsSkipped = 0;
+
+    try {
+      // Collect unique languages
+      const languages = [
+        ...new Set(
+          users.map((u) => u.lang).filter((lang): lang is string => !!lang),
+        ),
+      ];
+
+      // Ensure English is always included as fallback
+      if (!languages.includes('en')) {
+        languages.push('en');
+      }
+
+      this.logger.debug(
+        `Generating messages for languages: ${languages.join(', ')}`,
+      );
+
+      // Get subscription details for the first user (assuming same notification for all)
+      const firstUser = users[0];
+      const subscription = firstUser.subscribeId
+        ? await this.subscriptionsRepository.findOneBy(
+            firstUser.subscribeId as any,
+          )
+        : null;
+
+      const subscriptionName = subscription?.name || 'Subscription';
+
+      // Generate messages via LLM
+      const messages = await this.generateNotificationMessages(
+        subscriptionName,
+        daysFromNow,
+        firstUser.subscribeExpirationDate!,
+        languages,
+      );
+
+      // Send notifications to each user
+      const results = await Promise.allSettled(
+        users.map((user) =>
+          this.sendNotificationToUser(user, daysFromNow, messages),
+        ),
+      );
+
+      // Process results
+      results.forEach((result, index) => {
+        const user = users[index];
+
+        if (result.status === 'fulfilled' && result.value) {
+          notificationsSent++;
+        } else if (result.status === 'fulfilled' && !result.value) {
+          notificationsSkipped++;
+        } else {
+          const error =
+            result.status === 'rejected'
+              ? (result.reason as Error).message
+              : 'Unknown error';
+          errors.push({ userId: user.telegramId, error });
+        }
+      });
+
+      return {
+        success: errors.length === 0,
+        totalUsers: users.length,
+        notificationsSent,
+        notificationsSkipped,
+        errors,
+      };
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to send notifications: ${err.message}`,
+        err.stack,
+      );
+
+      return {
+        success: false,
+        totalUsers: users.length,
+        notificationsSent,
+        notificationsSkipped,
+        errors: [{ userId: 0, error: err.message }],
+      };
+    }
+  }
+
+  /**
+   * Generate notification messages for multiple languages using LLM
+   * Falls back to template if LLM fails
+   */
+  private async generateNotificationMessages(
+    subscriptionName: string,
+    daysRemaining: number,
+    expirationDate: Date,
+    languages: string[],
+  ): Promise<ExpirationMessages> {
+    const data: ExpirationNotificationData = {
+      subscriptionName,
+      daysRemaining,
+      expirationDate: expirationDate.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }),
+    };
+
+    try {
+      const model = this.configService.get<string>(
+        'EXPIRATION_LLM_MODEL',
+        'gpt-5-mini',
+      );
+
+      // Schema returns 'any' to match LLMService.generateObject interface
+
+      const prompt = createExpirationPrompt(data, languages);
+
+      this.logger.debug(`Generating messages with ${model}`);
+
+      // LLM Service returns generic type, typed explicitly via <ExpirationMessages>
+
+      const messages = await this.llmService.generateObject<ExpirationMessages>(
+        {
+          model,
+
+          schema: expirationMessagesSchema,
+          prompt,
+          systemPrompt: EXPIRATION_NOTIFICATION_SYSTEM_PROMPT,
+          temperature: 0.7,
+        },
+      );
+
+      return messages;
+    } catch (error) {
+      if (error instanceof QuotaExceededException) {
+        this.logger.warn('LLM quota exceeded, using fallback templates');
+      } else {
+        this.logger.error(
+          'LLM generation failed, using fallback templates',
+          error as Error,
+        );
+      }
+
+      // Use fallback templates
+      return this.getFallbackMessages(data, daysRemaining, languages);
+    }
+  }
+
+  /**
+   * Get fallback messages when LLM is unavailable
+   * Always includes English as fallback for unsupported languages
+   */
+  private getFallbackMessages(
+    data: ExpirationNotificationData,
+    daysRemaining: number,
+    languages: string[],
+  ): ExpirationMessages {
+    const messages: ExpirationMessages = {};
+    const fallback = FALLBACK_MESSAGES[daysRemaining] || FALLBACK_MESSAGES[0];
+
+    // Ensure English template exists
+    if (!fallback['en']) {
+      this.logger.error(
+        `English fallback message not found for ${daysRemaining} days`,
+      );
+      throw new Error('English fallback message is required');
+    }
+
+    languages.forEach((lang) => {
+      // Use language-specific template if available, otherwise fallback to English
+      const template = fallback[lang] || fallback['en'];
+      messages[lang] = formatFallbackMessage(template, data);
+    });
+
+    // Ensure English is always present in output
+    if (!messages['en']) {
+      messages['en'] = formatFallbackMessage(fallback['en'], data);
+    }
+
+    return messages;
+  }
+
+  /**
+   * Send notification to a single user
+   * Uses user's language if available, otherwise defaults to English
+   */
+  private sendNotificationToUser(
+    user: User,
+    daysFromNow: number,
+    messages: ExpirationMessages,
+  ): boolean {
+    try {
+      // Get message in user's language (fallback to English)
+      const userLang = user.lang || 'en';
+      const message = messages[userLang] || messages['en'];
+
+      if (!message) {
+        this.logger.error(
+          `No message available for user ${user.telegramId}. User lang: ${userLang}, Available languages: ${Object.keys(messages).join(', ')}`,
+        );
+        throw new Error(
+          `No message available for language: ${userLang} and English fallback is missing`,
+        );
+      }
+
+      // Send notification
+      this.notificationService.addMessage(user.telegramId, message, {
+        messageType: QueuedMessageType.TEXT,
+        priority: MessagePriority.HIGH,
+      });
+
+      this.logger.debug(
+        `Sent ${daysFromNow}-day expiration notification to user ${user.telegramId}`,
+      );
+
+      return true;
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to send notification to user ${user.telegramId}: ${err.message}`,
+        err.stack,
+      );
+      throw error;
+    }
+  }
+}
