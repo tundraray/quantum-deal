@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
@@ -247,9 +245,7 @@ export class SubscriptionExpirationService {
       // Get subscription details for the first user (assuming same notification for all)
       const firstUser = users[0];
       const subscription = firstUser.subscribeId
-        ? await this.subscriptionsRepository.findOneBy(
-            firstUser.subscribeId as any,
-          )
+        ? await this.subscriptionsRepository.findById(firstUser.subscribeId)
         : null;
 
       const subscriptionName = subscription?.name || 'Subscription';
@@ -430,7 +426,7 @@ export class SubscriptionExpirationService {
 
       // Send notification
       this.notificationService.addMessage(user.telegramId, message, {
-        messageType: QueuedMessageType.TEXT,
+        messageType: QueuedMessageType.MARKDOWN,
         priority: MessagePriority.HIGH,
       });
 

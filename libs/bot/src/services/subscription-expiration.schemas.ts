@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 import { z } from 'zod';
 
 /**
@@ -15,7 +13,7 @@ export interface ExpirationNotificationData {
  * Generated messages for multiple languages
  */
 
-export const expirationMessagesSchema = z.record(z.string(), z.string());
+export const expirationMessagesSchema = z.object({}).catchall(z.string());
 export type ExpirationMessages = z.infer<typeof expirationMessagesSchema>;
 /**
  * Default fallback messages when LLM is unavailable

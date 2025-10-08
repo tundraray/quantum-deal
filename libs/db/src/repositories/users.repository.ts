@@ -60,20 +60,14 @@ export class UsersRepository extends BaseRepository<User, NewUser, number> {
   public async findUsersWithExpiringSubscriptions(
     daysFromNow: number,
   ): Promise<User[]> {
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() + daysFromNow);
-    targetDate.setHours(0, 0, 0, 0);
-
-    const nextDay = new Date(targetDate);
-    nextDay.setDate(nextDay.getDate() + 1);
-
+    // Compare by date only (ignore time-of-day)
+    // Matches rows where DATE(subscribe_expiration_date) = CURRENT_DATE + daysFromNow
     return await this.findBy(
       and(
         eq(this.table.isActive, true),
         sql`${users.subscribeId} IS NOT NULL`,
         sql`${users.subscribeExpirationDate} IS NOT NULL`,
-        sql`${users.subscribeExpirationDate} >= ${targetDate}`,
-        sql`${users.subscribeExpirationDate} < ${nextDay}`,
+        sql`${users.subscribeExpirationDate}::date = CURRENT_DATE + ${daysFromNow}::int`,
       ),
     );
   }
