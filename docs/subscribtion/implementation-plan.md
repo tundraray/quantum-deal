@@ -1,0 +1,1303 @@
+# Implementation Plan
+
+## ⚠️ CRITICAL PREFACE
+
+**This is a complete implementation plan for a feature that DOES NOT YET EXIST.** Before starting implementation, understand the current state:
+
+**Current Codebase Reality:**
+- ✅ Base infrastructure: NestJS, Drizzle ORM, Telegraf, repositories, services ← EXISTS
+- ✅ Masterbot module structure ← EXISTS
+- ✅ NotificationService with rate limiting ← EXISTS
+- ✅ UsersRepository.findBySubscription() ← EXISTS
+- ❌ Schema changes (type, isActive fields) ← **NOT APPLIED**
+- ❌ SubscriptionType enum ← **DOES NOT EXIST**
+- ❌ All new services (SubscriptionManagement, Broadcast, CodeGeneration) ← **DO NOT EXIST**
+- ❌ Repository extensions for analytical subscriptions ← **NOT IMPLEMENTED**
+- ❌ Command handlers (/subscription, actions) ← **NOT ADDED**
+
+**IMPORTANT:** This implementation requires **ADDING NEW CODE**, not modifying existing features. The signals subscription system continues to work independently.
+
+---
+
+## Overview
+
+This document outlines a phased approach to implementing the manual subscription broadcast feature. The plan is organized into phases with specific tasks, dependencies, and acceptance criteria.
+
+## Project Timeline
+
+**Estimated Duration**: 2-3 weeks
+
+- **Phase 1**: Database & Repository Layer (3-4 days)
+- **Phase 2**: Service Layer (4-5 days)
+- **Phase 3**: Command Handlers & UI (4-5 days)
+- **Phase 4**: Testing & Refinement (3-4 days)
+
+## Phase 1: Database & Repository Layer
+
+**Duration**: 3-4 days
+
+### Tasks
+
+#### 1.1 Update Drizzle Schema - Subscriptions
+
+**Priority**: High
+**Dependencies**: None
+**Estimated Time**: 3 hours
+
+**Steps**:
+1. Update `libs/db/src/schema/subscriptions.ts`
+2. **CRITICAL**: Add `SubscriptionType` const for signals type
+3. Add helper functions for generating broadcast subscription types
+4. Add new fields: `type` (with default `'signals'`, length 50), `isActive`, `updatedAt`, `closedAt`, `closedBy`
+5. Add import for `managers` table to enable foreign key reference
+6. Export helper functions for use across the application
+7. Update TypeScript types (`Subscription`, `NewSubscription`)
+
+**Files to Modify**:
+- `libs/db/src/schema/subscriptions.ts`
+
+**New Exports**:
+```typescript
+export const SubscriptionType = {
+  SIGNALS: 'signals',
+} as const;
+
+// Helper to generate broadcast subscription UID
+import { nanoid } from 'nanoid';
+
+export function generateSubscriptionUID(): string {
+  return nanoid(10);
+}
+
+export function generateBroadcastSubscriptionType(): string {
+  return `subscription_${generateSubscriptionUID()}`;
+}
+
+export function isBroadcastSubscription(type: string): boolean {
+  return type.startsWith('subscription_');
+}
+```
+
+**Code Example**:
+```typescript
+import { boolean } from 'drizzle-orm/pg-core';
+import { managers } from './managers';
+import { nanoid } from 'nanoid';
+
+export const SubscriptionType = {
+  SIGNALS: 'signals',
+} as const;
+
+export function generateSubscriptionUID(): string {
+  return nanoid(10);
+}
+
+export function generateBroadcastSubscriptionType(): string {
+  return `subscription_${generateSubscriptionUID()}`;
+}
+
+export function isBroadcastSubscription(type: string): boolean {
+  return type.startsWith('subscription_');
+}
+
+export const subscriptions = pgTable('subscriptions', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  name: varchar('name').notNull(),
+  type: varchar('type', { length: 50 }).notNull().default(SubscriptionType.SIGNALS), // NEW - length 50 for dynamic UIDs
+  scope: jsonb('scope').$type<string[] | null>(),
+  isActive: boolean('is_active').notNull().default(true), // NEW
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(), // NEW
+  closedAt: timestamp('closed_at', { withTimezone: true }), // NEW
+  closedBy: bigint('closed_by', { mode: 'number' }).references(() => managers.telegramId), // NEW
+});
+```
+
+**Acceptance Criteria**:
+- Schema file includes `type` field with default value `'signals'` and length 50
+- Helper functions for UID generation are exported
+- Helper function `isBroadcastSubscription()` is exported
+- All new lifecycle fields are added
+- TypeScript types are correct
+- No TypeScript compilation errors
+- `nanoid` package is installed
+
+---
+
+#### 1.2 Generate and Enhance Database Migration
+
+**Priority**: High
+**Dependencies**: 1.1
+**Estimated Time**: 6 hours
+
+**Steps**:
+1. **Generate migration** with Drizzle Kit:
+   ```bash
+   pnpm run db:generate
+   ```
+2. **Review generated SQL** in `libs/db/migrations/XXXXXX_*.sql`
+3. **CRITICAL**: Manually enhance the generated migration file with:
+   - CHECK constraint for subscription types (`signals`, `analytical`)
+   - Unique constraint for analytical categories
+   - Performance indexes (type, type+active, active, name)
+   - Auto-update trigger for `updated_at` column
+   - **Data migration**: UPDATE to set existing subscriptions to `'signals'`
+   - Column comments for documentation
+4. Test enhanced migration on development database
+5. Verify all existing subscriptions are set to `type = 'signals'`
+6. Verify indexes are created correctly
+7. Prepare rollback commands
+
+**Enhancement Template** (append to generated file):
+```sql
+-- ====================================================================================
+-- MANUAL ENHANCEMENTS (added after Drizzle generation)
+-- ====================================================================================
+
+-- 1. Type constraint (signals or subscription_*)
+DO $$ BEGIN
+  ALTER TABLE "subscriptions" ADD CONSTRAINT chk_subscription_type
+  CHECK (type = 'signals' OR type LIKE 'subscription_%');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- 2. Performance indexes
+CREATE INDEX IF NOT EXISTS idx_subscriptions_type ON subscriptions(type);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_type_active ON subscriptions(type, is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_subscriptions_is_active ON subscriptions(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_subscriptions_name ON subscriptions(name);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_broadcast ON subscriptions(type) WHERE type LIKE 'subscription_%';
+
+-- 3. Auto-update trigger
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+DROP TRIGGER IF EXISTS update_subscriptions_updated_at ON subscriptions;
+CREATE TRIGGER update_subscriptions_updated_at
+BEFORE UPDATE ON subscriptions
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- 4. CRITICAL: Migrate existing data
+-- Only set type for rows that don't have it (if column added without default)
+UPDATE subscriptions SET type = 'signals' WHERE type IS NULL;
+
+-- 5. Column comments
+COMMENT ON COLUMN subscriptions.type IS 'Subscription type: signals (ONE per user) or subscription_{uid} (broadcast subscriptions)';
+COMMENT ON COLUMN subscriptions.is_active IS 'Subscription active status (soft delete)';
+COMMENT ON COLUMN subscriptions.updated_at IS 'Last modification timestamp';
+COMMENT ON COLUMN subscriptions.closed_at IS 'When subscription was closed';
+COMMENT ON COLUMN subscriptions.closed_by IS 'Manager who closed the subscription';
+```
+
+**Files Modified**:
+- `libs/db/migrations/XXXXXX_*.sql` (generated by Drizzle, then manually enhanced)
+
+**Acceptance Criteria**:
+- Migration generated successfully by Drizzle Kit
+- Manual enhancements added to migration file
+- Migration runs successfully without errors
+- **CRITICAL**: All existing subscriptions are set to `type = 'signals'`
+- Type CHECK constraint allows `'signals'` and any `'subscription_%'` pattern
+- Composite indexes on (type, is_active) are created
+- Broadcast subscription index created for LIKE pattern matching
+- All existing data remains intact and functional
+- Verify existing signals subscriptions still work after migration
+- `updated_at` trigger works correctly
+
+---
+
+#### 1.3 Update Drizzle Schema - Codes
+
+**Priority**: Medium
+**Dependencies**: 1.2
+**Estimated Time**: 1 hour
+
+**Steps**:
+1. Update `libs/db/src/schema/codes.ts`
+2. Add `isActive` field with default `true`
+3. Update TypeScript types (`Code`, `NewCode`)
+
+**Files to Modify**:
+- `libs/db/src/schema/codes.ts`
+
+**Code Example**:
+```typescript
+import { boolean } from 'drizzle-orm/pg-core';
+
+export const codes = pgTable('codes', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  code: varchar('code').notNull(),
+  subscriptionId: bigint('subscription_id', { mode: 'number' })
+    .notNull()
+    .references(() => subscriptions.id),
+  userId: bigint('user_id', { mode: 'number' }).references(() => users.telegramId),
+  managerId: bigint('manager_id', { mode: 'number' }).references(() => managers.telegramId),
+  activationDate: timestamp('activation_date'),
+  expirationDate: timestamp('expiration_date'),
+  isActive: boolean('is_active').notNull().default(true), // NEW
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+```
+
+**Acceptance Criteria**:
+- Schema includes `isActive` field with default `true`
+- TypeScript types are updated
+- No compilation errors
+
+---
+
+#### 1.4 Generate and Enhance Codes Migration
+
+**Priority**: Medium
+**Dependencies**: 1.3
+**Estimated Time**: 2 hours
+
+**Steps**:
+1. **Generate migration** with Drizzle Kit:
+   ```bash
+   pnpm run db:generate
+   ```
+2. **Review generated SQL** for codes table changes
+3. **Manually enhance** with:
+   - Partial indexes for active codes
+   - Composite index for subscription + active codes
+   - Unique constraint on active unused codes
+   - Column comment
+4. Test migration on development database
+5. Verify all existing codes are marked active
+
+**Enhancement Template** (append to generated file):
+```sql
+-- ====================================================================================
+-- MANUAL ENHANCEMENTS for codes table
+-- ====================================================================================
+
+-- Indexes for codes
+CREATE INDEX IF NOT EXISTS idx_codes_is_active ON codes(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_codes_subscription_active ON codes(subscription_id, is_active) WHERE is_active = true;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_codes_code_unique_active ON codes(code) WHERE is_active = true AND user_id IS NULL;
+
+-- Column comment
+COMMENT ON COLUMN codes.is_active IS 'Code active status (invalidated when subscription closes)';
+```
+
+**Files Modified**:
+- `libs/db/migrations/XXXXXX_*.sql` (generated by Drizzle, then manually enhanced)
+
+**Acceptance Criteria**:
+- Migration runs successfully
+- All existing codes are marked active by default
+- Unique constraint on active unused codes works correctly
+- Partial indexes are created
+
+---
+
+#### 1.5 Extend SubscriptionsRepository
+
+**Priority**: High
+**Dependencies**: 1.2
+**Estimated Time**: 6 hours (increased due to type filtering methods)
+
+**Steps**:
+1. Open `libs/db/src/repositories/subscriptions.repository.ts`
+2. Import `SubscriptionType`, `isBroadcastSubscription` from schema
+3. **CRITICAL**: Add `findActiveBroadcastSubscriptions()` method
+4. Add `isBroadcastSubscriptionById()` validation method
+5. Add `updateStatus()` method
+6. Add `closeSubscription()` method
+7. Add unit tests for all new methods
+8. Add integration tests for type filtering
+
+**Files to Modify**:
+- `libs/db/src/repositories/subscriptions.repository.ts`
+
+**New Methods** (CRITICAL - with type filtering):
+```typescript
+// CRITICAL: Only returns broadcast subscriptions (type LIKE 'subscription_%')
+async findActiveBroadcastSubscriptions(): Promise<Subscription[]>
+
+// Type validation
+async isBroadcastSubscriptionById(id: number): Promise<boolean>
+
+// Lifecycle management
+async updateStatus(id: number, isActive: boolean): Promise<Subscription>
+async closeSubscription(id: number, managerId: number): Promise<Subscription>
+```
+
+**Acceptance Criteria**:
+- **CRITICAL**: `findActiveBroadcastSubscriptions()` ONLY returns broadcast type (LIKE pattern)
+- Type filtering works correctly with pattern matching
+- Unit tests pass with type filtering scenarios
+- Integration tests verify database type filtering
+- Proper error handling
+- Signals subscriptions are never returned by broadcast methods
+
+---
+
+#### 1.6 Extend CodesRepository
+
+**Priority**: Medium
+**Dependencies**: 1.4
+**Estimated Time**: 3 hours
+
+**Steps**:
+1. Open `libs/db/src/repositories/codes.repository.ts`
+2. Add `findBySubscription()` method
+3. Add `findActiveCodesBySubscription()` method
+4. Add `deactivateCodesBySubscription()` method
+5. Add unit tests
+
+**Files to Modify**:
+- `libs/db/src/repositories/codes.repository.ts`
+
+**New Methods**:
+```typescript
+async findBySubscription(subscriptionId: number): Promise<Code[]>
+async findActiveCodesBySubscription(subscriptionId: number): Promise<Code[]>
+async deactivateCodesBySubscription(subscriptionId: number): Promise<void>
+```
+
+**Acceptance Criteria**:
+- All methods implemented
+- Unit tests pass
+- Transaction support for bulk operations
+
+---
+
+## Phase 2: Service Layer
+
+**Duration**: 4-5 days
+
+### Tasks
+
+#### 2.1 Create DTOs
+
+**Priority**: High
+**Dependencies**: Phase 1
+**Estimated Time**: 2 hours
+
+**Steps**:
+1. Create `libs/masterbot/src/dto/subscription.dto.ts`
+2. Create `libs/masterbot/src/dto/code.dto.ts`
+3. Create `libs/masterbot/src/dto/broadcast.dto.ts`
+4. Add class-validator decorators
+
+**Files to Create**:
+- `libs/masterbot/src/dto/subscription.dto.ts`
+- `libs/masterbot/src/dto/code.dto.ts`
+- `libs/masterbot/src/dto/broadcast.dto.ts`
+
+**DTOs to Define**:
+- `CreateSubscriptionDto`
+- `SubscriptionDto`
+- `CloseSubscriptionDto`
+- `BroadcastMessageDto`
+- `BroadcastResultDto`
+
+**Acceptance Criteria**:
+- All DTOs have validation decorators
+- TypeScript types are correct
+- No compilation errors
+
+---
+
+#### 2.2 Create CodeGenerationService
+
+**Priority**: High
+**Dependencies**: 2.1
+**Estimated Time**: 6 hours
+
+**Steps**:
+1. Create `libs/masterbot/src/services/code-generation.service.ts`
+2. Implement `generateUniqueCode()` method with collision detection
+3. Implement `validateCode()` method
+4. Implement `getInviteUrl()` method
+5. Add unit tests
+6. Add integration tests
+
+**Files to Create**:
+- `libs/masterbot/src/services/code-generation.service.ts`
+- `libs/masterbot/src/services/code-generation.service.spec.ts`
+
+**Key Methods**:
+```typescript
+async generateUniqueCode(subscriptionId: number, managerId: number): Promise<CodeDto>
+async validateCode(code: string): Promise<boolean>
+async getInviteUrl(code: string): Promise<string>
+```
+
+**Implementation Details**:
+- Use `crypto.randomBytes()` for code generation
+- 15-character alphanumeric codes
+- Max 10 collision retries
+- Get bot username via Telegram API
+
+**Acceptance Criteria**:
+- Generates unique codes consistently
+- Handles collisions gracefully
+- Unit tests cover edge cases
+- Integration tests verify database operations
+
+---
+
+#### 2.3 Create SubscriptionManagementService
+
+**Priority**: High
+**Dependencies**: 2.1, 2.2
+**Estimated Time**: 10 hours (increased due to type handling and validation)
+
+**Steps**:
+1. Create `libs/masterbot/src/services/subscription-management.service.ts`
+2. Import `generateBroadcastSubscriptionType`, `isBroadcastSubscription` from schema
+3. **CRITICAL**: Implement `createSubscription()` with dynamic UID generation
+4. Implement `closeSubscription()` with type validation
+5. **CRITICAL**: Implement `getActiveBroadcastSubscriptions()` (filtered by type pattern)
+6. Implement `getSubscriptionById()`
+7. Implement `validateSubscriptionName()`
+8. Add type validation in all methods
+9. Add unit tests with type scenarios
+10. Add integration tests
+
+**Files to Create**:
+- `libs/masterbot/src/services/subscription-management.service.ts`
+- `libs/masterbot/src/services/subscription-management.service.spec.ts`
+
+**Key Methods** (CRITICAL - type-aware):
+```typescript
+// CRITICAL: Creates BROADCAST subscriptions with dynamic type
+async createSubscription(name: string, managerId: number): Promise<CreateSubscriptionResult>
+
+// CRITICAL: Validates broadcast type before closing
+async closeSubscription(subscriptionId: number, managerId: number): Promise<void>
+
+// CRITICAL: Returns only broadcast subscriptions
+async getActiveBroadcastSubscriptions(): Promise<SubscriptionDto[]>
+
+async getSubscriptionById(id: number): Promise<SubscriptionDto | null>
+validateSubscriptionName(name: string): boolean
+```
+
+**Implementation Details**:
+- **CRITICAL**: Always generate dynamic type with `generateBroadcastSubscriptionType()`
+- Validate subscription is broadcast before closing using `isBroadcastSubscription()`
+- Use transactions for create operation
+- Validate name: 3-50 characters, alphanumeric + spaces
+- Check for duplicate names (optional)
+- Generate code automatically on creation
+- Throw error if trying to close signals subscription
+
+**Acceptance Criteria**:
+- **CRITICAL**: All created subscriptions have dynamic `type = 'subscription_{uid}'`
+- Cannot close signals subscriptions through this service
+- Transaction rollback on errors
+- Type validation prevents operations on wrong subscription types
+- Comprehensive unit tests with type scenarios
+- Integration tests verify type filtering in database
+
+---
+
+#### 2.4 Create BroadcastService
+
+**Priority**: High
+**Dependencies**: 2.1
+**Estimated Time**: 10 hours (increased due to type validation)
+
+**Steps**:
+1. Create `libs/masterbot/src/services/broadcast.service.ts`
+2. Import `isBroadcastSubscription` from schema
+3. **CRITICAL**: Implement `countSubscribers()` with inline type validation
+4. Implement `validateMessage()`
+5. **CRITICAL**: Implement `sendBroadcast()` with inline type validation
+6. Implement `saveBroadcastHistory()` (optional)
+7. Add unit tests with type validation scenarios
+8. Add integration tests
+
+**Files to Create**:
+- `libs/masterbot/src/services/broadcast.service.ts`
+- `libs/masterbot/src/services/broadcast.service.spec.ts`
+
+**Key Methods** (CRITICAL - type-aware):
+```typescript
+// CRITICAL: Only counts for broadcast subscriptions (validates inline)
+async countSubscribers(subscriptionId: number): Promise<number>
+
+validateMessage(message: string): MessageValidationResult
+
+// CRITICAL: Only broadcasts to broadcast subscriptions (validates inline)
+async sendBroadcast(subscriptionId: number, message: string, managerId: number): Promise<BroadcastResultDto>
+```
+
+**Implementation Details**:
+- **CRITICAL**: Validate subscription is broadcast INLINE using `isBroadcastSubscription()`
+- Throw error if subscription is signals type
+- Integrate with existing `NotificationService`
+- Message validation: max 4096 chars (Telegram limit)
+- Use `MessagePriority.NORMAL` for broadcasts
+- Support Markdown formatting
+
+**Acceptance Criteria**:
+- **CRITICAL**: Cannot broadcast to signals subscriptions
+- Type validation happens inline in countSubscribers() and sendBroadcast()
+- Type validation throws clear errors
+- Correctly counts active subscribers (broadcast only)
+- Validates messages properly
+- Integrates with NotificationService
+- Unit tests include type validation scenarios
+- Integration tests verify type filtering works
+
+---
+
+#### 2.5 Update MasterbotModule
+
+**Priority**: High
+**Dependencies**: 2.2, 2.3, 2.4
+**Estimated Time**: 2 hours
+
+**Steps**:
+1. Open `libs/masterbot/src/masterbot.module.ts`
+2. Add new services to providers
+3. Import BotModule for NotificationService
+4. Verify dependency injection
+
+**Files to Modify**:
+- `libs/masterbot/src/masterbot.module.ts`
+
+**Providers to Add**:
+- `SubscriptionManagementService`
+- `BroadcastService`
+- `CodeGenerationService`
+
+**Acceptance Criteria**:
+- Module compiles without errors
+- DI works correctly
+- No circular dependencies
+
+---
+
+## Phase 3: Command Handlers & UI
+
+**Duration**: 4-5 days
+
+### Tasks
+
+#### 3.1 Add Constants
+
+**Priority**: Medium
+**Dependencies**: None
+**Estimated Time**: 1 hour
+
+**Steps**:
+1. Open `libs/masterbot/src/constants.ts`
+2. Add new main command `/subscription`
+3. Add new callback action prefixes for menu buttons
+4. Add error messages
+
+**Files to Modify**:
+- `libs/masterbot/src/constants.ts`
+
+**Constants to Add**:
+```typescript
+COMMANDS: {
+  SUBSCRIPTION: '/subscription',
+}
+
+CALLBACK_ACTIONS: {
+  SUBSCRIPTION_CREATE: 'subscription_create',
+  SUBSCRIPTION_CLOSE: 'subscription_close',
+  SUBSCRIPTION_BROADCAST: 'subscription_broadcast',
+  CLOSE_SUB_PREFIX: 'close_sub_',
+  CLOSE_SUB_CANCEL: 'close_sub_cancel',
+  BROADCAST_SUB_PREFIX: 'broadcast_sub_',
+  BROADCAST_CONFIRM: 'broadcast_confirm',
+  BROADCAST_CANCEL: 'broadcast_cancel',
+}
+```
+
+**Acceptance Criteria**:
+- Constants are properly typed
+- No naming conflicts
+- New callback actions for menu buttons defined
+
+---
+
+#### 3.2 Extend UserContext Interface
+
+**Priority**: Medium
+**Dependencies**: None
+**Estimated Time**: 1 hour
+
+**Steps**:
+1. Open `libs/masterbot/src/interfaces/user-context.interface.ts`
+2. Add session fields for broadcast state
+3. Update type definitions
+
+**Files to Modify**:
+- `libs/masterbot/src/interfaces/user-context.interface.ts`
+
+**Session Fields to Add**:
+```typescript
+session: {
+  state: string | null;
+  commandContext: string | null;
+  broadcastSubscriptionId: number | null;
+  broadcastMessage: string | null;
+}
+```
+
+**Acceptance Criteria**:
+- Session interface is properly typed
+- Compatible with existing session structure
+
+---
+
+#### 3.3 Implement Subscription Menu Command
+
+**Priority**: High
+**Dependencies**: Phase 2, 3.1, 3.2
+**Estimated Time**: 2 hours
+
+**Steps**:
+1. Open `libs/masterbot/src/masterbot.update.ts`
+2. Add `@Command('subscription')` handler
+3. Implement inline keyboard with three buttons
+4. Add error handling
+5. Add logging
+
+**Files to Modify**:
+- `libs/masterbot/src/masterbot.update.ts`
+
+**Handlers to Add**:
+- `onSubscriptionMenu()` - Main command handler showing menu
+
+**Implementation**:
+- Show menu with three buttons:
+  - "Создать подписку" (subscription_create)
+  - "Закрыть подписку" (subscription_close)
+  - "Отправить сообщение" (subscription_broadcast)
+- Use inline keyboard for buttons
+- Handle errors gracefully
+
+**Acceptance Criteria**:
+- Command shows menu correctly
+- All three buttons display properly
+- Button labels are clear
+- Error handling works
+
+---
+
+#### 3.4 Implement Create Subscription Action
+
+**Priority**: High
+**Dependencies**: 3.3
+**Estimated Time**: 6 hours
+
+**Steps**:
+1. Open `libs/masterbot/src/masterbot.update.ts`
+2. Add `@Action('subscription_create')` handler
+3. Add text message handler for subscription name
+4. Implement session state management
+5. Add error handling
+6. Add logging
+
+**Files to Modify**:
+- `libs/masterbot/src/masterbot.update.ts`
+
+**Handlers to Add**:
+- `onCreateSubscription()` - Action handler (triggered from menu)
+- Update `onText()` - Handle name input
+
+**Implementation**:
+- Edit message to prompt for subscription name
+- Validate input
+- Create subscription + code
+- Return invite URL
+- Handle errors gracefully
+
+**Acceptance Criteria**:
+- Action flow works end-to-end from menu
+- Validation works correctly
+- Error messages are user-friendly
+- Session state is managed properly
+
+---
+
+#### 3.5 Implement Close Subscription Action
+
+**Priority**: High
+**Dependencies**: 3.3
+**Estimated Time**: 6 hours
+
+**Steps**:
+1. Open `libs/masterbot/src/masterbot.update.ts`
+2. Add `@Action('subscription_close')` handler
+3. Add `@Action(/^close_sub_(\d+)$/)` handler
+4. Add `@Action(/^confirm_close_(\d+)$/)` handler
+5. Add cancel action handler
+6. Add error handling
+7. Add logging
+
+**Files to Modify**:
+- `libs/masterbot/src/masterbot.update.ts`
+
+**Handlers to Add**:
+- `onCloseSubscription()` - Action handler (triggered from menu)
+- `onCloseSubscriptionSelected()` - Subscription selection
+- `onConfirmCloseSubscription()` - Confirmation
+- `onCancelCloseSubscription()` - Cancel action
+
+**Implementation**:
+- Edit message to show active subscriptions
+- Get user selection
+- Show confirmation
+- Close subscription
+- Send success message
+
+**Acceptance Criteria**:
+- Complete flow works from menu
+- Inline keyboard displays correctly
+- Confirmation prevents accidental closes
+- Cancel action works
+
+---
+
+#### 3.6 Implement Broadcast Action
+
+**Priority**: High
+**Dependencies**: 3.3, 3.2
+**Estimated Time**: 10 hours
+
+**Steps**:
+1. Open `libs/masterbot/src/masterbot.update.ts`
+2. Add `@Action('subscription_broadcast')` handler
+3. Add `@Action(/^broadcast_sub_(\d+)$/)` handler
+4. Update `@On('text')` handler for message input
+5. Add `@Action('broadcast_confirm')` handler
+6. Add cancel action handler
+7. Add error handling
+8. Add logging
+9. Add completion notification
+
+**Files to Modify**:
+- `libs/masterbot/src/masterbot.update.ts`
+
+**Handlers to Add**:
+- `onBroadcast()` - Action handler (triggered from menu)
+- `onBroadcastSubscriptionSelected()` - Subscription selection
+- Update `onText()` - Handle message input
+- `onBroadcastConfirm()` - Confirmation and send
+- `onCancelBroadcast()` - Cancel action
+
+**Implementation**:
+- Edit message to show subscriptions with counts
+- Get subscription selection
+- Prompt for message
+- Validate message
+- Show preview + confirmation
+- Queue broadcast via BroadcastService
+- Send completion status
+
+**Acceptance Criteria**:
+- Complete flow works from menu
+- Message validation works
+- Preview shows correctly
+- Broadcast queues successfully
+- Completion status is accurate
+- Error handling is robust
+
+---
+
+#### 3.7 Update Help Command
+
+**Priority**: Low
+**Dependencies**: 3.3, 3.4, 3.5, 3.6
+**Estimated Time**: 1 hour
+
+**Steps**:
+1. Open `libs/masterbot/src/masterbot.update.ts`
+2. Update help message in `onHelp()` method
+3. Add new command to help text
+
+**Files to Modify**:
+- `libs/masterbot/src/masterbot.update.ts`
+
+**Commands to Document**:
+- `/subscription` - Manage analytical subscriptions (create, close, broadcast)
+
+**Acceptance Criteria**:
+- Help text includes the subscription command
+- Description explains the menu-based approach
+- Clear and concise wording
+
+---
+
+## Phase 4: Testing & Refinement
+
+**Duration**: 3-4 days
+
+### Tasks
+
+#### 4.1 Unit Tests - Services
+
+**Priority**: High
+**Dependencies**: Phase 2
+**Estimated Time**: 8 hours
+
+**Steps**:
+1. Write tests for CodeGenerationService
+2. Write tests for SubscriptionManagementService
+3. Write tests for BroadcastService
+4. Achieve >80% code coverage
+5. Test edge cases
+
+**Test Files**:
+- `libs/masterbot/src/services/code-generation.service.spec.ts`
+- `libs/masterbot/src/services/subscription-management.service.spec.ts`
+- `libs/masterbot/src/services/broadcast.service.spec.ts`
+
+**Test Scenarios**:
+- Valid inputs
+- Invalid inputs
+- Database errors
+- Transaction rollbacks
+- Collision handling
+- Empty result sets
+
+**Acceptance Criteria**:
+- All tests pass
+- Code coverage >80%
+- Edge cases covered
+
+---
+
+#### 4.2 Integration Tests - Repositories
+
+**Priority**: High
+**Dependencies**: Phase 1
+**Estimated Time**: 6 hours
+
+**Steps**:
+1. Set up test database
+2. Write tests for SubscriptionsRepository
+3. Write tests for CodesRepository
+4. Test transactions
+5. Test concurrent operations
+
+**Test Files**:
+- `libs/db/src/repositories/subscriptions.repository.spec.ts`
+- `libs/db/src/repositories/codes.repository.spec.ts`
+
+**Test Scenarios**:
+- CRUD operations
+- Filtering and queries
+- Transaction rollbacks
+- Concurrent code generation
+
+**Acceptance Criteria**:
+- All tests pass
+- Database is properly cleaned up
+- Tests are isolated
+
+---
+
+#### 4.3 E2E Tests - Command Flows
+
+**Priority**: High
+**Dependencies**: Phase 3
+**Estimated Time**: 10 hours
+
+**Steps**:
+1. Set up E2E testing environment
+2. Mock Telegram API
+3. Test create subscription flow
+4. Test close subscription flow
+5. Test broadcast flow
+6. Test error scenarios
+7. Test cancel actions
+
+**Test Files**:
+- `test/e2e/subscription-management.e2e-spec.ts`
+- `test/e2e/broadcast.e2e-spec.ts`
+
+**Test Scenarios**:
+- Full create subscription flow
+- Full close subscription flow
+- Full broadcast flow
+- Invalid inputs at each step
+- Cancel at each step
+- Network errors
+- Rate limiting
+
+**Acceptance Criteria**:
+- All flows work end-to-end
+- Error scenarios handled gracefully
+- Cancel actions work at all steps
+
+---
+
+#### 4.4 Manual Testing
+
+**Priority**: High
+**Dependencies**: Phase 3
+**Estimated Time**: 4 hours
+
+**Steps**:
+1. Deploy to staging environment
+2. Test all commands manually
+3. Test with real Telegram bot
+4. Test edge cases
+5. Verify rate limiting
+6. Test large broadcasts (100+ users)
+7. Document any issues
+
+**Test Scenarios**:
+- Create multiple subscriptions
+- Close and reopen subscriptions
+- Broadcast to different sizes
+- Concurrent operations
+- Message formatting (Markdown)
+- Long messages
+- Special characters
+
+**Acceptance Criteria**:
+- All commands work as expected
+- No UI glitches
+- Rate limiting works
+- Large broadcasts complete successfully
+
+---
+
+#### 4.5 Code Review & Refactoring
+
+**Priority**: Medium
+**Dependencies**: 4.1, 4.2, 4.3
+**Estimated Time**: 6 hours
+
+**Steps**:
+1. Review all code for clean architecture principles
+2. Check for code duplication
+3. Refactor long functions
+4. Improve error messages
+5. Add JSDoc comments
+6. Run linter and fix issues
+7. Format code with Prettier
+
+**Acceptance Criteria**:
+- Code follows NestJS best practices
+- Functions are <20 instructions
+- No code duplication
+- All functions documented
+- Linter passes
+- Code formatted consistently
+
+---
+
+#### 4.6 Documentation Review
+
+**Priority**: Medium
+**Dependencies**: All phases
+**Estimated Time**: 4 hours
+
+**Steps**:
+1. Review all documentation files
+2. Update with implementation details
+3. Add code examples
+4. Update sequence diagrams if needed
+5. Add troubleshooting section
+6. Spell check and grammar check
+
+**Documentation Files**:
+- `docs/subscribtion/README.md`
+- `docs/subscribtion/architecture.md`
+- `docs/subscribtion/database-schema.md`
+- `docs/subscribtion/api-flows.md`
+- `docs/subscribtion/code-examples.md`
+
+**Acceptance Criteria**:
+- Documentation is accurate
+- Examples match implementation
+- No broken links
+- Clear and concise
+
+---
+
+#### 4.7 Performance Testing
+
+**Priority**: Medium
+**Dependencies**: Phase 3
+**Estimated Time**: 4 hours
+
+**Steps**:
+1. Test broadcast to 1000+ users
+2. Monitor rate limiting
+3. Check database query performance
+4. Optimize slow queries
+5. Add database indexes if needed
+6. Monitor memory usage
+
+**Metrics to Track**:
+- Broadcast completion time
+- Messages per second
+- Database query times
+- Memory usage during broadcast
+- Error rates
+
+**Acceptance Criteria**:
+- Broadcasts complete in reasonable time
+- No memory leaks
+- Database queries are optimized
+- Rate limiting prevents API errors
+
+---
+
+#### 4.8 Security Audit
+
+**Priority**: High
+**Dependencies**: Phase 3
+**Estimated Time**: 4 hours
+
+**Steps**:
+1. Review authentication checks
+2. Verify manager-only access
+3. Check for SQL injection vulnerabilities
+4. Validate input sanitization
+5. Review error messages for sensitive data
+6. Check for code injection in messages
+
+**Security Checks**:
+- Only managers can create/close subscriptions
+- Only managers can broadcast
+- User input is validated
+- Messages are sanitized
+- No sensitive data in logs
+- No SQL injection vulnerabilities
+
+**Acceptance Criteria**:
+- All commands require authentication
+- Input validation prevents injection
+- No sensitive data leaks
+- Security best practices followed
+
+---
+
+## Phase 5: Deployment
+
+**Duration**: 1 day
+
+### Tasks
+
+#### 5.1 Staging Deployment
+
+**Priority**: High
+**Dependencies**: Phase 4
+**Estimated Time**: 3 hours
+
+**Steps**:
+1. Run database migrations on staging
+2. Deploy code to staging environment
+3. Smoke test all commands
+4. Monitor logs for errors
+5. Fix any deployment issues
+
+**Acceptance Criteria**:
+- Migrations run successfully
+- All commands work on staging
+- No errors in logs
+
+---
+
+#### 5.2 Production Deployment
+
+**Priority**: High
+**Dependencies**: 5.1
+**Estimated Time**: 3 hours
+
+**Steps**:
+1. Create backup of production database
+2. Run database migrations on production
+3. Deploy code to production
+4. Smoke test all commands
+5. Monitor for 24 hours
+6. Document deployment process
+
+**Rollback Plan**:
+- Keep previous version deployed
+- Rollback migrations if needed
+- Database backup for recovery
+
+**Acceptance Criteria**:
+- Migrations complete successfully
+- All commands work on production
+- No errors in monitoring
+- Rollback plan documented
+
+---
+
+#### 5.3 Post-Deployment Monitoring
+
+**Priority**: High
+**Dependencies**: 5.2
+**Estimated Time**: Ongoing
+
+**Steps**:
+1. Monitor error rates in Sentry
+2. Track command usage
+3. Monitor broadcast success rates
+4. Check database performance
+5. Gather user feedback
+
+**Metrics to Monitor**:
+- Subscription creation rate
+- Broadcast frequency
+- Success/failure rates
+- Database query performance
+- Error rates
+
+**Acceptance Criteria**:
+- All metrics within normal ranges
+- No critical errors
+- User feedback is positive
+
+---
+
+## Risk Management
+
+### High-Risk Areas
+
+1. **Database Migrations**
+   - Risk: Data loss or corruption
+   - Mitigation: Backups before migration, thorough testing, rollback scripts
+
+2. **Code Uniqueness**
+   - Risk: Duplicate codes generated
+   - Mitigation: Unique constraints, collision detection, integration tests
+
+3. **Rate Limiting**
+   - Risk: Telegram API blocks
+   - Mitigation: Use existing NotificationService, test with large broadcasts
+
+4. **Transaction Failures**
+   - Risk: Incomplete operations
+   - Mitigation: Proper transaction handling, rollback testing
+
+### Medium-Risk Areas
+
+1. **Session State Management**
+   - Risk: Lost state between messages
+   - Mitigation: Clear state transitions, timeout handling
+
+2. **Message Validation**
+   - Risk: Invalid messages cause errors
+   - Mitigation: Comprehensive validation, sanitization
+
+3. **Concurrent Operations**
+   - Risk: Race conditions
+   - Mitigation: Database constraints, transaction isolation
+
+## Testing Strategy Summary
+
+### Test Coverage Goals
+
+- Unit Tests: >80% coverage
+- Integration Tests: All repository methods
+- E2E Tests: All command flows
+- Manual Testing: All scenarios
+
+### Testing Tools
+
+- Jest for unit/integration tests
+- Supertest for E2E tests
+- Staging environment for manual testing
+- Sentry for error monitoring
+
+## Dependencies & Prerequisites
+
+### External Dependencies
+
+- Telegram Bot API (via Telegraf)
+- PostgreSQL database
+- Drizzle ORM
+- Existing NotificationService
+
+### Internal Prerequisites
+
+- Manager authentication middleware
+- Session management
+- Database connection
+- Bot token and configuration
+
+## Success Criteria
+
+### Feature Complete When:
+
+1. All commands work as designed
+2. All tests pass (unit, integration, E2E)
+3. Code coverage >80%
+4. Documentation is complete
+5. Security audit passes
+6. Performance meets requirements
+7. Deployed to production
+8. No critical bugs in first week
+
+### Performance Targets
+
+- Subscription creation: <2 seconds
+- Broadcast queuing: <5 seconds for 100 users
+- Message delivery: 28 messages/second (Telegram limit)
+- Database queries: <100ms for most operations
+
+### Quality Targets
+
+- Zero SQL injection vulnerabilities
+- Zero authentication bypass issues
+- Zero data loss incidents
+- >95% broadcast success rate
+- <1% error rate in production
+
+## Rollback Plan
+
+### If Issues Occur
+
+1. Stop accepting new commands
+2. Rollback database migrations
+3. Deploy previous version
+4. Restore from backup if needed
+5. Investigate root cause
+6. Fix and redeploy
+
+### Rollback Triggers
+
+- Critical security vulnerability
+- Data corruption
+- >10% error rate
+- Database performance degradation
+- Telegram API blocks
+
+## Post-Launch Tasks
+
+### Week 1
+
+- Monitor all metrics
+- Fix critical bugs
+- Gather manager feedback
+- Document common issues
+
+### Week 2-4
+
+- Optimize performance
+- Add requested features
+- Improve error messages
+- Update documentation
+
+### Future Enhancements
+
+- Scheduled broadcasts
+- Broadcast templates
+- Analytics dashboard
+- Subscriber import/export
+- Message preview
+- Broadcast history UI
