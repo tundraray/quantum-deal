@@ -597,10 +597,17 @@ export class WeekReportService {
     const vipNegativeTrades = data.tradingActivity.vipLossingOrders;
     const templateName = `weekly_report_${data.client.subscription.id}`;
     try {
-      const template = await this.messagesRepository.getReportTemplate(
+      let template = await this.messagesRepository.getReportTemplate(
         templateName as MessageType,
         clientLang,
       );
+
+      if (!template) {
+        template = await this.messagesRepository.getReportTemplate(
+          'weekly_report' as MessageType,
+          clientLang,
+        );
+      }
 
       return template
         .replace(/\{profit\}/g, profit.toFixed(2))
