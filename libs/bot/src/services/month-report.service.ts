@@ -531,6 +531,11 @@ export class MonthReportService {
     const profitSign = totalProfit >= 0 ? '+' : '';
     const bestTradeSymbol = data.tradingActivity.bestTradeSymbol || 'N/A';
     const bestTradeProfit = data.tradingActivity.bestTradeProfit || 0;
+    const bestTradeProfitSign = bestTradeProfit >= 0 ? '+' : '';
+    const maxProfitTrade =
+      bestTradeSymbol === 'N/A'
+        ? 'N/A'
+        : `${bestTradeSymbol} (${bestTradeProfitSign}${bestTradeProfit.toFixed(2)} USD)`;
 
     const allOrders =
       Object.keys(data.tradingActivity.ordersBySymbol).length > 0
@@ -552,6 +557,7 @@ export class MonthReportService {
       return template
         .replace(/\{TotalOrders\}/g, totalOrders.toString())
         .replace(/\{TotalProfit\}/g, `${profitSign}${totalProfit.toFixed(2)}`)
+        .replace(/\{MaxProfitTrade\}/g, maxProfitTrade)
         .replace(/\{BestSymbol\}/g, bestTradeSymbol)
         .replace(/\{BestSymbol_1\}/g, bestSymbol1)
         .replace(/\{BestSymbol_2\}/g, bestSymbol2)

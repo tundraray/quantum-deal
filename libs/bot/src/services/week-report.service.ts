@@ -597,12 +597,16 @@ export class WeekReportService {
     const vipNegativeTrades = data.tradingActivity.vipLossingOrders;
     const templateName = `weekly_report_${data.client.subscription.id}`;
     try {
-      let template = await this.messagesRepository.getReportTemplate(
-        templateName as MessageType,
-        clientLang,
-      );
+      let template = await this.messagesRepository
+        .getReportTemplate(templateName as MessageType, clientLang)
+        .catch(() => {
+          return null;
+        });
 
       if (!template) {
+        this.logger.debug(
+          `Weekly report template not found for template name '${templateName}', falling back to 'weekly_report'`,
+        );
         template = await this.messagesRepository.getReportTemplate(
           'weekly_report' as MessageType,
           clientLang,

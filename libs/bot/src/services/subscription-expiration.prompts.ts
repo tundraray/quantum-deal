@@ -32,16 +32,30 @@ Format requirements:
 - You can use paragraph breaks to separate logical blocks
 - Natural, human-like text
 - 3-4 sentences or more if needed for clarity
-- Telegram markdown formatting (bold, italic, or other Telegram markdown syntax)
+
+Telegram Markdown formatting (use sparingly for emphasis):
+- *bold text* - for important information
+- _italic text_ - for emphasis
+- __underlined text__ - for highlighting
+- ~strikethrough~ - for crossed out text
+- ||spoiler|| - for hidden text
+- [link text](http://example.com/) - for links
+
+Example with formatting:
+"Здравствуйте! 📅 Напоминаем: через *7 дней* истекает срок вашего доступа к Quantum Deal AI.
+
+Чтобы не терять доступ к _сделкам ИИ, комментариям и статистике_, продлите подписку или оформите *VIP*.
+
+Для продления свяжитесь с вашим экспертом брокерской компании."
 
 Reference example (Russian, 7 days):
 "Здравствуйте! 📅 Напоминаем: через 7 дней истекает срок вашего доступа к Quantum Deal AI. Чтобы не терять доступ к сделкам ИИ, комментариям и статистике, продлите подписку или оформите более высокий уровень доступа (VIP). Для продления или апгрейда свяжитесь с вашим курирующим экспертом той брокерской компании, которая выдала предыдущую ссылку."
 
 Output schema example:
 {
-  "en": "Hello! 📅 This is a reminder: your access to Quantum Deal AI expires in 7 days.\n\nTo continue receiving AI trading signals, comments, and statistics, please renew your subscription or upgrade to VIP.\n\nContact your brokerage company expert who provided your previous access link.",
-  "ru": "Здравствуйте! 📅 Напоминаем: через 7 дней истекает срок вашего доступа к Quantum Deal AI.\n\nЧтобы не терять доступ к сделкам ИИ, комментариям и статистике, продлите подписку или оформите VIP.\n\nСвяжитесь с вашим экспертом брокерской компании.",
-  "uk": "Вітаємо! 📅 Нагадуємо: через 7 днів закінчується ваш доступ до Quantum Deal AI.\n\nЩоб не втратити доступ, продовжіть підписку або оформіть VIP.\n\nЗв'яжіться з вашим експертом."
+  "en": "Hello! 📅 This is a reminder: your access to Quantum Deal AI expires in *7 days*.\n\nTo continue receiving _AI trading signals, comments, and statistics_, please renew your subscription or upgrade to *VIP*.\n\nContact your brokerage company expert who provided your previous access link.",
+  "ru": "Здравствуйте! 📅 Напоминаем: через *7 дней* истекает срок вашего доступа к Quantum Deal AI.\n\nЧтобы не терять доступ к _сделкам ИИ, комментариям и статистике_, продлите подписку или оформите *VIP*.\n\nСвяжитесь с вашим экспертом брокерской компании.",
+  "uk": "Вітаємо! 📅 Нагадуємо: через *7 днів* закінчується ваш доступ до Quantum Deal AI.\n\nЩоб не втратити доступ до _угод ШІ, коментарів та статистики_, продовжіть підписку або оформіть *VIP*.\n\nЗв'яжіться з вашим експертом."
 }
 
 The output must be a JSON object with language codes as keys and complete notification messages as string values.
