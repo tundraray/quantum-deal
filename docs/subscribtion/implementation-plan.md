@@ -38,6 +38,87 @@ This document outlines a phased approach to implementing the manual subscription
 
 ### Tasks
 
+#### 1.0 Create UserSubscriptions Schema (CRITICAL - NEW TABLE)
+
+**Priority**: CRITICAL
+**Dependencies**: None
+**Estimated Time**: 4 hours
+
+**Purpose**: Create the central many-to-many relationship table that unifies subscription management.
+
+**Steps**:
+1. Create `libs/db/src/schema/user-subscriptions.ts`
+2. Define table with many-to-many relationship (userId + subscriptionId)
+3. Add foreign keys to users and subscriptions with CASCADE delete
+4. Add unique constraint on (userId, subscriptionId)
+5. Add indexes: (userId), (subscriptionId), (userId, isActive)
+6. Export types (UserSubscription, NewUserSubscription)
+7. Update `libs/db/src/schema/index.ts` to export new schema
+
+**Files to Create**:
+- `libs/db/src/schema/user-subscriptions.ts`
+
+**Files to Modify**:
+- `libs/db/src/schema/index.ts` (add export)
+
+**Schema Definition**:
+```typescript
+import { pgTable, timestamp, bigint, boolean } from 'drizzle-orm/pg-core';
+import { users } from './users';
+import { subscriptions } from './subscriptions';
+
+export const userSubscriptions = pgTable('user_subscriptions', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  userId: bigint('user_id', { mode: 'number' })
+    .notNull()
+    .references(() => users.telegramId, { onDelete: 'cascade' }),
+  subscriptionId: bigint('subscription_id', { mode: 'number' })
+    .notNull()
+    .references(() => subscriptions.id, { onDelete: 'cascade' }),
+  activatedAt: timestamp('activated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type UserSubscription = typeof userSubscriptions.$inferSelect;
+export type NewUserSubscription = typeof userSubscriptions.$inferInsert;
+```
+
+**Migration Enhancement** (after Drizzle generates migration):
+```sql
+-- Unique constraint
+ALTER TABLE user_subscriptions
+ADD CONSTRAINT unique_user_subscription UNIQUE (user_id, subscription_id);
+
+-- Performance indexes
+CREATE INDEX idx_user_subscriptions_user ON user_subscriptions(user_id);
+CREATE INDEX idx_user_subscriptions_subscription ON user_subscriptions(subscription_id);
+CREATE INDEX idx_user_subscriptions_user_active
+ON user_subscriptions(user_id, is_active) WHERE is_active = true;
+
+-- Comments
+COMMENT ON TABLE user_subscriptions IS 'Many-to-many: users ↔ subscriptions (unified for both signals and broadcast)';
+COMMENT ON COLUMN user_subscriptions.user_id IS 'Replaces users.subscribeId and codes.userId';
+COMMENT ON COLUMN user_subscriptions.activated_at IS 'Replaces codes.activationDate';
+COMMENT ON COLUMN user_subscriptions.expires_at IS 'Replaces users.subscribeExpirationDate and codes.expirationDate';
+```
+
+**Acceptance Criteria**:
+- Schema file created with correct foreign keys
+- Unique constraint prevents duplicate (user, subscription) pairs
+- Indexes created for performance
+- CASCADE delete behavior configured
+- TypeScript types exported correctly
+- No compilation errors
+- Schema exported in `schema/index.ts`
+
+---
+
 #### 1.1 Update Drizzle Schema - Subscriptions
 
 **Priority**: High
@@ -45,10 +126,11 @@ This document outlines a phased approach to implementing the manual subscription
 **Estimated Time**: 3 hours
 
 **Steps**:
+0. Install nanoid package: `pnpm add nanoid`
 1. Update `libs/db/src/schema/subscriptions.ts`
 2. **CRITICAL**: Add `SubscriptionType` const for signals type
 3. Add helper functions for generating broadcast subscription types
-4. Add new fields: `type` (with default `'signals'`, length 50), `isActive`, `updatedAt`, `closedAt`, `closedBy`
+4. Add new fields: `type` (with default `'signals'`, length 30), `isActive`, `updatedAt`, `closedAt`, `closedBy`
 5. Add import for `managers` table to enable foreign key reference
 6. Export helper functions for use across the application
 7. Update TypeScript types (`Subscription`, `NewSubscription`)
@@ -103,7 +185,7 @@ export function isBroadcastSubscription(type: string): boolean {
 export const subscriptions = pgTable('subscriptions', {
   id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
   name: varchar('name').notNull(),
-  type: varchar('type', { length: 50 }).notNull().default(SubscriptionType.SIGNALS), // NEW - length 50 for dynamic UIDs
+  type: varchar('type', { length: 30 }).notNull().default(SubscriptionType.SIGNALS), // NEW - length 30 for dynamic UIDs
   scope: jsonb('scope').$type<string[] | null>(),
   isActive: boolean('is_active').notNull().default(true), // NEW
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -124,11 +206,24 @@ export const subscriptions = pgTable('subscriptions', {
 
 ---
 
-#### 1.2 Generate and Enhance Database Migration
+#### 1.2 Generate and Enhance Database Migration (CRITICAL - DATA MIGRATION)
 
-**Priority**: High
-**Dependencies**: 1.1
-**Estimated Time**: 6 hours
+**CRITICAL PREREQUISITE**: This migration assumes the CURRENT (AS-IS) schema still has:
+- users.subscribeId
+- users.subscribeExpirationDate
+- codes.userId
+- codes.activationDate
+- codes.expirationDate
+
+These fields will be READ during migration, then REMOVED in Phase 3 of this migration.
+
+**DO NOT remove old fields before running this migration!**
+
+**Priority**: CRITICAL
+**Dependencies**: 1.0, 1.1
+**Estimated Time**: 8 hours (increased due to data migration complexity)
+
+**Purpose**: Generate migration for new schema AND manually add data migration logic.
 
 **Steps**:
 1. **Generate migration** with Drizzle Kit:
@@ -136,19 +231,21 @@ export const subscriptions = pgTable('subscriptions', {
    pnpm run db:generate
    ```
 2. **Review generated SQL** in `libs/db/migrations/XXXXXX_*.sql`
-3. **CRITICAL**: Manually enhance the generated migration file with:
-   - CHECK constraint for subscription types (`signals`, `analytical`)
+3. **CRITICAL**: Drizzle will only generate schema changes, NOT data migration
+4. **Manually enhance** the generated migration file with:
+   - CHECK constraint for subscription types
    - Unique constraint for analytical categories
-   - Performance indexes (type, type+active, active, name)
+   - Performance indexes
    - Auto-update trigger for `updated_at` column
-   - **Data migration**: UPDATE to set existing subscriptions to `'signals'`
-   - Column comments for documentation
-4. Test enhanced migration on development database
-5. Verify all existing subscriptions are set to `type = 'signals'`
-6. Verify indexes are created correctly
+   - **DATA MIGRATION** scripts (see below)
+   - Verification queries
+   - Column comments
+5. Test enhanced migration on development database
+6. **Verify 100% data migration** using verification queries
 7. Prepare rollback commands
 
-**Enhancement Template** (append to generated file):
+**CRITICAL: Data Migration Section** (append to generated migration):
+
 ```sql
 -- ====================================================================================
 -- MANUAL ENHANCEMENTS (added after Drizzle generation)
@@ -161,14 +258,17 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
--- 2. Performance indexes
+-- 2. Performance indexes (subscriptions)
 CREATE INDEX IF NOT EXISTS idx_subscriptions_type ON subscriptions(type);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_type_active ON subscriptions(type, is_active) WHERE is_active = true;
-CREATE INDEX IF NOT EXISTS idx_subscriptions_is_active ON subscriptions(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_subscriptions_type_active
+ON subscriptions(type, is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_subscriptions_is_active
+ON subscriptions(is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_subscriptions_name ON subscriptions(name);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_broadcast ON subscriptions(type) WHERE type LIKE 'subscription_%';
+CREATE INDEX IF NOT EXISTS idx_subscriptions_broadcast
+ON subscriptions(type) WHERE type LIKE 'subscription_%';
 
--- 3. Auto-update trigger
+-- 3. Auto-update trigger for subscriptions.updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -182,32 +282,153 @@ CREATE TRIGGER update_subscriptions_updated_at
 BEFORE UPDATE ON subscriptions
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- 4. CRITICAL: Migrate existing data
--- Only set type for rows that don't have it (if column added without default)
-UPDATE subscriptions SET type = 'signals' WHERE type IS NULL;
+-- 4. CRITICAL: Set all existing subscriptions to 'signals' type
+UPDATE subscriptions SET type = 'signals' WHERE type IS NULL OR type = '';
 
--- 5. Column comments
-COMMENT ON COLUMN subscriptions.type IS 'Subscription type: signals (ONE per user) or subscription_{uid} (broadcast subscriptions)';
+-- ====================================================================================
+-- PHASE 2: DATA MIGRATION (CRITICAL - DO NOT SKIP)
+-- ====================================================================================
+
+-- STEP 1: Migrate signals subscriptions from users table
+INSERT INTO user_subscriptions (user_id, subscription_id, activated_at, expires_at, is_active, created_at)
+SELECT
+  telegram_id,
+  subscribe_id,
+  created_at, -- approximate activation date
+  subscribe_expiration_date,
+  true,
+  created_at
+FROM users
+WHERE subscribe_id IS NOT NULL;
+
+-- Get count for logging
+DO $$
+DECLARE
+  migrated_count INT;
+BEGIN
+  SELECT COUNT(*) INTO migrated_count FROM user_subscriptions;
+  RAISE NOTICE 'Migrated % signals subscriptions from users table', migrated_count;
+END $$;
+
+-- STEP 2: Migrate broadcast subscriptions from codes table (if any activated)
+INSERT INTO user_subscriptions (user_id, subscription_id, activated_at, expires_at, is_active, created_at)
+SELECT
+  c.user_id,
+  c.subscription_id,
+  COALESCE(c.activation_date, c.created_at), -- use activation_date or fallback to created_at
+  c.expiration_date,
+  true,
+  c.created_at
+FROM codes c
+WHERE c.user_id IS NOT NULL
+ON CONFLICT (user_id, subscription_id) DO NOTHING; -- Skip duplicates
+
+-- Get count for logging
+DO $$
+DECLARE
+  codes_count INT;
+BEGIN
+  SELECT COUNT(*) INTO codes_count
+  FROM user_subscriptions us
+  INNER JOIN codes c ON us.subscription_id = c.subscription_id AND us.user_id IS NOT NULL;
+
+  RAISE NOTICE 'Migrated % broadcast subscriptions from codes table', codes_count;
+END $$;
+
+-- ====================================================================================
+-- PHASE 3: VERIFICATION (CRITICAL - MUST PASS 100%)
+-- ====================================================================================
+
+DO $$
+DECLARE
+  old_signals_count INT;
+  new_signals_count INT;
+  old_codes_count INT;
+  new_codes_count INT;
+BEGIN
+  -- Verify signals migration
+  SELECT COUNT(*) INTO old_signals_count FROM users WHERE subscribe_id IS NOT NULL;
+  SELECT COUNT(*) INTO new_signals_count FROM user_subscriptions;
+
+  IF old_signals_count > new_signals_count THEN
+    RAISE EXCEPTION 'MIGRATION FAILED: users had % signals but user_subscriptions has only %',
+      old_signals_count, new_signals_count;
+  END IF;
+
+  -- Verify codes migration
+  SELECT COUNT(*) INTO old_codes_count FROM codes WHERE user_id IS NOT NULL;
+  SELECT COUNT(DISTINCT us.user_id) INTO new_codes_count
+  FROM user_subscriptions us
+  INNER JOIN codes c ON us.subscription_id = c.subscription_id;
+
+  RAISE NOTICE '✅ Migration verification PASSED:';
+  RAISE NOTICE '  - Signals: % (old) → % (new)', old_signals_count, new_signals_count;
+  RAISE NOTICE '  - Codes: % (old) → % (new)', old_codes_count, new_codes_count;
+  RAISE NOTICE '  - Total in user_subscriptions: %', new_signals_count;
+
+  IF old_signals_count > 0 AND new_signals_count = 0 THEN
+    RAISE EXCEPTION 'CRITICAL: No data was migrated to user_subscriptions!';
+  END IF;
+END $$;
+
+-- ====================================================================================
+-- PHASE 4: Column comments
+-- ====================================================================================
+
+COMMENT ON COLUMN subscriptions.type IS 'Subscription type: signals (ONE per user) or subscription_{uid} (MANY per user)';
 COMMENT ON COLUMN subscriptions.is_active IS 'Subscription active status (soft delete)';
 COMMENT ON COLUMN subscriptions.updated_at IS 'Last modification timestamp';
 COMMENT ON COLUMN subscriptions.closed_at IS 'When subscription was closed';
 COMMENT ON COLUMN subscriptions.closed_by IS 'Manager who closed the subscription';
+
+COMMENT ON TABLE user_subscriptions IS 'Unified many-to-many: users ↔ subscriptions (replaces users.subscribeId and codes.userId)';
+COMMENT ON COLUMN user_subscriptions.user_id IS 'Replaces users.subscribeId (for signals) and codes.userId (for broadcasts)';
+COMMENT ON COLUMN user_subscriptions.subscription_id IS 'Reference to subscription (can be signals or broadcast type)';
+COMMENT ON COLUMN user_subscriptions.activated_at IS 'Replaces codes.activationDate - when user activated/joined';
+COMMENT ON COLUMN user_subscriptions.expires_at IS 'Replaces users.subscribeExpirationDate and codes.expirationDate';
 ```
 
-**Files Modified**:
-- `libs/db/migrations/XXXXXX_*.sql` (generated by Drizzle, then manually enhanced)
+**Verification Queries** (run manually after migration):
+
+```sql
+-- 1. Check total migrated
+SELECT COUNT(*) as total_subscriptions FROM user_subscriptions;
+
+-- 2. Check signals migration
+SELECT COUNT(*) as old_signals FROM users WHERE subscribe_id IS NOT NULL;
+SELECT COUNT(*) as new_signals FROM user_subscriptions;
+
+-- 3. Check codes migration
+SELECT COUNT(*) as old_codes FROM codes WHERE user_id IS NOT NULL;
+SELECT COUNT(DISTINCT user_id) as new_codes FROM user_subscriptions;
+
+-- 4. Sample data check
+SELECT
+  us.id,
+  us.user_id,
+  u.username,
+  us.subscription_id,
+  s.name as subscription_name,
+  us.activated_at,
+  us.expires_at
+FROM user_subscriptions us
+INNER JOIN users u ON u.telegram_id = us.user_id
+INNER JOIN subscriptions s ON s.id = us.subscription_id
+LIMIT 10;
+```
 
 **Acceptance Criteria**:
 - Migration generated successfully by Drizzle Kit
 - Manual enhancements added to migration file
 - Migration runs successfully without errors
-- **CRITICAL**: All existing subscriptions are set to `type = 'signals'`
-- Type CHECK constraint allows `'signals'` and any `'subscription_%'` pattern
-- Composite indexes on (type, is_active) are created
-- Broadcast subscription index created for LIKE pattern matching
-- All existing data remains intact and functional
-- Verify existing signals subscriptions still work after migration
+- **CRITICAL**: Verification queries show 100% data migration
+  - All users with `subscribe_id` are in user_subscriptions
+  - All codes with `user_id` are in user_subscriptions
+- Type CHECK constraint allows 'signals' and 'subscription_%' pattern
+- Composite indexes created
 - `updated_at` trigger works correctly
+- Column comments added
+- **NO DATA LOSS** - 100% migration accuracy verified
 
 ---
 
@@ -366,6 +587,212 @@ async deactivateCodesBySubscription(subscriptionId: number): Promise<void>
 - All methods implemented
 - Unit tests pass
 - Transaction support for bulk operations
+
+---
+
+#### 1.7 Create UserSubscriptionsRepository (CRITICAL - NEW)
+
+**Priority**: CRITICAL
+**Dependencies**: 1.2 (migration applied)
+**Estimated Time**: 10 hours
+
+**Purpose**: Create the central repository for unified subscription management.
+
+**Steps**:
+1. Create `libs/db/src/repositories/user-subscriptions.repository.ts`
+2. Extend `BaseRepository<UserSubscription, NewUserSubscription, number>`
+3. Implement core methods:
+   - `findByUserId()` - Get all user subscriptions
+   - `findBySubscriptionId()` - Get all subscribers
+   - `isUserSubscribed()` - Check subscription status
+   - `activate()` - Create subscription relationship
+   - `deactivate()` - Remove subscription
+4. Implement query methods with JOINs:
+   - `findExpiring()` - Replaces `UsersRepository.findUsersWithExpiringSubscriptions()`
+   - `findByUserIdAndType()` - Get subscriptions by type
+5. Add comprehensive unit tests
+6. Add integration tests with real database
+
+**Files to Create**:
+- `libs/db/src/repositories/user-subscriptions.repository.ts`
+- `libs/db/src/repositories/user-subscriptions.repository.spec.ts`
+
+**Files to Modify**:
+- `libs/db/src/repositories/index.ts` (add export)
+- `libs/db/src/db.module.ts` (add to providers)
+
+**Key Implementation** (basic structure):
+
+```typescript
+import { Injectable, Inject } from '@nestjs/common';
+import { BaseRepository } from './base.repository';
+import { DRIZZLE_CLIENT, type DrizzleClient } from '../database.provider';
+import {
+  userSubscriptions,
+  UserSubscription,
+  NewUserSubscription
+} from '../schema/user-subscriptions';
+import { users, User } from '../schema/users';
+import { subscriptions, Subscription } from '../schema/subscriptions';
+import { eq, and, sql } from 'drizzle-orm';
+
+@Injectable()
+export class UserSubscriptionsRepository extends BaseRepository<
+  UserSubscription,
+  NewUserSubscription,
+  number
+> {
+  protected table = userSubscriptions;
+  protected idColumn = userSubscriptions.id;
+
+  constructor(@Inject(DRIZZLE_CLIENT) db: DrizzleClient) {
+    super(db);
+  }
+
+  /**
+   * Find all subscriptions for a user
+   * REPLACES: queries to users.subscribeId
+   */
+  async findByUserId(userId: number): Promise<UserSubscription[]> {
+    return this.findBy(
+      and(
+        eq(this.table.userId, userId),
+        eq(this.table.isActive, true)
+      )
+    );
+  }
+
+  /**
+   * Find all subscribers for a subscription
+   * REPLACES: UsersRepository.findBySubscription()
+   */
+  async findBySubscriptionId(subscriptionId: number): Promise<UserSubscription[]> {
+    return this.findBy(
+      and(
+        eq(this.table.subscriptionId, subscriptionId),
+        eq(this.table.isActive, true)
+      )
+    );
+  }
+
+  /**
+   * Check if user has active subscription
+   */
+  async isUserSubscribed(userId: number, subscriptionId: number): Promise<boolean> {
+    const result = await this.findOneBy(
+      and(
+        eq(this.table.userId, userId),
+        eq(this.table.subscriptionId, subscriptionId),
+        eq(this.table.isActive, true)
+      )
+    );
+    return result !== null;
+  }
+
+  /**
+   * Activate subscription (create relationship)
+   * REPLACES: Updating users.subscribeId or codes.userId
+   */
+  async activate(
+    userId: number,
+    subscriptionId: number,
+    expiresAt?: Date
+  ): Promise<UserSubscription> {
+    return this.create({
+      userId,
+      subscriptionId,
+      expiresAt,
+      isActive: true,
+      activatedAt: new Date(),
+    });
+  }
+
+  /**
+   * Deactivate subscription
+   */
+  async deactivate(userId: number, subscriptionId: number): Promise<void> {
+    const subscription = await this.findOneBy(
+      and(
+        eq(this.table.userId, userId),
+        eq(this.table.subscriptionId, subscriptionId)
+      )
+    );
+
+    if (subscription) {
+      await this.update(subscription.id, { isActive: false });
+    }
+  }
+
+  /**
+   * Find expiring subscriptions with user and subscription data
+   * REPLACES: UsersRepository.findUsersWithExpiringSubscriptions()
+   */
+  async findExpiring(
+    daysFromNow: number,
+    subscriptionType?: string
+  ): Promise<Array<{
+    user: User;
+    subscription: Subscription;
+    userSubscription: UserSubscription;
+  }>> {
+    const conditions = [
+      eq(this.table.isActive, true),
+      eq(users.isActive, true),
+      sql`${this.table.expiresAt} IS NOT NULL`,
+      sql`${this.table.expiresAt}::date = CURRENT_DATE + ${daysFromNow}::int`
+    ];
+
+    // Optional type filter
+    if (subscriptionType) {
+      conditions.push(eq(subscriptions.type, subscriptionType));
+    }
+
+    return this.db
+      .select({
+        user: users,
+        subscription: subscriptions,
+        userSubscription: this.table,
+      })
+      .from(this.table)
+      .innerJoin(users, eq(users.telegramId, this.table.userId))
+      .innerJoin(subscriptions, eq(subscriptions.id, this.table.subscriptionId))
+      .where(and(...conditions));
+  }
+}
+```
+
+**Testing**:
+
+```typescript
+// Unit test example
+describe('UserSubscriptionsRepository', () => {
+  it('should activate subscription', async () => {
+    const result = await repository.activate(123, 456, new Date('2025-12-31'));
+
+    expect(result.userId).toBe(123);
+    expect(result.subscriptionId).toBe(456);
+    expect(result.isActive).toBe(true);
+  });
+
+  it('should find expiring subscriptions', async () => {
+    const expiring = await repository.findExpiring(3, 'signals');
+
+    expect(expiring).toHaveLength(2);
+    expect(expiring[0].user).toBeDefined();
+    expect(expiring[0].subscription).toBeDefined();
+  });
+});
+```
+
+**Acceptance Criteria**:
+- All methods implemented with proper TypeScript typing
+- JOIN queries work correctly and return expected data
+- Unit tests pass (>80% coverage)
+- Integration tests verify database operations
+- **CRITICAL**: `findExpiring()` returns same results as old `UsersRepository` method
+- **CRITICAL**: `findBySubscriptionId()` returns same users as old `UsersRepository.findBySubscription()`
+- Performance is comparable or better than old queries
+- Repository exported and available in DI container
 
 ---
 

@@ -8,22 +8,35 @@ The manual subscription broadcast feature follows NestJS clean architecture prin
 
 This system manages **TWO DISTINCT AND INDEPENDENT** subscription types:
 
-### 1. Signals Subscriptions (`type: 'signals'`)
+### Two Subscription Types - AS-IS (Current State)
+
+#### 1. Signals Subscriptions (`type: 'signals'`)
 - **Purpose**: Automated trading signal distribution
 - **Source**: Trading platform
 - **Existing System**: Already implemented
 - **User Flow**: Users subscribe → receive automated trading signals
 - **NOT affected by this feature**: Continues to operate independently
-- **One per user**: Via `users.subscribeId` field
+- **AS-IS Storage**: ONE per user via `users.subscribeId` field (one-to-one relationship)
 
-### 2. Broadcast Subscriptions (`type: 'subscription_{uid}'`)
+#### 2. Broadcast Subscriptions (`type: 'subscription_{uid}'`)
 - **Purpose**: Manual broadcast of content by managers to specific groups
 - **Source**: Manager-initiated via bot commands
 - **NEW Feature**: Implemented by this architecture
 - **User Flow**: Manager creates subscription → users join via invite link → manager broadcasts messages
 - **Isolation**: Only interacts with broadcast subscriptions, never signals subscriptions
 - **Dynamic Type**: Each subscription has unique type like `'subscription_V1StGXR8_Z'`
-- **Multiple per user**: Users can subscribe to many via `codes` table
+- **AS-IS Storage**: Via `codes` table (userId + activationDate + expirationDate)
+
+### Two Subscription Types - TO-BE (After Migration)
+
+#### 1. Signals Subscriptions (`type: 'signals'`)
+- **TO-BE Storage**: MULTIPLE per user via `user_subscriptions` table (many-to-many relationship)
+- **Migration**: Data moved from `users.subscribeId` → `user_subscriptions`
+
+#### 2. Broadcast Subscriptions (`type: 'subscription_{uid}'`)
+- **TO-BE Storage**: MULTIPLE per user via `user_subscriptions` table (many-to-many relationship)
+- **Migration**: Data moved from `codes.userId/activationDate/expirationDate` → `user_subscriptions`
+- **Unified Architecture**: Same table as signals subscriptions
 
 ### Architectural Separation Principle
 
@@ -698,6 +711,78 @@ countCodesBySubscription(subscriptionId: number): Promise<number>
 findBySubscription(subscriptionId: number): Promise<User[]> // Already exists
 findActiveUsers(): Promise<User[]> // Already exists
 ```
+
+### UserSubscriptionsRepository (NEW - CRITICAL)
+
+**Central repository for unified subscription management**
+
+**Location**: `libs/db/src/repositories/user-subscriptions.repository.ts`
+
+**Purpose**: Manages the many-to-many relationship between users and subscriptions, replacing:
+- `users.subscribeId` (old signals subscription)
+- `codes.userId` + activation/expiration data (old broadcast activations)
+
+**New Methods**:
+```typescript
+// Create subscription relationship (activation)
+async create(data: NewUserSubscription): Promise<UserSubscription>
+
+// Find all user subscriptions (unified query - replaces multiple queries)
+async findByUserId(userId: number): Promise<UserSubscription[]>
+
+// Find subscriptions by type for a user
+async findByUserIdAndType(userId: number, subscriptionType: string): Promise<UserSubscription[]>
+
+// Find all subscribers for a subscription (replaces UsersRepository.findBySubscription)
+async findBySubscriptionId(subscriptionId: number): Promise<UserSubscription[]>
+
+// Check if user has active subscription
+async isUserSubscribed(userId: number, subscriptionId: number): Promise<boolean>
+
+// Activate subscription (create relationship)
+async activate(
+  userId: number,
+  subscriptionId: number,
+  expiresAt?: Date
+): Promise<UserSubscription>
+
+// Deactivate subscription
+async deactivate(userId: number, subscriptionId: number): Promise<void>
+
+// Find expiring subscriptions (replaces UsersRepository.findUsersWithExpiringSubscriptions)
+async findExpiring(daysFromNow: number, subscriptionType?: string): Promise<Array<{
+  user: User;
+  subscription: Subscription;
+  userSubscription: UserSubscription;
+}>>
+```
+
+**Key Patterns:**
+
+```typescript
+// Unified query example - get all user subscriptions with JOIN
+const subscriptions = await this.db
+  .select({
+    userSubscription: userSubscriptions,
+    subscription: subscriptions,
+  })
+  .from(userSubscriptions)
+  .innerJoin(subscriptions, eq(subscriptions.id, userSubscriptions.subscriptionId))
+  .where(
+    and(
+      eq(userSubscriptions.userId, userId),
+      eq(userSubscriptions.isActive, true)
+    )
+  );
+```
+
+**Replaces:**
+- `UsersRepository.findBySubscription()` → Use `findBySubscriptionId()` then JOIN with users
+- `UsersRepository.findUsersWithExpiringSubscriptions()` → Use `findExpiring()`
+
+**Naming Convention**:
+- Repository methods use `find*` prefix (data access layer)
+- Service methods use `get*` prefix (business logic layer)
 
 ## Error Handling Strategy
 

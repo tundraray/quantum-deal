@@ -1,5 +1,37 @@
 # Database Schema Design
 
+## Table of Contents
+
+1. [⚠️ IMPLEMENTATION STATUS](#️-implementation-status)
+2. [Overview](#overview)
+3. [IMPORTANT: Two Subscription Types](#important-two-subscription-types)
+4. [Current Schema Analysis](#current-schema-analysis)
+   - [Existing Tables](#existing-tables)
+   - [subscriptions](#subscriptions)
+   - [codes](#codes)
+   - [users](#users)
+5. [⭐ IMPLEMENTATION STATUS - Current State](#implementation-status---current-state)
+6. [Required Schema Changes](#required-schema-changes)
+   - [CRITICAL CHANGE: Create user_subscriptions Table](#critical-change-create-user_subscriptions-table)
+   - [1. Extend subscriptions Table](#1-extend-subscriptions-table)
+   - [2. Extend codes Table (Optional)](#2-extend-codes-table-optional)
+   - [3. Create broadcast_history Table (Optional)](#3-create-broadcast_history-table-optional---future-enhancement)
+7. [Database Migrations with Drizzle Kit](#database-migrations-with-drizzle-kit)
+   - [Migration Workflow](#migration-workflow-for-unified-architecture)
+   - [CRITICAL: Data Migration Steps](#critical-data-migration-steps)
+   - [Step-by-Step Migration Process](#step-by-step-migration-process)
+8. [Current Schema Files (AS-IS)](#current-schema-files-as-is)
+9. [Target Schema Files (TO-BE) - After Migration](#target-schema-files-to-be---after-migration)
+10. [Indexes](#indexes)
+11. [Data Integrity](#data-integrity)
+12. [Rollback Strategy](#rollback-strategy)
+13. [Data Migration](#data-migration)
+14. [Testing Data](#testing-data)
+15. [Monitoring Queries](#monitoring-queries)
+16. [Backup Considerations](#backup-considerations)
+
+---
+
 ## ⚠️ IMPLEMENTATION STATUS
 
 **CRITICAL:** The schema changes described in this document are **NOT YET IMPLEMENTED** in the codebase. This is a design document that describes the REQUIRED changes to support the subscription broadcast feature.
@@ -91,7 +123,7 @@ export const users = pgTable('users', {
   lastName: varchar('last_name', { length: 255 }),
   lang: varchar('lang', { length: 10 }),
   isPremium: boolean('is_premium').default(false),
-  subscribeId: integer('subscribe_id').references(() => subscriptions.id),
+  subscribeId: bigint('subscribe_id', { mode: 'number' }).references(() => subscriptions.id),
   subscribeExpirationDate: timestamp('subscribe_expiration_date', { withTimezone: true }),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -103,9 +135,95 @@ export const users = pgTable('users', {
 - `subscribeId` links user to subscription
 - `isActive` flag already exists for user deactivation
 
+## IMPLEMENTATION STATUS - Current State
+
+⚠️ **IMPORTANT**: The `user_subscriptions` table described in this document is a **PROPOSED ARCHITECTURE** that is **NOT YET IMPLEMENTED**.
+
+**Current Implementation (AS-IS)**:
+- ✅ Users have **ONE signals subscription** via `users.subscribeId` (one-to-one relationship)
+- ✅ Activation data stored in `codes` table with `userId`, `activationDate`, `expirationDate` fields
+- ✅ Current system works for single subscription per user
+
+**Proposed Architecture (TO-BE)**:
+- 🎯 Introduce `user_subscriptions` table for many-to-many relationship
+- 🎯 Users can have **MULTIPLE subscriptions** (both signals and broadcast types)
+- 🎯 Clean separation: `codes` table becomes invitation code catalog only
+- 🎯 Requires data migration from `users.subscribeId` and `codes.userId` to `user_subscriptions`
+
+**Why the change?**
+- Support multiple subscriptions per user (signals + broadcast subscriptions)
+- Cleaner data model with proper separation of concerns
+- Invitation codes separated from activation records
+
+**Migration Status**: Data migration scripts required before implementation (see "Database Migrations with Drizzle Kit" section).
+
 ## Required Schema Changes
 
+### CRITICAL CHANGE: Create `user_subscriptions` Table
+
+⚠️ **PROPOSED ARCHITECTURE - Not yet implemented. This is the target state after migration.**
+
+The most important change is introducing a **unified many-to-many relationship** table.
+
+**Why this change?**
+- **OLD**: `users.subscribeId` (one-to-one, only ONE signals subscription)
+- **OLD**: `codes.userId`, `codes.activationDate`, `codes.expirationDate` (activation data mixed with invitation codes)
+- **NEW**: `user_subscriptions` table (many-to-many, supports MULTIPLE subscriptions per user)
+- **BENEFIT**: Users can have multiple subscriptions (both signals and broadcast types)
+- **BENEFIT**: Cleaner separation: codes are just invitation codes, not activation records
+
+**New Table Schema:**
+```typescript
+export const userSubscriptions = pgTable('user_subscriptions', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  userId: bigint('user_id', { mode: 'number' })
+    .notNull()
+    .references(() => users.telegramId, { onDelete: 'cascade' }),
+  subscriptionId: bigint('subscription_id', { mode: 'number' })
+    .notNull()
+    .references(() => subscriptions.id, { onDelete: 'cascade' }),
+  activatedAt: timestamp('activated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type UserSubscription = typeof userSubscriptions.$inferSelect;
+export type NewUserSubscription = typeof userSubscriptions.$inferInsert;
+```
+
+**Constraints:**
+```sql
+-- Unique constraint: prevent duplicate subscriptions
+ALTER TABLE user_subscriptions
+ADD CONSTRAINT unique_user_subscription UNIQUE (user_id, subscription_id);
+
+-- Performance indexes
+CREATE INDEX idx_user_subscriptions_user ON user_subscriptions(user_id);
+CREATE INDEX idx_user_subscriptions_subscription ON user_subscriptions(subscription_id);
+CREATE INDEX idx_user_subscriptions_user_active ON user_subscriptions(user_id, is_active) WHERE is_active = true;
+```
+
+### Fields to REMOVE from existing tables:
+
+**users table:**
+- ❌ `subscribeId` - Moved to `user_subscriptions.subscription_id`
+- ❌ `subscribeExpirationDate` - Moved to `user_subscriptions.expires_at`
+
+**codes table:**
+- ❌ userId - REMOVED (activation tracking moved to user_subscriptions.user_id)
+- ❌ activationDate - REMOVED (activation tracking moved to user_subscriptions.activatedAt)
+- ❌ expirationDate - REMOVED (expiration tracking moved to user_subscriptions.expiresAt)
+
+**Rationale:** Codes become **multi-use invitation codes** (no longer tied to a single user). User activation data moves to user_subscriptions table.
+
 ### 1. Extend `subscriptions` Table
+
+**Current Status**: The `subscriptions` table already exists with core fields (`id`, `name`, `scope`, `createdAt`). This section describes adding NEW fields for type discrimination and lifecycle management.
 
 Add `type` field to distinguish subscription types, plus lifecycle management fields:
 
@@ -113,7 +231,7 @@ Add `type` field to distinguish subscription types, plus lifecycle management fi
 export const subscriptions = pgTable('subscriptions', {
   id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
   name: varchar('name').notNull(),
-  type: varchar('type', { length: 50 }).notNull().default('signals'), // NEW - CRITICAL
+  type: varchar('type', { length: 30 }).notNull().default('signals'), // NEW - CRITICAL
   scope: jsonb('scope').$type<string[] | null>(),
   isActive: boolean('is_active').notNull().default(true), // NEW
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -127,7 +245,7 @@ export const subscriptions = pgTable('subscriptions', {
 - `type`: **CRITICAL** - Distinguishes between subscription types
   - `'signals'`: Automated trading signal subscriptions (ONE per user via users.subscribeId)
   - `'subscription_{uid}'`: Dynamic broadcast subscriptions (e.g., `'subscription_abc123'`)
-  - Length: varchar(50) to accommodate dynamic UIDs
+  - Length: varchar(30) to accommodate dynamic UIDs
   - Default: `'signals'` for backward compatibility
   - **Identification**: Broadcast subscriptions match pattern `type LIKE 'subscription_%'`
 - `isActive`: Boolean flag for soft delete (default: true)
@@ -196,14 +314,141 @@ export const broadcastHistory = pgTable('broadcast_history', {
 
 ## Database Migrations with Drizzle Kit
 
-This project uses **Drizzle Kit** for managing database migrations. The migration process is automated through schema changes.
+This project uses **Drizzle Kit** for managing database migrations. The unified architecture migration is a **multi-step process** with data migration.
 
-### Migration Workflow
+### Migration Workflow for Unified Architecture
 
-1. **Update Drizzle Schema Files** (see sections below)
+1. **Update Drizzle Schema Files** (create user_subscriptions, update users/codes)
 2. **Generate Migration**: `pnpm run db:generate`
 3. **Review Generated SQL**: Check files in `libs/db/migrations/`
-4. **Apply Migration**: `pnpm run db:migrate`
+4. **CRITICAL: Enhance with Data Migration** (see below)
+5. **Apply Migration**: `pnpm run db:migrate`
+6. **Verify Data** (run verification queries)
+7. **Remove Old Fields** (separate migration after verification)
+
+### CRITICAL: Data Migration Steps
+
+The migration MUST preserve all existing subscription data. This requires manual SQL after Drizzle generates the schema changes.
+
+**Migration Phases:**
+
+#### Phase 1: Create New Structure
+```sql
+-- Drizzle generates this automatically
+CREATE TABLE user_subscriptions (...);
+ALTER TABLE subscriptions ADD COLUMN type VARCHAR(50) NOT NULL DEFAULT 'signals';
+-- ... other subscriptions columns
+ALTER TABLE codes ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
+```
+
+#### Phase 2: Migrate Existing Data (MANUAL - CRITICAL)
+```sql
+-- STEP 1: Migrate signals subscriptions from users table
+INSERT INTO user_subscriptions (user_id, subscription_id, activated_at, expires_at, is_active)
+SELECT
+  telegram_id,
+  subscribe_id,
+  created_at, -- approximate activation date
+  subscribe_expiration_date,
+  true
+FROM users
+WHERE subscribe_id IS NOT NULL;
+
+-- STEP 2: Migrate broadcast subscriptions from codes table (if any activated)
+INSERT INTO user_subscriptions (user_id, subscription_id, activated_at, expires_at, is_active)
+SELECT
+  c.user_id,
+  c.subscription_id,
+  c.activation_date,
+  c.expiration_date,
+  true
+FROM codes c
+WHERE c.user_id IS NOT NULL
+ON CONFLICT (user_id, subscription_id) DO NOTHING; -- Skip duplicates
+
+-- STEP 3: CRITICAL VERIFICATION
+DO $$
+DECLARE
+  old_signals_count INT;
+  new_signals_count INT;
+  old_codes_count INT;
+  new_codes_count INT;
+BEGIN
+  -- Verify signals migration
+  SELECT COUNT(*) INTO old_signals_count FROM users WHERE subscribe_id IS NOT NULL;
+  SELECT COUNT(*) INTO new_signals_count FROM user_subscriptions;
+
+  IF old_signals_count > new_signals_count THEN
+    RAISE EXCEPTION 'Data migration incomplete: users had % signals subscriptions but user_subscriptions has only %',
+      old_signals_count, new_signals_count;
+  END IF;
+
+  -- Verify codes migration: count rows migrated correctly
+  SELECT COUNT(*) INTO old_codes_count FROM codes WHERE user_id IS NOT NULL;
+  SELECT COUNT(*) INTO new_codes_count
+  FROM user_subscriptions us
+  WHERE EXISTS (
+    SELECT 1 FROM codes c
+    WHERE c.user_id = us.user_id
+    AND c.subscription_id = us.subscription_id
+    AND c.user_id IS NOT NULL
+  );
+
+  IF old_codes_count != new_codes_count THEN
+    RAISE EXCEPTION 'Codes migration incomplete: % codes but only % migrated',
+      old_codes_count, new_codes_count;
+  END IF;
+
+  RAISE NOTICE 'Migration verification: signals=%, codes=%, total=%',
+    old_signals_count, old_codes_count, new_signals_count;
+END $$;
+```
+
+#### Phase 3: Remove Old Fields (SEPARATE MIGRATION - only after verification)
+
+⚠️ **DANGER ZONE**: Only execute after Phase 2 verification passes!
+
+```sql
+-- Remove from users table
+ALTER TABLE users DROP COLUMN subscribe_id;
+ALTER TABLE users DROP COLUMN subscribe_expiration_date;
+
+-- Remove from codes table
+ALTER TABLE codes DROP COLUMN user_id;
+ALTER TABLE codes DROP COLUMN activation_date;
+ALTER TABLE codes DROP COLUMN expiration_date;
+```
+
+### Rollback Strategy
+
+If Phase 2 fails or data is incorrect:
+
+```sql
+-- Rollback: Restore old fields from user_subscriptions
+ALTER TABLE users ADD COLUMN subscribe_id INTEGER REFERENCES subscriptions(id);
+ALTER TABLE users ADD COLUMN subscribe_expiration_date TIMESTAMP WITH TIME ZONE;
+
+UPDATE users u
+SET subscribe_id = us.subscription_id,
+    subscribe_expiration_date = us.expires_at
+FROM user_subscriptions us
+WHERE us.user_id = u.telegram_id;
+
+-- Restore codes fields
+ALTER TABLE codes ADD COLUMN user_id BIGINT REFERENCES users(telegram_id);
+ALTER TABLE codes ADD COLUMN activation_date TIMESTAMP;
+ALTER TABLE codes ADD COLUMN expiration_date TIMESTAMP WITH TIME ZONE;
+
+UPDATE codes c
+SET user_id = us.user_id,
+    activation_date = us.activated_at,
+    expiration_date = us.expires_at
+FROM user_subscriptions us
+WHERE us.subscription_id = c.subscription_id AND us.user_id IS NOT NULL;
+
+-- Drop user_subscriptions table
+DROP TABLE user_subscriptions CASCADE;
+```
 
 ### Available Commands
 
@@ -248,8 +493,7 @@ This will:
 The generated migration should include:
 ```sql
 -- Auto-generated by Drizzle Kit
-ALTER TABLE "subscriptions" ADD COLUMN "type" varchar(20) DEFAULT 'signals' NOT NULL;
-ALTER TABLE "subscriptions" ADD COLUMN "category" varchar(50);
+ALTER TABLE "subscriptions" ADD COLUMN "type" varchar(50) DEFAULT 'signals' NOT NULL;
 ALTER TABLE "subscriptions" ADD COLUMN "is_active" boolean DEFAULT true NOT NULL;
 ALTER TABLE "subscriptions" ADD COLUMN "updated_at" timestamp with time zone DEFAULT now() NOT NULL;
 ALTER TABLE "subscriptions" ADD COLUMN "closed_at" timestamp with time zone;
@@ -262,6 +506,7 @@ ALTER TABLE "subscriptions" ADD COLUMN "closed_by" bigint;
 1. **Type constraint** (Drizzle doesn't generate CHECK constraints from varchar):
 ```sql
 -- Only validate 'signals' type explicitly, allow any 'subscription_%' pattern
+-- This allows unlimited broadcast subscriptions with dynamic UIDs
 ALTER TABLE "subscriptions"
 ADD CONSTRAINT chk_subscription_type
 CHECK (type = 'signals' OR type LIKE 'subscription_%');
@@ -436,9 +681,131 @@ Drizzle Kit generates basic ALTER TABLE statements but doesn't automatically cre
 
 These must be added manually to the generated migration file.
 
-## Drizzle Schema Files
+## Current Schema Files (AS-IS)
 
-### Updated `libs/db/src/schema/subscriptions.ts`
+**These are the CURRENT implementations** in the codebase. This represents the state BEFORE migration to unified `user_subscriptions` architecture.
+
+### Current `libs/db/src/schema/subscriptions.ts` (AS-IS)
+
+```typescript
+import {
+  pgTable,
+  timestamp,
+  varchar,
+  bigint,
+  jsonb,
+} from 'drizzle-orm/pg-core';
+
+export const subscriptions = pgTable('subscriptions', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  name: varchar('name').notNull(),
+  scope: jsonb('scope').$type<string[] | null>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type Subscription = typeof subscriptions.$inferSelect;
+export type NewSubscription = typeof subscriptions.$inferInsert;
+```
+
+**Current State**:
+- ✅ Basic subscription structure with `id`, `name`, `scope`, `createdAt`
+- ❌ No `type` discriminator field yet
+- ❌ No lifecycle management fields (`isActive`, `updatedAt`, `closedAt`, `closedBy`)
+
+### Current `libs/db/src/schema/codes.ts` (AS-IS)
+
+```typescript
+import { pgTable, timestamp, varchar, bigint } from 'drizzle-orm/pg-core';
+import { subscriptions } from './subscriptions';
+import { users } from './users';
+import { managers } from './managers';
+
+export const codes = pgTable('codes', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  code: varchar('code').notNull(),
+  subscriptionId: bigint('subscription_id', { mode: 'number' })
+    .notNull()
+    .references(() => subscriptions.id),
+  userId: bigint('user_id', { mode: 'number' }).references(() => users.telegramId), // WILL BE REMOVED
+  managerId: bigint('manager_id', { mode: 'number' }).references(() => managers.telegramId),
+  activationDate: timestamp('activation_date'), // WILL BE REMOVED
+  expirationDate: timestamp('expiration_date'), // WILL BE REMOVED
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type Code = typeof codes.$inferSelect;
+export type NewCode = typeof codes.$inferInsert;
+```
+
+**Current State**:
+- ✅ Has `userId`, `activationDate`, `expirationDate` (will be moved to `user_subscriptions`)
+- ❌ No `isActive` field yet
+- ⚠️ Mixing invitation codes with activation records (will be separated)
+
+### Current `libs/db/src/schema/users.ts` (AS-IS)
+
+```typescript
+import { pgTable, timestamp, varchar, bigint, boolean, integer } from 'drizzle-orm/pg-core';
+import { subscriptions } from './subscriptions';
+
+export const users = pgTable('users', {
+  telegramId: bigint('telegram_id', { mode: 'number' }).primaryKey().notNull(),
+  username: varchar('username', { length: 100 }),
+  firstName: varchar('first_name', { length: 255 }),
+  lastName: varchar('last_name', { length: 255 }),
+  lang: varchar('lang', { length: 10 }),
+  isPremium: boolean('is_premium').default(false),
+  subscribeId: bigint('subscribe_id', { mode: 'number' }).references(() => subscriptions.id), // WILL BE REMOVED
+  subscribeExpirationDate: timestamp('subscribe_expiration_date', { withTimezone: true }), // WILL BE REMOVED
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+```
+
+**Current State**:
+- ✅ Has `subscribeId` and `subscribeExpirationDate` (one subscription per user)
+- ⚠️ Will be replaced by `user_subscriptions` many-to-many table
+
+---
+
+## Target Schema Files (TO-BE) - After Migration
+
+⚠️ **WARNING**: These are TARGET schemas after migration to unified `user_subscriptions` architecture. **Do not implement yet without data migration scripts.** See "Database Migrations with Drizzle Kit" section for migration process.
+
+### Target `libs/db/src/schema/user-subscriptions.ts` (TO-BE - NEW FILE)
+
+```typescript
+import { pgTable, timestamp, bigint, boolean } from 'drizzle-orm/pg-core';
+import { users } from './users';
+import { subscriptions } from './subscriptions';
+
+// NEW TABLE: Replaces users.subscribeId and codes.userId with many-to-many relationship
+export const userSubscriptions = pgTable('user_subscriptions', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  userId: bigint('user_id', { mode: 'number' })
+    .notNull()
+    .references(() => users.telegramId, { onDelete: 'cascade' }), // NEW: replaces users.subscribeId
+  subscriptionId: bigint('subscription_id', { mode: 'number' })
+    .notNull()
+    .references(() => subscriptions.id, { onDelete: 'cascade' }), // NEW: replaces codes.userId
+  activatedAt: timestamp('activated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(), // NEW: replaces codes.activationDate
+  expiresAt: timestamp('expires_at', { withTimezone: true }), // NEW: replaces codes.expirationDate and users.subscribeExpirationDate
+  isActive: boolean('is_active').notNull().default(true), // NEW
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type UserSubscription = typeof userSubscriptions.$inferSelect;
+export type NewUserSubscription = typeof userSubscriptions.$inferInsert;
+```
+
+### Target `libs/db/src/schema/subscriptions.ts` (TO-BE)
 
 ```typescript
 import {
@@ -451,12 +818,12 @@ import {
 } from 'drizzle-orm/pg-core';
 import { managers } from './managers';
 
-// Define subscription type constant for signals
+// NEW: Define subscription type constant for signals
 export const SubscriptionType = {
   SIGNALS: 'signals',
 } as const;
 
-// Helper to generate broadcast subscription type
+// NEW: Helper to generate broadcast subscription type
 import { nanoid } from 'nanoid';
 
 export function generateSubscriptionUID(): string {
@@ -467,7 +834,7 @@ export function generateBroadcastSubscriptionType(): string {
   return `subscription_${generateSubscriptionUID()}`;
 }
 
-// Helper to check if subscription is broadcast type
+// NEW: Helper to check if subscription is broadcast type
 export function isBroadcastSubscription(type: string): boolean {
   return type.startsWith('subscription_');
 }
@@ -475,25 +842,31 @@ export function isBroadcastSubscription(type: string): boolean {
 export const subscriptions = pgTable('subscriptions', {
   id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
   name: varchar('name').notNull(),
-  type: varchar('type', { length: 50 }).notNull().default(SubscriptionType.SIGNALS), // NEW - supports dynamic 'subscription_{uid}'
+  type: varchar('type', { length: 30 }).notNull().default(SubscriptionType.SIGNALS), // NEW - supports dynamic 'subscription_{uid}'
   scope: jsonb('scope').$type<string[] | null>(),
-  isActive: boolean('is_active').notNull().default(true),
+  isActive: boolean('is_active').notNull().default(true), // NEW
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  closedAt: timestamp('closed_at', { withTimezone: true }),
-  closedBy: bigint('closed_by', { mode: 'number' }).references(() => managers.telegramId),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(), // NEW
+  closedAt: timestamp('closed_at', { withTimezone: true }), // NEW
+  closedBy: bigint('closed_by', { mode: 'number' }).references(() => managers.telegramId), // NEW
 });
 
 export type Subscription = typeof subscriptions.$inferSelect;
 export type NewSubscription = typeof subscriptions.$inferInsert;
 ```
 
-### Updated `libs/db/src/schema/codes.ts`
+### Target `libs/db/src/schema/codes.ts` (TO-BE)
+
+**Fields removed in unified architecture:**
+- `userId` → Moved to `user_subscriptions.userId`
+- `activationDate` → Moved to `user_subscriptions.activatedAt`
+- `expirationDate` → Moved to `user_subscriptions.expiresAt`
+
+**Rationale:** Codes become multi-use invitation codes (no longer tied to a single user).
 
 ```typescript
 import { pgTable, timestamp, varchar, bigint, boolean } from 'drizzle-orm/pg-core';
 import { subscriptions } from './subscriptions';
-import { users } from './users';
 import { managers } from './managers';
 
 export const codes = pgTable('codes', {
@@ -502,11 +875,8 @@ export const codes = pgTable('codes', {
   subscriptionId: bigint('subscription_id', { mode: 'number' })
     .notNull()
     .references(() => subscriptions.id),
-  userId: bigint('user_id', { mode: 'number' }).references(() => users.telegramId),
   managerId: bigint('manager_id', { mode: 'number' }).references(() => managers.telegramId),
-  activationDate: timestamp('activation_date'),
-  expirationDate: timestamp('expiration_date'),
-  isActive: boolean('is_active').notNull().default(true),
+  isActive: boolean('is_active').notNull().default(true), // NEW
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -514,7 +884,7 @@ export type Code = typeof codes.$inferSelect;
 export type NewCode = typeof codes.$inferInsert;
 ```
 
-### New `libs/db/src/schema/broadcast-history.ts`
+### Target `libs/db/src/schema/broadcast-history.ts` (TO-BE - NEW FILE)
 
 ```typescript
 import {
@@ -528,21 +898,22 @@ import {
 import { subscriptions } from './subscriptions';
 import { managers } from './managers';
 
+// NEW TABLE: Optional future enhancement for broadcast analytics
 export const broadcastHistory = pgTable('broadcast_history', {
-  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(), // NEW
   subscriptionId: bigint('subscription_id', { mode: 'number' })
     .notNull()
-    .references(() => subscriptions.id, { onDelete: 'cascade' }),
+    .references(() => subscriptions.id, { onDelete: 'cascade' }), // NEW
   managerId: bigint('manager_id', { mode: 'number' })
     .notNull()
-    .references(() => managers.telegramId, { onDelete: 'set null' }),
-  message: text('message').notNull(),
-  recipientCount: integer('recipient_count').notNull(),
-  successCount: integer('success_count').default(0),
-  failureCount: integer('failure_count').default(0),
-  status: varchar('status', { length: 20 }).notNull().default('pending'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  completedAt: timestamp('completed_at', { withTimezone: true }),
+    .references(() => managers.telegramId, { onDelete: 'set null' }), // NEW
+  message: text('message').notNull(), // NEW
+  recipientCount: integer('recipient_count').notNull(), // NEW
+  successCount: integer('success_count').default(0), // NEW
+  failureCount: integer('failure_count').default(0), // NEW
+  status: varchar('status', { length: 20 }).notNull().default('pending'), // NEW
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(), // NEW
+  completedAt: timestamp('completed_at', { withTimezone: true }), // NEW
 });
 
 export type BroadcastHistory = typeof broadcastHistory.$inferSelect;
@@ -730,7 +1101,9 @@ INSERT INTO subscriptions (name, type, scope, is_active) VALUES
   ('Premium Signals', 'signals', '["forex", "crypto"]', true),
   ('VIP Trading Signals', 'signals', '["*"]', true);
 
--- Create test broadcast subscriptions (new type for broadcast feature)
+-- PREREQUISITE: Assumes subscriptions 1-2 already exist as signals subscriptions
+
+-- Create test broadcast subscriptions (IDs will be 3, 4, 5 assuming 1-2 exist)
 -- Each has unique dynamic type: subscription_{uid}
 INSERT INTO subscriptions (name, type, scope, is_active) VALUES
   ('Premium Analytics Broadcast', 'subscription_abc123', NULL, true),

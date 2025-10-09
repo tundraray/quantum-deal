@@ -162,6 +162,7 @@ Bot: "✅ Subscription created successfully!
 **Service Implementation**:
 ```typescript
 async createSubscription(name: string, managerId: number): Promise<CreateSubscriptionResult> {
+  // Use transaction to ensure atomicity: if code generation fails, subscription is rolled back
   return await this.subscriptionsRepository.transaction(async (tx) => {
     // 1. Generate unique subscription type
     const subscriptionType = generateBroadcastSubscriptionType(); // e.g., 'subscription_V1StGXR8_Z'
@@ -643,6 +644,76 @@ async sendBroadcast(
 
 ---
 
+### 4. User Subscription Activation Flow (via Invite Code)
+
+**Trigger**: User clicks invite link with activation code
+
+**User Journey**:
+```
+User clicks: t.me/QuantumDealBot?start=ABC123XYZ456DEF
+    ↓
+Bot receives /start command with code parameter
+    ↓
+Bot validates code (active, subscription exists and is active)
+    ↓
+Bot checks if user already has this subscription (user_subscriptions)
+    ↓
+If not subscribed: Create user_subscriptions record
+    ↓
+Bot: "✅ Successfully subscribed to [Subscription Name]!"
+```
+
+**Implementation** (in `BotService` or `StartCommand`):
+
+```typescript
+@Command('start')
+async handleStart(@Ctx() ctx: Context) {
+  const startParam = ctx.message.text.split(' ')[1]; // Extract code
+
+  if (!startParam) {
+    return ctx.reply('Welcome to QuantumDeal Bot!');
+  }
+
+  // This is an activation code
+  const code = startParam;
+
+  // Validate code
+  const isValid = await this.subscriptionManagementService.validateCode(code);
+  if (!isValid) {
+    return ctx.reply('❌ Invalid or expired activation code');
+  }
+
+  // Get code details
+  const codeData = await this.codesRepository.findByCode(code);
+  const subscription = await this.subscriptionsRepository.findById(codeData.subscriptionId);
+
+  // Check if user already has this subscription
+  const existingSub = await this.userSubscriptionsRepository.findByUserAndSubscription(
+    ctx.from.id,
+    codeData.subscriptionId
+  );
+
+  if (existingSub) {
+    return ctx.reply(`You already have subscription: ${subscription.name}`);
+  }
+
+  // Activate subscription for user
+  await this.userSubscriptionsRepository.create({
+    userId: ctx.from.id,
+    subscriptionId: codeData.subscriptionId,
+    activatedAt: new Date(),
+    expiresAt: subscription.expirationDays
+      ? new Date(Date.now() + subscription.expirationDays * 24 * 60 * 60 * 1000)
+      : null,
+    isActive: true,
+  });
+
+  return ctx.reply(`✅ Successfully subscribed to: ${subscription.name}!`);
+}
+```
+
+---
+
 ## Session State Management
 
 ### Session Structure
@@ -687,6 +758,10 @@ ctx.session.broadcastMessage = null;
 ---
 
 ## Error Handling Patterns
+
+```typescript
+import { MASTERBOT_CONSTANTS } from './constants';
+```
 
 ### 1. Authentication Errors
 

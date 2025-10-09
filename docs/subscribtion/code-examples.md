@@ -30,6 +30,7 @@ This document provides reference code examples for implementing the subscription
 ```typescript
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { SubscriptionsRepository, CodesRepository } from '@quantumdeal/db';
+// Assumes barrel export in libs/db/src/index.ts exports these from schema/subscriptions.ts
 import { SubscriptionType, generateBroadcastSubscriptionType, isBroadcastSubscription } from '@quantumdeal/db';
 import { CodeGenerationService } from './code-generation.service';
 import { CreateSubscriptionResult, SubscriptionDto } from '../dto/subscription.dto';
@@ -52,6 +53,8 @@ export class SubscriptionManagementService {
     name: string,
     managerId: number,
   ): Promise<CreateSubscriptionResult> {
+    // Use transaction to ensure atomicity: if code generation fails, subscription is rolled back
+
     // Validate name
     if (!this.validateSubscriptionName(name)) {
       throw new BadRequestException(
@@ -215,6 +218,7 @@ export class CodeGenerationService implements OnModuleInit {
     @InjectBot(BotName)
     private readonly bot: Telegraf<UserContext>,
     private readonly codesRepository: CodesRepository,
+    private readonly subscriptionsRepository: SubscriptionsRepository,
   ) {}
 
   /**
@@ -282,11 +286,15 @@ export class CodeGenerationService implements OnModuleInit {
   }
 
   /**
-   * Validate if code exists and is unused
+   * Validate if code exists and is active
    */
   async validateCode(code: string): Promise<boolean> {
     const existingCode = await this.codesRepository.findByCode(code);
-    return existingCode !== null && existingCode.isActive && !existingCode.userId;
+    if (!existingCode || !existingCode.isActive) return false;
+
+    // Check if subscription is still active (codes are multi-use in unified architecture)
+    const subscription = await this.subscriptionsRepository.findById(existingCode.subscriptionId);
+    return subscription !== null && subscription.isActive;
   }
 
   /**
@@ -366,6 +374,7 @@ export class BroadcastService {
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
+    private readonly userSubscriptionsRepository: UserSubscriptionsRepository, // NEW
     private readonly notificationService: NotificationService,
   ) {}
 
@@ -454,10 +463,10 @@ export class BroadcastService {
       `Broadcasting to BROADCAST subscription ${subscriptionId} by manager ${managerId}`,
     );
 
-    // Get active subscribers
-    const subscribers = await this.usersRepository.findBySubscription(
-      subscriptionId,
-    );
+    // Get active subscribers via unified architecture
+    const userSubs = await this.userSubscriptionsRepository.findBySubscriptionId(subscriptionId);
+    const userIds = userSubs.map(us => us.userId);
+    const subscribers = await this.usersRepository.findByIds(userIds);
 
     if (subscribers.length === 0) {
       this.logger.warn(
@@ -680,6 +689,8 @@ export class CodesRepository extends BaseRepository<Code, NewCode, number> {
     return codes.length;
   }
 }
+
+export { CodesRepository };
 ```
 
 ---

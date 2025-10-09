@@ -27,7 +27,8 @@ The system now manages **TWO DISTINCT AND INDEPENDENT** subscription types:
 - **Status**: Existing system, already implemented
 - **NOT part of this feature**: Continues to operate independently
 - **Manager interaction**: None through broadcast commands
-- **One per user**: Via `users.subscribeId` field
+- **AS-IS (Current)**: ONE per user via `users.subscribeId` field
+- **TO-BE (After migration)**: MULTIPLE per user via `user_subscriptions` table
 
 ### 2. Broadcast Subscriptions (`type: 'subscription_{uid}'`)
 - **Purpose**: Manual broadcast of content by managers to specific groups
@@ -106,8 +107,10 @@ Manager executes `/subscription` command, which displays a menu with three actio
 ## Technical Architecture
 
 ### Database Schema
-- **subscriptions**: Extended with `type` field (varchar 50) for 'signals' or 'subscription_{uid}', and `isActive` flag
-- **codes**: Links codes to subscriptions with manager tracking
+- **subscriptions**: Extended with `type` field (varchar 30) for 'signals' or 'subscription_{uid}', and `isActive` flag
+- **codes**: Invitation codes for subscriptions
+  - **AS-IS**: Tracks code usage (userId, activationDate, expirationDate) - single-use codes
+  - **TO-BE**: Catalog of multi-use invitation codes (user data moved to user_subscriptions)
 - **users**: Subscription relationship via `subscribeId` for signals; broadcast via codes table
 - **Type Separation**: Database enforces separation with CHECK constraint (signals OR LIKE 'subscription_%')
 - **Dynamic Types**: Each broadcast subscription has unique type generated with nanoid
