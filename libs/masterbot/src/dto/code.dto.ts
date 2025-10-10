@@ -23,5 +23,4 @@ export class CodeDto {
 export class CreateSubscriptionResult {
   subscription: SubscriptionDto;
   code: CodeDto;
-  inviteUrl: string;
 }

@@ -30,14 +30,12 @@ export class SubscriptionManagementService {
    *
    * @param name - The subscription name (3-50 characters)
    * @param managerId - The manager's Telegram ID who created the subscription
-   * @param botUsername - The bot's username for generating invite URL
-   * @returns Complete subscription creation result with invite URL
+   * @returns Complete subscription creation result
    * @throws Error if name is invalid
    */
   async createSubscription(
     name: string,
     managerId: number,
-    botUsername: string,
   ): Promise<CreateSubscriptionResult> {
     // Validate name
     if (!this.validateSubscriptionName(name)) {
@@ -60,16 +58,9 @@ export class SubscriptionManagementService {
       managerId,
     );
 
-    // Generate invite URL
-    const inviteUrl = this.codeGenerationService.getInviteUrl(
-      code.code,
-      botUsername,
-    );
-
     return {
       subscription: this.mapToDto(subscription),
       code,
-      inviteUrl,
     };
   }
 

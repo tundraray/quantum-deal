@@ -911,9 +911,6 @@ export class MasterbotUpdate {
       // Ensure session is initialized
       this.ensureSession(ctx);
 
-      // Get bot username
-      const botInfo = await this.bot.telegram.getMe();
-      const botUsername = botInfo.username;
       const managerId = manager.telegramId;
 
       // Create subscription
@@ -921,7 +918,6 @@ export class MasterbotUpdate {
         await this.subscriptionManagementService.createSubscription(
           name,
           managerId,
-          botUsername,
         );
 
       // Clear state
@@ -939,8 +935,7 @@ export class MasterbotUpdate {
           `📋 Название: ${result.subscription.name}\n` +
           `🆔 ID: ${result.subscription.id}\n` +
           `📅 Создана: ${result.subscription.createdAt.toLocaleString('ru-RU')}\n\n` +
-          `🎫 *Ссылка-приглашение:*\n\`${result.inviteUrl}\`\n\n` +
-          '_Поделитесь этой ссылкой с пользователями для подписки._',
+          '💡 Для генерации кодов используйте команду `/generate_codes`',
         { parse_mode: 'Markdown' },
       );
     } catch (error) {
