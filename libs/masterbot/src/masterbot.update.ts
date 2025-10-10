@@ -147,19 +147,19 @@ export class MasterbotUpdate {
         `Code command requested by manager ${manager.telegramId}`,
       );
 
-      // Get all subscriptions except id=1
-      const subscriptions = await this.subscriptionsRepository.findAll();
-      const availableSubscriptions = subscriptions.filter(
-        (sub) => sub.id !== 1,
-      );
+      // Get all active subscriptions (including signals and broadcast subscriptions)
+      const activeSubscriptions =
+        await this.subscriptionsRepository.findActiveSubscriptions();
 
-      if (availableSubscriptions.length === 0) {
-        await ctx.reply('❌ No subscriptions available for code generation.');
+      if (activeSubscriptions.length === 0) {
+        await ctx.reply(
+          '❌ Нет активных подписок. Создайте подписку с помощью /create_subscription',
+        );
         return;
       }
 
       // Create inline keyboard with subscription options
-      const subscriptionButtons = availableSubscriptions.map((subscription) => [
+      const subscriptionButtons = activeSubscriptions.map((subscription) => [
         {
           text: subscription.name,
           callback_data: `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.SUBSCRIPTION_PREFIX}${subscription.id}`,
