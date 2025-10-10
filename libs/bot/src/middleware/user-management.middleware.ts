@@ -1,8 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Context } from '@quantumdeal/framework';
 import { User as TelegramUser } from 'telegraf/types';
-import { UsersRepository, NewUser } from '@quantumdeal/db';
-import { UserContext } from '../interfaces';
+import {
+  UsersRepository,
+  NewUser,
+  UserSubscriptionsRepository,
+} from '@quantumdeal/db';
+import { UserContext, UserWithSubscriptions } from '../interfaces';
 
 /**
  * Middleware that handles user authentication and creation for Telegram bot
@@ -16,7 +20,10 @@ import { UserContext } from '../interfaces';
 export class UserManagementMiddleware {
   private readonly logger = new Logger(UserManagementMiddleware.name);
 
-  constructor(private readonly usersRepository: UsersRepository) {
+  constructor(
+    private readonly usersRepository: UsersRepository,
+    private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
+  ) {
     this.logger.debug('User management middleware constructor');
   }
 
@@ -47,9 +54,11 @@ export class UserManagementMiddleware {
         return;
       }
 
-      // Attach user to context (user is guaranteed to exist at this point)
+      // Attach user to context with subscriptions (user is guaranteed to exist at this point)
       if (user) {
-        (ctx as UserContext).user = user;
+        const userWithSubscriptions =
+          await this.loadUserWithSubscriptions(user);
+        (ctx as UserContext).user = userWithSubscriptions;
       }
 
       // Continue to next middleware
@@ -83,5 +92,47 @@ export class UserManagementMiddleware {
     };
 
     return this.usersRepository.create(newUser);
+  }
+
+  /**
+   * Loads user with active subscriptions and converts to UserWithSubscriptions DTO
+   * @param user - Raw user entity from database
+   * @returns UserWithSubscriptions DTO with active subscriptions
+   */
+  private async loadUserWithSubscriptions(user: {
+    telegramId: number;
+    username: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    lang: string | null;
+    isPremium: boolean | null;
+    isActive: boolean;
+    createdAt: Date;
+  }): Promise<UserWithSubscriptions> {
+    // Load active subscriptions with subscription details
+    const subscriptions =
+      await this.userSubscriptionsRepository.findActiveByUserIdWithSubscription(
+        user.telegramId,
+      );
+
+    // Map to UserWithSubscriptions DTO
+    return {
+      telegramId: user.telegramId,
+      username: user.username,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      lang: user.lang,
+      isPremium: user.isPremium ?? false,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      activeSubscriptions: subscriptions.map((s) => ({
+        subscriptionId: s.subscription.id,
+        name: s.subscription.name,
+        type: s.subscription.type,
+        activatedAt: s.userSubscription.activatedAt,
+        expiresAt: s.userSubscription.expiresAt,
+        isActive: s.userSubscription.isActive,
+      })),
+    };
   }
 }

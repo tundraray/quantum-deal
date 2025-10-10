@@ -40,16 +40,18 @@ export class BotUpdate {
   ): Promise<void> {
     const user = ctx.user;
     if (user) {
-      const me = await this.bot.telegram.getMe();
       await this.bot.telegram
-        .sendChatAction(me.id, 'typing')
+        .sendChatAction(user.telegramId, 'typing')
         .catch((e) => this.logger.error('Error sending chat action', e));
 
       const [, code] = args ?? [];
 
       const welcomeMessage = await this.botService.onStart(user, code);
 
-      await ctx.reply(welcomeMessage, langKeyboard(2));
+      await ctx.reply(welcomeMessage, {
+        parse_mode: 'Markdown',
+        ...langKeyboard(2),
+      });
     } else {
       this.logger.debug('User not found');
     }
@@ -60,7 +62,10 @@ export class BotUpdate {
     if (ctx.user) {
       const welcomeMessage = await this.botService.onStart(ctx.user);
 
-      await ctx.reply(welcomeMessage, langKeyboard(2));
+      await ctx.reply(welcomeMessage, {
+        parse_mode: 'Markdown',
+        ...langKeyboard(2),
+      });
     }
   }
 
