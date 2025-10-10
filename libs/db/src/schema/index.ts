@@ -6,6 +6,7 @@ export * from './orders';
 export * from './messages';
 export * from './subscriptions';
 export * from './codes';
+export * from './user-subscriptions';
 export * from './summary';
 
 // Export all tables for use with drizzle queries
@@ -15,4 +16,5 @@ export { orders } from './orders';
 export { messages } from './messages';
 export { subscriptions } from './subscriptions';
 export { codes } from './codes';
+export { userSubscriptions } from './user-subscriptions';
 export { summary } from './summary';

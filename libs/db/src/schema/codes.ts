@@ -1,4 +1,10 @@
-import { pgTable, timestamp, varchar, bigint } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  timestamp,
+  varchar,
+  bigint,
+  boolean,
+} from 'drizzle-orm/pg-core';
 import { subscriptions } from './subscriptions';
 import { users } from './users';
 import { managers } from './managers';
@@ -17,6 +23,7 @@ export const codes = pgTable('codes', {
   ),
   activationDate: timestamp('activation_date'),
   expirationDate: timestamp('expiration_date'),
+  isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
