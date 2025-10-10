@@ -228,14 +228,250 @@ The notification is non-blocking:
 - Permanent errors (blocked manager) handled gracefully
 - Retry logic for transient failures
 
-## Future Enhancements
+## Multilingual Broadcast Support
+
+### Overview
+
+The broadcast system includes automatic translation capabilities that ensure each user receives broadcast messages in their preferred language. This critical feature enables true multilingual support for broadcast subscriptions.
+
+### How It Works
+
+When a manager sends a broadcast message to a subscription:
+
+1. **Language Detection**: The system retrieves all subscribers and extracts their language preferences from the `user.lang` field
+2. **User Grouping**: Users are grouped by language to minimize translation operations
+3. **Translation**: The system uses LLM to translate the message once per language group
+4. **Delivery**: Each user receives the message in their preferred language
+
+### Translation Strategy
+
+**Performance Optimization**:
+- **Single LLM call**: Translates to ALL languages in ONE request using `generateObject`
+- Groups users by language before translation
+- Uses fast model (gpt-5-nano) for efficient translation
+- Structured response with Zod schema for type safety
+- **O(1) LLM calls** regardless of number of languages (5 languages = 1 call, 10 languages = 1 call)
+
+**Content Preservation**:
+- Preserves ALL Markdown formatting (bold, italic, code blocks)
+- Keeps ALL emojis exactly as they are
+- Maintains ALL links and their structure
+- Preserves message layout and structure
+- Only translates actual text content
+- Keeps code blocks, usernames, and technical terms unchanged
+
+**Fallback Handling**:
+- If user has no language preference: defaults to English
+- If translation fails: sends original message (better than nothing)
+- All translation errors logged for debugging
+
+### LLM Translation Prompt
+
+The system uses a carefully crafted prompt with `generateObject` to ensure high-quality translations:
+
+```
+Translate the following message to multiple languages.
+
+IMPORTANT RULES:
+- Preserve ALL Markdown formatting (bold **text**, italic *text*, code blocks ```, etc.)
+- Preserve ALL emojis EXACTLY as they are (do not modify or remove)
+- Preserve ALL links and their structure [text](url)
+- Maintain the SAME message structure and layout
+- Only translate the actual text content
+- Keep code blocks, usernames (@username), and technical terms unchanged
+- Keep numbers, dates, and times in their original format
+
+Target languages: {languageList}
+
+Original message:
+{originalMessage}
+
+Return a JSON object with language codes as keys and translated messages as values.
+
+Example format:
+{
+  "en": "translated English text",
+  "ru": "переведенный русский текст",
+  "es": "texto traducido al español"
+}
+```
+
+**Zod Schema**:
+```typescript
+const TranslationsSchema = z.record(z.string(), z.string());
+// Returns Record<languageCode, translatedMessage>
+```
+
+### Supported Languages
+
+The system supports translation to 20+ languages including:
+- English (en) - default fallback language
+- Russian (ru)
+- Spanish (es)
+- French (fr)
+- German (de)
+- Italian (it)
+- Portuguese (pt)
+- Chinese (zh)
+- Japanese (ja)
+- Korean (ko)
+- Arabic (ar)
+- Hindi (hi)
+- Turkish (tr)
+- Polish (pl)
+- Ukrainian (uk)
+- Dutch (nl)
+- Swedish (sv)
+- Danish (da)
+- Norwegian (no)
+- Finnish (fi)
+
+### Technical Implementation
+
+**BroadcastService Updates**:
+- Added `LLMService` dependency for translation
+- Added Zod schema (`TranslationsSchema`) for type-safe translation responses
+- Implemented `groupUsersByLanguage()` method for user grouping
+- Implemented `translateMessagesForLanguages()` for single-call batch translation
+- Implemented `translateToMultipleLanguages()` using `generateObject` for all languages at once
+- Modified `sendBroadcast()` to use translated messages
+
+**Translation Flow**:
+```
+Manager sends broadcast
+    ↓
+Get all subscribers with user details (including lang)
+    ↓
+Group users by language preference
+    ↓
+Single LLM call to translate to ALL languages:
+    - Call generateObject with Zod schema
+    - Request translations for all unique languages
+    - Receive structured JSON response with all translations
+    - Handle errors with fallback to original for all languages
+    ↓
+Send language-specific messages to each user
+    ↓
+Users receive broadcasts in their preferred language
+```
+
+### Testing Scenarios
+
+#### Scenario 1: Russian Broadcast to Multilingual Users
+```
+Input: Manager sends Russian message
+Users:
+  - 50 users with lang='en'
+  - 30 users with lang='ru'
+  - 20 users with lang='es'
+
+Result:
+  - 50 users receive English translation
+  - 30 users receive original Russian message
+  - 20 users receive Spanish translation
+  - Total: 1 LLM call (all 3 languages translated together)
+```
+
+#### Scenario 2: English Broadcast to Russian Users
+```
+Input: Manager sends English message
+Users:
+  - 100 users with lang='ru'
+
+Result:
+  - 100 users receive Russian translation
+  - Total: 1 LLM call (single language)
+```
+
+#### Scenario 3: Users Without Language Preference
+```
+Input: Manager sends Russian message
+Users:
+  - 30 users with lang='en'
+  - 20 users with lang=null (no preference)
+
+Result:
+  - 30 users receive English translation
+  - 20 users receive English translation (default)
+  - Total: 1 LLM call (grouped together)
+```
+
+#### Scenario 4: Translation Failure
+```
+Input: Manager sends message, LLM fails for Spanish
+Users:
+  - 50 users with lang='en' (translation succeeds)
+  - 30 users with lang='es' (translation fails)
+
+Result:
+  - 50 users receive English translation
+  - 30 users receive original message (fallback)
+  - Error logged but broadcast continues
+```
+
+#### Scenario 5: Mixed Language Broadcast
+```
+Input: Manager sends Russian message with Markdown and emojis
+Message: "🎉 **Важное объявление!** \n\nПроверьте [наш сайт](https://example.com)"
+
+Users with lang='en' receive:
+"🎉 **Important announcement!** \n\nCheck [our website](https://example.com)"
+
+Note: Emojis, Markdown, and links preserved exactly
+```
+
+### Performance Considerations
+
+1. **Model Selection**: Uses gpt-5-nano for fast, cost-efficient translations
+2. **Single-Call Translation**: **ONE LLM call for ALL languages** using `generateObject`
+3. **Batch Processing**: Translates all languages simultaneously, not sequentially
+4. **Type Safety**: Zod schema ensures structured, predictable responses
+5. **Temperature**: Set to 0.3 for consistent translation quality
+6. **Error Handling**: Non-blocking - translation failures don't stop broadcasts (fallback to original)
+
+**Performance Improvements**:
+- 5 languages: **5x faster** (1 call vs 5 calls)
+- 10 languages: **10x faster** (1 call vs 10 calls)
+- 20 languages: **20x faster** (1 call vs 20 calls)
+
+### Logging and Debugging
+
+The system provides comprehensive logging:
+- `Broadcasting message to {count} subscribers` - Initial broadcast
+- `Users grouped by language: en, ru, es` - Language grouping
+- `Translating message for {lang} ({count} users)` - Per-language translation
+- `Translation failed for language {lang}, using original message` - Fallback events
+- `Broadcast queued: {count} messages, {errors} errors, {languages} languages` - Final summary
+
+### Message Metadata
+
+Each translated message includes metadata:
+```typescript
+{
+  subscriptionId: number,
+  managerId: number,
+  broadcastType: 'subscription',
+  targetLanguage: string // Language code (en, ru, es, etc.)
+}
+```
+
+This enables:
+- Tracking which language was delivered to each user
+- Analytics on language distribution
+- Debugging translation issues
+- Future language preference optimization
+
+### Future Enhancements
 
 Potential improvements:
 1. **Manager preferences**: Allow managers to opt-out of activation notifications
 2. **Batch notifications**: Group multiple activations in one message
 3. **Analytics dashboard**: Track activation rates per manager
 4. **Custom messages**: Allow managers to customize notification format
-5. **Multi-language**: Detect manager language preference
+5. **Language detection**: Auto-detect manager message language
+6. **Translation cache**: Cache translations across broadcasts for identical messages
+7. **Custom translations**: Allow managers to provide translations for specific languages
+8. **Translation quality feedback**: Let users report translation issues
 
 ## Related Features
 

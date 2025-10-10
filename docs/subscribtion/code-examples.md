@@ -513,6 +513,423 @@ export class BroadcastService {
 }
 ```
 
+### 4. Multilingual Broadcast Examples
+
+**IMPLEMENTED**: The BroadcastService now includes automatic translation based on user language preferences.
+
+#### Example 1: Basic Multilingual Broadcast
+
+**Scenario**: Manager sends Russian message to subscribers with different language preferences
+
+```typescript
+// Manager sends broadcast
+const message = `🎉 **Важное объявление!**
+
+Мы запускаем новую функцию. Проверьте [наш сайт](https://example.com) для получения дополнительной информации.
+
+📅 Дата запуска: 15 октября 2025`;
+
+// BroadcastService automatically handles translation
+const result = await broadcastService.sendBroadcast(
+  subscriptionId: 123,
+  message,
+  managerId: 456
+);
+
+// Internal flow:
+// 1. Get subscribers (100 users: 50 en, 30 ru, 20 es)
+// 2. Group by language: Map { 'en' => 50 users, 'ru' => 30 users, 'es' => 20 users }
+// 3. Translate to English:
+//    "🎉 **Important announcement!**
+//
+//    We are launching a new feature. Check [our website](https://example.com) for more information.
+//
+//    📅 Launch date: October 15, 2025"
+//
+// 4. Keep Russian original for 'ru' users
+// 5. Translate to Spanish:
+//    "🎉 **¡Anuncio importante!**
+//
+//    Estamos lanzando una nueva función. Consulta [nuestro sitio web](https://example.com) para más información.
+//
+//    📅 Fecha de lanzamiento: 15 de octubre de 2025"
+//
+// 6. Send language-specific messages to each user
+
+// Result
+console.log(result);
+// {
+//   recipientCount: 100,
+//   queuedCount: 100,
+//   errorCount: 0,
+//   queuedIds: [...],
+//   errors: []
+// }
+```
+
+#### Example 2: Translation with Markdown Preservation
+
+**Scenario**: Ensuring Markdown formatting is preserved during translation
+
+```typescript
+const markdownMessage = `**Bold text** and *italic text*
+
+\`\`\`javascript
+const code = "preserved";
+console.log(code);
+\`\`\`
+
+Regular text with [link](https://example.com) and @username mention`;
+
+// Translation preserves:
+// - **Bold text** → **Жирный текст** (in Russian)
+// - *italic text* → *курсивный текст* (in Russian)
+// - Code blocks remain unchanged
+// - Links structure preserved: [ссылка](https://example.com)
+// - @username mentions unchanged
+
+await broadcastService.sendBroadcast(subscriptionId, markdownMessage, managerId);
+```
+
+#### Example 3: Handling Translation Failures
+
+**Scenario**: Graceful fallback when translation fails
+
+```typescript
+// Internal translation method with error handling (using generateObject)
+private async translateToMultipleLanguages(
+  message: string,
+  targetLanguages: string[]
+): Promise<Translations> {
+  const languageList = targetLanguages
+    .map((lang) => languageNames[lang] || lang)
+    .join(', ');
+
+  const prompt = `Translate the following message to multiple languages.
+
+IMPORTANT RULES:
+- Preserve ALL Markdown formatting
+- Preserve ALL emojis EXACTLY as they are
+- Preserve ALL links and their structure
+- Only translate the actual text content
+
+Target languages: ${languageList}
+
+Original message:
+${message}
+
+Return a JSON object with language codes as keys and translated messages as values.`;
+
+  try {
+    const translations = await this.llmService.generateObject<Translations>({
+      model: 'gpt-5-nano',
+      schema: TranslationsSchema,
+      prompt,
+      temperature: 0.3,
+    });
+    return translations;
+  } catch (error) {
+    this.logger.error(`Translation failed for all languages, using original`, error);
+    throw error; // Handled by caller with fallback
+  }
+}
+
+// Example flow with failure:
+// 1. Manager sends message
+// 2. Single LLM call attempts to translate to ALL languages (en, ru, es)
+// 3. Translation fails (API error or quota exceeded)
+// 4. ALL users receive original message (fallback)
+// 5. Broadcast continues successfully for all users
+// Note: If translation succeeds, ALL users get properly translated messages
+```
+
+#### Example 4: Language Grouping Optimization
+
+**Scenario**: Efficient translation by grouping users
+
+```typescript
+// Internal grouping method
+private groupUsersByLanguage(
+  subscribers: Array<{ user: { telegramId: number; lang: string | null }; userSubscription: any }>
+): Map<string, Array<{ user: any; userSubscription: any }>> {
+  const grouped = new Map();
+
+  for (const sub of subscribers) {
+    const lang = sub.user.lang || 'en'; // Default to English
+    const group = grouped.get(lang) || [];
+    group.push(sub);
+    grouped.set(lang, group);
+  }
+
+  return grouped;
+}
+
+// Example:
+// Input: 1000 users
+//   - 500 users lang='en'
+//   - 300 users lang='ru'
+//   - 150 users lang='es'
+//   - 50 users lang=null (defaults to 'en')
+//
+// Output: Map {
+//   'en' => 550 users (500 + 50 defaulted),
+//   'ru' => 300 users,
+//   'es' => 150 users
+// }
+//
+// LLM calls: 1 (single call for ALL 3 languages, not 3 separate calls)
+// Performance: O(1) LLM calls regardless of number of languages
+// Old approach: 3 calls (one per language) - NEW: 1 call (all languages)
+```
+
+#### Example 5: Translation Prompt Structure with generateObject
+
+**Scenario**: LLM prompt that translates to multiple languages and preserves formatting
+
+```typescript
+import { z } from 'zod';
+
+// Zod schema for type-safe translations
+const TranslationsSchema = z.record(z.string(), z.string());
+type Translations = z.infer<typeof TranslationsSchema>;
+
+private async translateToMultipleLanguages(
+  message: string,
+  targetLanguages: string[]
+): Promise<Translations> {
+  const languageNames: Record<string, string> = {
+    en: 'English',
+    ru: 'Russian',
+    es: 'Spanish',
+    fr: 'French',
+    de: 'German',
+    // ... more languages
+  };
+
+  // Build list of target language names
+  const languageList = targetLanguages
+    .map((lang) => languageNames[lang] || lang)
+    .join(', ');
+
+  const translationPrompt = `Translate the following message to multiple languages.
+
+IMPORTANT RULES:
+- Preserve ALL Markdown formatting (bold **text**, italic *text*, code blocks \`\`\`, etc.)
+- Preserve ALL emojis EXACTLY as they are (do not modify or remove)
+- Preserve ALL links and their structure [text](url)
+- Maintain the SAME message structure and layout
+- Only translate the actual text content
+- Keep code blocks, usernames (@username), and technical terms unchanged
+- Keep numbers, dates, and times in their original format
+
+Target languages: ${languageList}
+
+Original message:
+${message}
+
+Return a JSON object with language codes as keys and translated messages as values.
+
+Example format:
+{
+  "en": "translated English text",
+  "ru": "переведенный русский текст",
+  "es": "texto traducido al español"
+}`;
+
+  // Use generateObject for structured, type-safe response
+  const translations = await this.llmService.generateObject<Translations>({
+    model: 'gpt-5-nano',
+    schema: TranslationsSchema,
+    prompt: translationPrompt,
+    temperature: 0.3,
+  });
+
+  // Returns: { en: "...", ru: "...", es: "..." }
+  return translations;
+}
+```
+
+#### Example 6: Full Broadcast Flow with Translation
+
+**Scenario**: Complete broadcast flow from manager to users
+
+```typescript
+async sendBroadcast(
+  subscriptionId: number,
+  message: string,
+  managerId: number,
+): Promise<BroadcastResultDto> {
+  // 1. Validate subscription type
+  const subscription = await this.subscriptionsRepository.findById(subscriptionId);
+  if (!isBroadcastSubscription(subscription.type)) {
+    throw new Error('Cannot broadcast to signals subscription');
+  }
+
+  // 2. Validate message
+  const validation = this.validateMessage(message);
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
+  // 3. Get subscribers with user details (including lang)
+  const subscribers = await this.userSubscriptionsRepository
+    .findSubscribersWithUserDetails(subscriptionId);
+
+  this.logger.log(`Broadcasting to ${subscribers.length} subscribers`);
+
+  // 4. Group users by language
+  const usersByLang = this.groupUsersByLanguage(subscribers);
+
+  this.logger.debug(`Languages: ${Array.from(usersByLang.keys()).join(', ')}`);
+
+  // 5. Translate to ALL languages in a SINGLE LLM call
+  const translatedMessages = await this.translateMessagesForLanguages(
+    message,
+    usersByLang
+  );
+  // Note: Uses generateObject to translate all languages at once
+
+  // 6. Queue messages with language-specific translations
+  const batchResult = this.notificationService.addMessages(
+    subscribers.map((sub) => {
+      const userLang = sub.user.lang || 'en';
+      const translatedMessage = translatedMessages.get(userLang) || message;
+
+      return {
+        userId: sub.user.telegramId,
+        message: translatedMessage,
+        options: {
+          priority: MessagePriority.NORMAL,
+          messageType: QueuedMessageType.MARKDOWN,
+          metadata: {
+            subscriptionId,
+            managerId,
+            broadcastType: 'subscription',
+            targetLanguage: userLang, // Track which language was sent
+          },
+        },
+      };
+    })
+  );
+
+  // 7. Return results
+  this.logger.log(
+    `Broadcast queued: ${batchResult.queuedCount} messages, ${translatedMessages.size} languages`
+  );
+
+  return {
+    recipientCount: subscribers.length,
+    queuedCount: batchResult.queuedCount,
+    errorCount: batchResult.errorCount,
+    queuedIds: batchResult.queuedIds,
+    errors: batchResult.errors,
+  };
+}
+```
+
+#### Example 7: Supported Languages
+
+**Scenario**: List of supported translation languages
+
+```typescript
+const SUPPORTED_LANGUAGES = {
+  en: 'English',       // Default fallback
+  ru: 'Russian',
+  es: 'Spanish',
+  fr: 'French',
+  de: 'German',
+  it: 'Italian',
+  pt: 'Portuguese',
+  zh: 'Chinese',
+  ja: 'Japanese',
+  ko: 'Korean',
+  ar: 'Arabic',
+  hi: 'Hindi',
+  tr: 'Turkish',
+  pl: 'Polish',
+  uk: 'Ukrainian',
+  nl: 'Dutch',
+  sv: 'Swedish',
+  da: 'Danish',
+  no: 'Norwegian',
+  fi: 'Finnish',
+};
+
+// Usage in translation
+const targetLanguageName = SUPPORTED_LANGUAGES[targetLang] || targetLang;
+```
+
+#### Example 8: Testing Multilingual Broadcasts
+
+**Scenario**: Unit test for translation functionality using generateObject
+
+```typescript
+describe('BroadcastService - Multilingual Translation', () => {
+  it('should translate message to all user languages in one call', async () => {
+    // Arrange
+    const message = 'Hello, this is a test message';
+    const subscribers = [
+      { user: { telegramId: 1, lang: 'en' }, userSubscription: {} },
+      { user: { telegramId: 2, lang: 'ru' }, userSubscription: {} },
+      { user: { telegramId: 3, lang: 'es' }, userSubscription: {} },
+    ];
+
+    jest.spyOn(userSubscriptionsRepo, 'findSubscribersWithUserDetails')
+      .mockResolvedValue(subscribers);
+
+    // Mock generateObject to return all translations at once
+    jest.spyOn(llmService, 'generateObject')
+      .mockResolvedValue({
+        en: 'Hello, this is a test message',
+        ru: 'Привет, это тестовое сообщение',
+        es: 'Hola, este es un mensaje de prueba'
+      });
+
+    // Act
+    const result = await broadcastService.sendBroadcast(1, message, 123);
+
+    // Assert
+    expect(result.queuedCount).toBe(3);
+    // CRITICAL: Only 1 LLM call for all 3 languages
+    expect(llmService.generateObject).toHaveBeenCalledTimes(1);
+
+    // Verify the call included all languages
+    const callArgs = llmService.generateObject.mock.calls[0][0];
+    expect(callArgs.schema).toBe(TranslationsSchema);
+    expect(callArgs.prompt).toContain('English, Russian, Spanish');
+
+    // Verify notification service received correct translations
+    const calls = notificationService.addMessages.mock.calls[0][0];
+    expect(calls[0].message).toBe('Hello, this is a test message'); // English
+    expect(calls[1].message).toBe('Привет, это тестовое сообщение'); // Russian
+    expect(calls[2].message).toBe('Hola, este es un mensaje de prueba'); // Spanish
+  });
+
+  it('should fallback to original message on translation failure', async () => {
+    // Arrange
+    const message = 'Test message';
+    const subscribers = [
+      { user: { telegramId: 1, lang: 'en' }, userSubscription: {} },
+      { user: { telegramId: 2, lang: 'es' }, userSubscription: {} },
+    ];
+
+    // Mock generateObject to fail
+    jest.spyOn(llmService, 'generateObject')
+      .mockRejectedValue(new Error('API Error'));
+
+    // Act
+    const result = await broadcastService.sendBroadcast(1, message, 123);
+
+    // Assert
+    expect(result.queuedCount).toBe(2);
+    // All users get original message (fallback for all languages)
+    const calls = notificationService.addMessages.mock.calls[0][0];
+    expect(calls[0].message).toBe(message); // English - fallback to original
+    expect(calls[1].message).toBe(message); // Spanish - fallback to original
+  });
+});
+```
+
 ---
 
 ## Repository Extensions

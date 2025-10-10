@@ -10,6 +10,15 @@ import {
   MessagePriority,
   QueuedMessageType,
 } from '@quantumdeal/bot/interfaces/notification.interface';
+import { LLMService } from '@quantumdeal/framework';
+import { z } from 'zod';
+
+/**
+ * Zod schema for translation response
+ * Maps language code to translated message
+ */
+const TranslationsSchema = z.record(z.string(), z.string());
+type Translations = z.infer<typeof TranslationsSchema>;
 
 /**
  * Service for broadcasting messages to subscription subscribers
@@ -26,6 +35,7 @@ export class BroadcastService {
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly notificationService: NotificationService,
+    private readonly llmService: LLMService,
   ) {}
 
   /**
@@ -88,6 +98,12 @@ export class BroadcastService {
    *
    * CRITICAL: Validates subscription is broadcast type INLINE before sending
    *
+   * Features:
+   * - Automatic translation based on user language preferences
+   * - Groups users by language to minimize LLM calls
+   * - Preserves message structure (Markdown, emojis, links)
+   * - Fallback to original message on translation failure
+   *
    * @param subscriptionId - The subscription ID to broadcast to
    * @param message - The message content
    * @param managerId - The manager's Telegram ID who is broadcasting
@@ -127,22 +143,41 @@ export class BroadcastService {
       `Broadcasting message to ${subscribers.length} subscribers for subscription ${subscriptionId}`,
     );
 
+    // Group users by language preference
+    const usersByLang = this.groupUsersByLanguage(subscribers);
+
+    this.logger.debug(
+      `Users grouped by language: ${Array.from(usersByLang.keys()).join(', ')}`,
+    );
+
+    // Translate message for each language group
+    const translatedMessages = await this.translateMessagesForLanguages(
+      message,
+      usersByLang,
+    );
+
     // Send broadcast via NotificationService
     try {
       const batchResult = this.notificationService.addMessages(
-        subscribers.map((sub) => ({
-          userId: sub.user.telegramId,
-          message,
-          options: {
-            priority: MessagePriority.NORMAL,
-            messageType: QueuedMessageType.MARKDOWN,
-            metadata: {
-              subscriptionId,
-              managerId,
-              broadcastType: 'subscription',
+        subscribers.map((sub) => {
+          const userLang = sub.user.lang || 'en';
+          const translatedMessage = translatedMessages.get(userLang) || message;
+
+          return {
+            userId: sub.user.telegramId,
+            message: translatedMessage,
+            options: {
+              priority: MessagePriority.NORMAL,
+              messageType: QueuedMessageType.MARKDOWN,
+              metadata: {
+                subscriptionId,
+                managerId,
+                broadcastType: 'subscription',
+                targetLanguage: userLang,
+              },
             },
-          },
-        })),
+          };
+        }),
       );
 
       // Map BatchSendResult to BroadcastResultDto
@@ -155,7 +190,7 @@ export class BroadcastService {
       };
 
       this.logger.log(
-        `Broadcast queued: ${result.queuedCount} messages, ${result.errorCount} errors`,
+        `Broadcast queued: ${result.queuedCount} messages, ${result.errorCount} errors, ${translatedMessages.size} languages`,
       );
 
       return result;
@@ -194,5 +229,187 @@ export class BroadcastService {
       );
 
     return subscribers.map((s) => s.user.telegramId);
+  }
+
+  /**
+   * Group subscribers by their language preference
+   *
+   * @param subscribers - Array of subscribers with user details
+   * @returns Map of language code to array of subscribers
+   * @private
+   */
+  private groupUsersByLanguage(
+    subscribers: Array<{
+      user: { telegramId: number; lang: string | null };
+      userSubscription: any;
+    }>,
+  ): Map<string, Array<{ user: any; userSubscription: any }>> {
+    const grouped = new Map<
+      string,
+      Array<{ user: any; userSubscription: any }>
+    >();
+
+    for (const sub of subscribers) {
+      const lang = sub.user.lang || 'en'; // Default to English if no language set
+      const group = grouped.get(lang) || [];
+      group.push(sub);
+      grouped.set(lang, group);
+    }
+
+    return grouped;
+  }
+
+  /**
+   * Translate message for each language group
+   *
+   * Strategy:
+   * - Translate to ALL languages in a SINGLE LLM call
+   * - Use fast LLM model (gpt-5-nano) for translation
+   * - Use generateObject with Zod schema for type safety
+   * - Preserve Markdown formatting, emojis, and links
+   * - Fallback to original message on translation failure
+   *
+   * Performance: O(1) LLM calls regardless of language count
+   * - 5 languages: 1 call (vs 5 calls with old approach)
+   * - 10 languages: 1 call (vs 10 calls with old approach)
+   *
+   * @param originalMessage - The original message to translate
+   * @param usersByLang - Map of language to users
+   * @returns Map of language code to translated message
+   * @private
+   */
+  private async translateMessagesForLanguages(
+    originalMessage: string,
+    usersByLang: Map<string, Array<{ user: any; userSubscription: any }>>,
+  ): Promise<Map<string, string>> {
+    const translatedMessages = new Map<string, string>();
+    const languages = Array.from(usersByLang.keys());
+
+    this.logger.debug(
+      `Translating message for ${languages.length} languages in a single LLM call: ${languages.join(', ')}`,
+    );
+
+    try {
+      // Single LLM call for all languages
+      const translations = await this.translateToMultipleLanguages(
+        originalMessage,
+        languages,
+      );
+
+      // Convert Record to Map
+      for (const [lang, text] of Object.entries(translations)) {
+        translatedMessages.set(lang, text);
+      }
+
+      this.logger.log(
+        `Successfully translated to ${languages.length} languages in one call`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Translation failed for all languages, using original message as fallback:`,
+        error,
+      );
+      // Fallback: set original message for all languages
+      for (const lang of languages) {
+        translatedMessages.set(lang, originalMessage);
+      }
+    }
+
+    return translatedMessages;
+  }
+
+  /**
+   * Translate message to multiple languages using LLM
+   *
+   * Uses generateObject with Zod schema for type-safe, structured responses.
+   * Translates to ALL languages in a SINGLE LLM call for optimal performance.
+   *
+   * IMPORTANT RULES:
+   * - Preserve ALL Markdown formatting (bold, italic, code blocks, etc.)
+   * - Preserve ALL emojis exactly as they are
+   * - Preserve ALL links and their structure
+   * - Maintain the same message structure and layout
+   * - Only translate the actual text content
+   * - Keep code blocks, usernames, and technical terms unchanged
+   *
+   * @param message - The message to translate
+   * @param targetLanguages - Array of target language codes (ISO 639-1)
+   * @returns Record mapping language codes to translated messages
+   * @private
+   */
+  private async translateToMultipleLanguages(
+    message: string,
+    targetLanguages: string[],
+  ): Promise<Translations> {
+    const languageNames: Record<string, string> = {
+      en: 'English',
+      ru: 'Russian',
+      es: 'Spanish',
+      fr: 'French',
+      de: 'German',
+      it: 'Italian',
+      pt: 'Portuguese',
+      zh: 'Chinese',
+      ja: 'Japanese',
+      ko: 'Korean',
+      ar: 'Arabic',
+      hi: 'Hindi',
+      tr: 'Turkish',
+      pl: 'Polish',
+      uk: 'Ukrainian',
+      nl: 'Dutch',
+      sv: 'Swedish',
+      da: 'Danish',
+      no: 'Norwegian',
+      fi: 'Finnish',
+    };
+
+    // Build list of target language names
+    const languageList = targetLanguages
+      .map((lang) => languageNames[lang] || lang)
+      .join(', ');
+
+    const translationPrompt = `Translate the following message to multiple languages.
+
+IMPORTANT RULES:
+- Preserve ALL Markdown formatting (bold **text**, italic *text*, code blocks \`\`\`, etc.)
+- Preserve ALL emojis EXACTLY as they are (do not modify or remove)
+- Preserve ALL links and their structure [text](url)
+- Maintain the SAME message structure and layout
+- Only translate the actual text content
+- Keep code blocks, usernames (@username), and technical terms unchanged
+- Keep numbers, dates, and times in their original format
+
+Target languages: ${languageList}
+
+Original message:
+${message}
+
+Return a JSON object with language codes as keys and translated messages as values.
+
+Example format:
+{
+  "en": "translated English text",
+  "ru": "переведенный русский текст",
+  "es": "texto traducido al español"
+}`;
+
+    try {
+      // Use gpt-5-nano for fast, cost-efficient translation
+      const translations = await this.llmService.generateObject<Translations>({
+        model: 'gpt-5-nano',
+        schema: TranslationsSchema,
+        prompt: translationPrompt,
+        temperature: 0.3, // Low temperature for consistent translation
+      });
+
+      return translations;
+    } catch (error) {
+      this.logger.error(
+        `LLM translation failed for languages [${targetLanguages.join(', ')}]:`,
+        error,
+      );
+      throw error;
+    }
   }
 }

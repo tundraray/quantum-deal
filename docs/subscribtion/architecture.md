@@ -176,6 +176,7 @@ interface ICodeGenerationService {
 **Responsibilities**:
 - Count subscribers for **BROADCAST** subscriptions only
 - Validate broadcast messages
+- Translate messages to user-preferred languages using LLM
 - Queue messages via NotificationService
 - Track broadcast status and errors
 - **CRITICAL**: All operations validate subscription is broadcast type
@@ -192,7 +193,130 @@ interface IBroadcastService {
 **Key Methods**:
 - `countSubscribers()`: Count active users with **broadcast** subscription (validates type inline)
 - `validateMessage()`: Check length, format, forbidden content
-- `sendBroadcast()`: Queue messages via NotificationService (validates broadcast type inline)
+- `sendBroadcast()`: Queue messages via NotificationService (validates broadcast type inline, translates to user languages)
+
+**Dependencies**:
+- `UserSubscriptionsRepository`: Get subscribers with user details (including language preferences)
+- `SubscriptionsRepository`: Validate subscription type
+- `NotificationService`: Queue translated messages for delivery
+- `LLMService`: Translate messages to multiple languages
+
+### 4. LLM Integration for Translation
+
+**Purpose**: Automatic translation of broadcast messages based on user language preferences
+
+**Translation Strategy**:
+1. **Language Grouping**: Group users by language preference to minimize LLM calls
+2. **Single-Call Translation**: **Translate to ALL languages in ONE LLM request** using `generateObject`
+3. **Type-Safe Responses**: Use Zod schema for structured, validated translation responses
+4. **Content Preservation**: Preserve Markdown formatting, emojis, and links during translation
+5. **Fallback Handling**: Use original message if translation fails (all languages fallback together)
+
+**Translation Flow**:
+```typescript
+// In BroadcastService.sendBroadcast()
+1. Get all subscribers with user details (including lang field)
+2. Group users by language: Map<lang, User[]>
+3. Extract unique language codes: ['en', 'ru', 'es']
+4. Single LLM call to translate to ALL languages:
+   - Use generateObject with Zod schema
+   - Request translations for all unique languages
+   - Receive structured JSON response: { en: "...", ru: "...", es: "..." }
+   - Handle errors with fallback to original for all languages
+5. Send language-specific messages to each user
+```
+
+**LLM Model Selection**:
+- **Model**: gpt-5-nano (fast, cost-efficient)
+- **Method**: `generateObject` (structured output with Zod schema)
+- **Temperature**: 0.3 (consistent translation quality)
+- **Schema**: `z.record(z.string(), z.string())` - maps language code to translated message
+
+**Zod Schema**:
+```typescript
+const TranslationsSchema = z.record(z.string(), z.string());
+type Translations = z.infer<typeof TranslationsSchema>;
+// Returns Record<languageCode, translatedMessage>
+```
+
+**Translation Prompt Structure**:
+```typescript
+const prompt = `Translate the following message to multiple languages.
+
+IMPORTANT RULES:
+- Preserve ALL Markdown formatting (bold **text**, italic *text*, code blocks \`\`\`, etc.)
+- Preserve ALL emojis EXACTLY as they are (do not modify or remove)
+- Preserve ALL links and their structure [text](url)
+- Maintain the SAME message structure and layout
+- Only translate the actual text content
+- Keep code blocks, usernames (@username), and technical terms unchanged
+- Keep numbers, dates, and times in their original format
+
+Target languages: ${languageList}
+
+Original message:
+${message}
+
+Return a JSON object with language codes as keys and translated messages as values.
+
+Example format:
+{
+  "en": "translated English text",
+  "ru": "переведенный русский текст",
+  "es": "texto traducido al español"
+}`;
+```
+
+**generateObject Implementation**:
+```typescript
+const translations = await llmService.generateObject<Translations>({
+  model: 'gpt-5-nano',
+  schema: TranslationsSchema,
+  prompt: translationPrompt,
+  temperature: 0.3,
+});
+
+// Returns: { en: "...", ru: "...", es: "..." }
+```
+
+**Error Handling**:
+```typescript
+try {
+  // Single call for ALL languages
+  const translations = await this.translateToMultipleLanguages(
+    originalMessage,
+    languages
+  );
+
+  // Convert Record to Map
+  for (const [lang, text] of Object.entries(translations)) {
+    translatedMessages.set(lang, text);
+  }
+} catch (error) {
+  logger.error(`Translation failed for all languages, using original message`);
+  // Fallback: set original message for ALL languages
+  for (const lang of languages) {
+    translatedMessages.set(lang, originalMessage);
+  }
+}
+```
+
+**Supported Languages**:
+- English (en) - default fallback
+- Russian (ru), Spanish (es), French (fr), German (de)
+- Italian (it), Portuguese (pt), Chinese (zh), Japanese (ja)
+- Korean (ko), Arabic (ar), Hindi (hi), Turkish (tr)
+- Polish (pl), Ukrainian (uk), Dutch (nl), Swedish (sv)
+- Danish (da), Norwegian (no), Finnish (fi)
+
+**Performance Optimization**:
+- **O(1) LLM calls** regardless of number of languages (not O(n))
+- **Single request** translates to all languages simultaneously
+- **Performance Improvements**:
+  - 5 languages: **5x faster** (1 call vs 5 calls)
+  - 10 languages: **10x faster** (1 call vs 10 calls)
+  - 20 languages: **20x faster** (1 call vs 20 calls)
+- Example: 1000 users with 5 languages = **1 LLM call** (vs 5 calls with old approach)
 
 ## Data Transfer Objects (DTOs)
 
