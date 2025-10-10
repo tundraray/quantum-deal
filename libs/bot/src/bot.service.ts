@@ -12,12 +12,8 @@ import {
 } from '@quantumdeal/db/schema/subscriptions';
 import { welcome } from './promts/welcome';
 import { UserContext, UserWithSubscriptions } from './interfaces';
-import { NotificationService } from './services/notification.service';
-import {
-  MessagePriority,
-  QueuedMessageType,
-} from './interfaces/notification.interface';
-import { MASTERBOT_BOT_NAME } from '@quantumdeal/masterbot';
+
+import { MASTERBOT_BOT_NAME } from '@quantumdeal/masterbot/constants';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf } from 'telegraf';
 
