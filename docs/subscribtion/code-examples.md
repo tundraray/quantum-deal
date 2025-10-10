@@ -393,9 +393,10 @@ export class BroadcastService {
       throw new BadRequestException('Can only count subscribers for broadcast subscriptions');
     }
 
-    // Broadcast subscribers come from codes table
-    const users = await this.usersRepository.findBySubscription(subscriptionId);
-    return users.length;
+    // Get subscribers via unified architecture
+    const userSubs = await this.userSubscriptionsRepository
+      .findBySubscriptionId(subscriptionId);
+    return userSubs.length;
   }
 
   /**
@@ -463,10 +464,9 @@ export class BroadcastService {
       `Broadcasting to BROADCAST subscription ${subscriptionId} by manager ${managerId}`,
     );
 
-    // Get active subscribers via unified architecture
-    const userSubs = await this.userSubscriptionsRepository.findBySubscriptionId(subscriptionId);
-    const userIds = userSubs.map(us => us.userId);
-    const subscribers = await this.usersRepository.findByIds(userIds);
+    // Get subscribers via unified architecture with JOIN
+    const subscribers = await this.userSubscriptionsRepository
+      .findSubscribersWithUserDetails(subscriptionId);
 
     if (subscribers.length === 0) {
       this.logger.warn(
@@ -481,30 +481,33 @@ export class BroadcastService {
       };
     }
 
-    // Prepare messages for NotificationService
-    const messages = subscribers.map((user) => ({
-      userId: user.telegramId,
-      message,
-      options: {
-        priority: MessagePriority.NORMAL,
-        messageType: QueuedMessageType.MARKDOWN,
-        maxRetries: 3,
-      },
-    }));
-
-    // Send via NotificationService (handles rate limiting)
-    const result = await this.notificationService.addMessages(messages);
+    // Queue messages via NotificationService with metadata
+    const batchResult = this.notificationService.addMessages(
+      subscribers.map(sub => ({
+        userId: sub.user.telegramId,
+        message,
+        options: {
+          priority: MessagePriority.NORMAL,
+          messageType: QueuedMessageType.MARKDOWN,
+          metadata: {
+            subscriptionId,
+            managerId,
+            broadcastType: 'subscription',
+          },
+        },
+      })),
+    );
 
     this.logger.log(
-      `Broadcast queued: ${result.queuedCount} messages, ${result.errorCount} errors`,
+      `Broadcast queued: ${batchResult.queuedCount} messages, ${batchResult.errorCount} errors`,
     );
 
     return {
-      queuedCount: result.queuedCount,
-      errorCount: result.errorCount,
+      queuedCount: batchResult.queuedCount,
+      errorCount: batchResult.errorCount,
       recipientCount: subscribers.length,
-      queuedIds: result.queuedIds,
-      errors: result.errors,
+      queuedIds: batchResult.queuedIds,
+      errors: batchResult.errors,
     };
   }
 }

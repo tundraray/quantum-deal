@@ -182,12 +182,12 @@ export const userSubscriptions = pgTable('user_subscriptions', {
   subscriptionId: bigint('subscription_id', { mode: 'number' })
     .notNull()
     .references(() => subscriptions.id, { onDelete: 'cascade' }),
-  activatedAt: timestamp('activated_at', { withTimezone: true })
+  activatedAt: timestamp('activated_at')  // WITHOUT timezone for consistency with codes table
     .notNull()
     .defaultNow(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  expiresAt: timestamp('expires_at'),     // WITHOUT timezone
   isActive: boolean('is_active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true })
+  createdAt: timestamp('created_at')      // WITHOUT timezone
     .defaultNow()
     .notNull(),
 });
@@ -195,6 +195,12 @@ export const userSubscriptions = pgTable('user_subscriptions', {
 export type UserSubscription = typeof userSubscriptions.$inferSelect;
 export type NewUserSubscription = typeof userSubscriptions.$inferInsert;
 ```
+
+**Key Decision**: Uses `timestamp` WITHOUT timezone to maintain consistency with the `codes` table. This avoids type mismatches during data migration from `codes.activationDate` and `codes.expirationDate`.
+
+**Migration Note**: Data migration from old fields requires explicit casts:
+- `users.subscribe_id::bigint` → `user_subscriptions.subscription_id`
+- No casts needed for timestamps (types match)
 
 **Constraints:**
 ```sql
@@ -312,19 +318,69 @@ export const broadcastHistory = pgTable('broadcast_history', {
 - Analytics on broadcast performance
 - Troubleshooting failed broadcasts
 
+## Migration Enhancements (APPLIED)
+
+The generated migration was enhanced with the following fixes:
+
+### 1. Transaction Wrapper
+All migration operations wrapped in a transaction to ensure atomicity:
+```sql
+BEGIN;
+
+-- All migration content
+
+COMMIT;
+```
+
+### 2. Type Casts
+Explicit type casts added for data migration to prevent type mismatches:
+```sql
+-- Cast subscribe_id from integer to bigint
+INSERT INTO user_subscriptions (user_id, subscription_id, ...)
+SELECT
+  telegram_id,
+  subscribe_id::bigint,  -- EXPLICIT CAST
+  ...
+FROM users
+WHERE subscribe_id IS NOT NULL;
+```
+
+### 3. Unique Constraint Timing
+Moved unique constraint BEFORE data migration to catch duplicates early:
+```sql
+-- After CREATE TABLE, before INSERT
+ALTER TABLE user_subscriptions
+ADD CONSTRAINT unique_user_subscription UNIQUE (user_id, subscription_id);
+
+-- Then proceed with data migration
+INSERT INTO user_subscriptions ...
+```
+
+### 4. Fixed Verification Logic
+Changed from counting distinct users to counting all rows to ensure accurate data loss detection:
+```sql
+-- OLD (incorrect):
+SELECT COUNT(DISTINCT user_id) INTO old_codes_count FROM codes WHERE user_id IS NOT NULL;
+
+-- NEW (correct):
+SELECT COUNT(*) INTO old_codes_count FROM codes WHERE user_id IS NOT NULL;
+```
+
+This ensures the migration detects if ANY activated codes fail to migrate, not just unique users.
+
 ## Database Migrations with Drizzle Kit
 
 This project uses **Drizzle Kit** for managing database migrations. The unified architecture migration is a **multi-step process** with data migration.
 
-### Migration Workflow for Unified Architecture
+### Migration Workflow for Unified Architecture (COMPLETED)
 
-1. **Update Drizzle Schema Files** (create user_subscriptions, update users/codes)
-2. **Generate Migration**: `pnpm run db:generate`
-3. **Review Generated SQL**: Check files in `libs/db/migrations/`
-4. **CRITICAL: Enhance with Data Migration** (see below)
-5. **Apply Migration**: `pnpm run db:migrate`
-6. **Verify Data** (run verification queries)
-7. **Remove Old Fields** (separate migration after verification)
+1. ✅ **Update Drizzle Schema Files** (create user_subscriptions, update users/codes)
+2. ✅ **Generate Migration**: `pnpm run db:generate`
+3. ✅ **Review Generated SQL**: Check files in `libs/db/migrations/`
+4. ✅ **CRITICAL: Enhance with Data Migration** (transaction, casts, constraints)
+5. ✅ **Apply Migration**: `pnpm run db:migrate`
+6. ✅ **Verify Data** (run verification queries - all passed)
+7. **Remove Old Fields** (deferred - old fields kept for safety)
 
 ### CRITICAL: Data Migration Steps
 

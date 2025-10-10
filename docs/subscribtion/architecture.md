@@ -253,6 +253,53 @@ interface MessageValidationResult {
 }
 ```
 
+## Code Activation Flow (UPDATED)
+
+### Unified Architecture
+
+ALL subscription types (signals and broadcast) use the same activation flow via `user_subscriptions` table.
+
+**Activation Steps**:
+1. Find code via `codesRepository.findByCode(code)` (validates `userId IS NULL`)
+2. Get subscription via `subscriptionsRepository.findById()`
+3. Validate subscription `isActive` status
+4. Mark code as used: update `codes.userId`, `codes.activationDate`
+5. Create subscription entry: `userSubscriptionsRepository.activate(userId, subscriptionId, expiresAt)`
+6. Return user
+
+**Key Decision**: Old fields (`users.subscribeId`, `users.subscribeExpirationDate`) remain in database but are NOT updated during activation. All services query `user_subscriptions` table instead.
+
+**Code Example**:
+```typescript
+private async activateCode(user: User, code: string) {
+  const $code = await this.codesRepository.findByCode(code);
+  if (!$code) return user;
+
+  const subscription = await this.subscriptionsRepository.findById($code.subscriptionId);
+  if (!subscription || !subscription.isActive) {
+    throw new Error('Subscription not found or closed');
+  }
+
+  // Mark code as used
+  await this.codesRepository.update($code.id, {
+    userId: user.telegramId,
+    activationDate: new Date(),
+  });
+
+  // Create subscription entry (unified for ALL types)
+  const expirationDate = new Date();
+  expirationDate.setDate(expirationDate.getDate() + 30);
+
+  await this.userSubscriptionsRepository.activate(
+    user.telegramId,
+    subscription.id,
+    expirationDate,
+  );
+
+  return user;
+}
+```
+
 ## Data Flow
 
 ### Create Subscription Flow
@@ -829,15 +876,83 @@ await this.subscriptionsRepository.transaction(async (tx) => {
 });
 ```
 
+## NotificationService Integration
+
+### Overview
+Broadcast messages are sent via `NotificationService` which provides:
+- Rate limiting (28 messages/second via Bottleneck)
+- Priority queue support
+- Automatic retry logic (up to 3 retries)
+- Error handling and user deactivation for permanent errors
+
+### Integration Details
+
+**Module Setup**:
+- `MasterbotModule` imports `BotModule` to access `NotificationService`
+- `BroadcastService` injects `NotificationService` in constructor
+
+**Broadcast Implementation**:
+```typescript
+async sendBroadcast(subscriptionId: number, message: string, managerId: number) {
+  // ... validation ...
+
+  const subscribers = await this.userSubscriptionsRepository
+    .findSubscribersWithUserDetails(subscriptionId);
+
+  const batchResult = this.notificationService.addMessages(
+    subscribers.map(sub => ({
+      userId: sub.user.telegramId,
+      message,
+      options: {
+        priority: MessagePriority.NORMAL,
+        messageType: QueuedMessageType.MARKDOWN,
+        metadata: {
+          subscriptionId,
+          managerId,
+          broadcastType: 'subscription',
+        },
+      },
+    })),
+  );
+
+  return {
+    recipientCount: subscribers.length,
+    queuedCount: batchResult.queuedCount,
+    errorCount: batchResult.errorCount,
+    queuedIds: batchResult.queuedIds,
+    errors: batchResult.errors,
+  };
+}
+```
+
+### Rate Limiting
+- **Max rate**: 28 messages/second (Telegram API limit: 30/second with safety buffer)
+- **Concurrency**: 4 concurrent requests
+- **Min time**: 30ms between messages
+- **Reservoir**: Refills every 1 second
+
+### Message Metadata
+Each broadcast message includes metadata for tracking:
+- `subscriptionId`: Which subscription sent the broadcast
+- `managerId`: Which manager initiated the broadcast
+- `broadcastType`: Always 'subscription' for broadcast messages
+
+This metadata is used for:
+- Analytics and reporting
+- Audit trail
+- Error investigation
+
 ## Integration Points
 
-### NotificationService Integration
+### NotificationService Integration (IMPLEMENTED)
 
 The BroadcastService leverages the existing `NotificationService` for:
-- Rate-limited message queuing
-- Retry logic for failed sends
+- Rate-limited message queuing (28 msg/sec via Bottleneck)
+- Retry logic for failed sends (up to 3 retries)
 - Telegram API error handling
 - Bottleneck queue management
+- Priority support (NORMAL priority for broadcasts)
+- Metadata tracking for analytics
 
 **Usage**:
 ```typescript
@@ -847,7 +962,12 @@ const result = await this.notificationService.addMessages(
     message: broadcastMessage,
     options: {
       priority: MessagePriority.NORMAL,
-      messageType: QueuedMessageType.MARKDOWN
+      messageType: QueuedMessageType.MARKDOWN,
+      metadata: {
+        subscriptionId,
+        managerId,
+        broadcastType: 'subscription',
+      },
     }
   }))
 );
