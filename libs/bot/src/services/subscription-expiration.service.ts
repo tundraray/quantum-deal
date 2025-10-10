@@ -5,7 +5,10 @@ import { CronJob } from 'cron';
 import {
   UsersRepository,
   SubscriptionsRepository,
+  UserSubscriptionsRepository,
   User,
+  Subscription,
+  UserSubscription,
 } from '@quantumdeal/db';
 import { LLMService, QuotaExceededException } from '@quantumdeal/framework';
 import { NotificationService } from './notification.service';
@@ -51,6 +54,7 @@ export class SubscriptionExpirationService {
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
+    private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly llmService: LLMService,
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService,
@@ -167,13 +171,14 @@ export class SubscriptionExpirationService {
     );
 
     try {
-      // Find users with subscriptions expiring on this day
-      const users =
-        await this.usersRepository.findUsersWithExpiringSubscriptions(
+      // Find user-subscription pairs expiring in N days (signals only)
+      const expiringSubscriptions =
+        await this.userSubscriptionsRepository.findExpiring(
           daysFromNow,
+          'signals', // Only signals subscriptions (broadcast subscriptions handled separately)
         );
 
-      if (users.length === 0) {
+      if (expiringSubscriptions.length === 0) {
         this.logger.debug(`No users found expiring in ${daysFromNow} days`);
         return {
           success: true,
@@ -184,12 +189,19 @@ export class SubscriptionExpirationService {
         };
       }
 
+      // Extract users from results
+      const users = expiringSubscriptions.map((result) => result.user);
+
       this.logger.log(
         `Found ${users.length} users with subscriptions expiring in ${daysFromNow} days`,
       );
 
       // Generate and send notifications
-      const result = await this.sendNotificationsToUsers(users, daysFromNow);
+      const result = await this.sendNotificationsToUsers(
+        users,
+        daysFromNow,
+        expiringSubscriptions,
+      );
 
       this.logger.log(
         `Processed ${daysFromNow}-day notifications: ${result.notificationsSent} sent, ${result.notificationsSkipped} skipped`,
@@ -220,6 +232,11 @@ export class SubscriptionExpirationService {
   private async sendNotificationsToUsers(
     users: User[],
     daysFromNow: number,
+    expiringSubscriptions: Array<{
+      user: User;
+      subscription: Subscription;
+      userSubscription: UserSubscription;
+    }>,
   ): Promise<NotificationResult> {
     const errors: Array<{ userId: number; error: string }> = [];
     let notificationsSent = 0;
@@ -242,19 +259,18 @@ export class SubscriptionExpirationService {
         `Generating messages for languages: ${languages.join(', ')}`,
       );
 
-      // Get subscription details for the first user (assuming same notification for all)
-      const firstUser = users[0];
-      const subscription = firstUser.subscribeId
-        ? await this.subscriptionsRepository.findById(firstUser.subscribeId)
-        : null;
+      // Get subscription from the expiring results (all users have same subscription in signals)
+      const subscription = expiringSubscriptions[0]?.subscription || null;
 
       const subscriptionName = subscription?.name || 'Subscription';
 
       // Generate messages via LLM
+      const expirationDate =
+        expiringSubscriptions[0]?.userSubscription.expiresAt || new Date();
       const messages = await this.generateNotificationMessages(
         subscriptionName,
         daysFromNow,
-        firstUser.subscribeExpirationDate!,
+        expirationDate,
         languages,
       );
 

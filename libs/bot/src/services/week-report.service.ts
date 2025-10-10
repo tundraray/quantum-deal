@@ -1,13 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
-import { inArray } from 'drizzle-orm';
 import {
   UsersRepository,
   OrdersRepository,
   SubscriptionsRepository,
+  UserSubscriptionsRepository,
   MessagesRepository,
-  subscriptions,
   Order,
   MessageType,
 } from '@quantumdeal/db';
@@ -97,6 +96,7 @@ export class WeekReportService {
     private readonly ordersRepository: OrdersRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly messagesRepository: MessagesRepository,
+    private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly notificationService: NotificationService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly configService: ConfigService,
@@ -287,52 +287,31 @@ export class WeekReportService {
     ClientSubscription[]
   > {
     try {
-      // Get all users with active subscriptions
-      const usersWithSubscriptions =
-        await this.usersRepository.findActiveUsersWithActiveSubscription();
+      // Get all active users with active subscriptions (signals only)
+      const results =
+        await this.userSubscriptionsRepository.findActiveUsersWithActiveSubscription(
+          'signals',
+        );
 
-      if (usersWithSubscriptions.length === 0) {
+      if (results.length === 0) {
         return [];
       }
 
-      // Get subscription details
-      const subscriptionIds = [
-        ...new Set(
-          usersWithSubscriptions.map((u) => u.subscribeId).filter(Boolean),
-        ),
-      ];
-      const subscriptionDetails = await this.subscriptionsRepository.findBy(
-        inArray(subscriptions.id, subscriptionIds as number[]),
+      // Transform to ClientSubscription format
+      const clientSubscriptions: ClientSubscription[] = results.map(
+        (result) => ({
+          telegramId: result.user.telegramId,
+          firstName: result.user.firstName,
+          lastName: result.user.lastName,
+          username: result.user.username,
+          lang: result.user.lang,
+          subscriptionId: result.subscription.id,
+          subscriptionName: result.subscription.name,
+          subscriptionScope: result.subscription.scope,
+          subscriptionExpirationDate:
+            result.userSubscription.expiresAt || new Date(),
+        }),
       );
-
-      const subscriptionMap = new Map(
-        subscriptionDetails.map((sub) => [sub.id, sub]),
-      );
-
-      // Build client subscription objects
-      const clientSubscriptions: ClientSubscription[] = [];
-
-      for (const user of usersWithSubscriptions) {
-        if (user.subscribeId && user.subscribeExpirationDate) {
-          const subscription = subscriptionMap.get(user.subscribeId);
-
-          if (subscription) {
-            clientSubscriptions.push({
-              telegramId: user.telegramId,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              username: user.username,
-              lang: user.lang,
-              subscriptionId: subscription.id,
-              subscriptionName: subscription.name,
-              subscriptionScope: subscription.scope,
-              subscriptionExpirationDate: new Date(
-                user.subscribeExpirationDate,
-              ),
-            });
-          }
-        }
-      }
 
       return clientSubscriptions;
     } catch (error) {
