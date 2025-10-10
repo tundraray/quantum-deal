@@ -17,6 +17,9 @@ import {
   MessagePriority,
   QueuedMessageType,
 } from './interfaces/notification.interface';
+import { MASTERBOT_BOT_NAME } from '@quantumdeal/masterbot';
+import { InjectBot } from 'nestjs-telegraf';
+import { Telegraf } from 'telegraf';
 
 @Injectable()
 export class BotService {
@@ -26,7 +29,8 @@ export class BotService {
     private readonly codesRepository: CodesRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
-    private readonly notificationService: NotificationService,
+    @InjectBot(MASTERBOT_BOT_NAME)
+    private readonly masterbot: Telegraf<UserContext>,
   ) {}
 
   async onStart(user: UserWithSubscriptions, code?: string) {
@@ -156,15 +160,8 @@ export class BotService {
         `📅 Valid ${expirationText}\n` +
         `🎫 Code: \`${$code.code}\``;
 
-      this.notificationService.addMessage($code.managerId, managerMessage, {
-        priority: MessagePriority.NORMAL,
-        messageType: QueuedMessageType.MARKDOWN,
-        metadata: {
-          type: 'subscription_activation',
-          userId: user.telegramId,
-          subscriptionId: subscription.id,
-          codeId: $code.id,
-        },
+      this.masterbot.telegram.sendMessage($code.managerId, managerMessage, {
+        parse_mode: 'Markdown',
       });
     }
 
