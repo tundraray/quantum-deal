@@ -61,7 +61,10 @@ export const sessionMiddleware = session();
       ) => ({
         token: configService.getOrThrow<string>('TELEGRAM_MASTER_BOT_TOKEN'),
         include: [MasterbotModule],
-        middlewares: [managersMiddleware.use.bind(managersMiddleware)],
+        middlewares: [
+          sessionMiddleware,
+          managersMiddleware.use.bind(managersMiddleware),
+        ],
         webhook: {
           domain: configService.getOrThrow<string>(
             'TELEGRAM_BOT_WEBHOOK_DOMAIN',
