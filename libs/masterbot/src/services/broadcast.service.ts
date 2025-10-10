@@ -14,11 +14,10 @@ import { LLMService } from '@quantumdeal/framework';
 import { z } from 'zod';
 
 /**
- * Zod schema for translation response
+ * Translation response type
  * Maps language code to translated message
  */
-const TranslationsSchema = z.record(z.string(), z.string());
-type Translations = z.infer<typeof TranslationsSchema>;
+type Translations = Record<string, string>;
 
 /**
  * Service for broadcasting messages to subscription subscribers
@@ -369,6 +368,10 @@ export class BroadcastService {
       .map((lang) => languageNames[lang] || lang)
       .join(', ');
 
+    // Create dynamic schema using catchall pattern (same as subscription-expiration service)
+    // This pattern works correctly with OpenAI's generateObject API
+    const dynamicSchema = z.object({}).catchall(z.string());
+
     const translationPrompt = `Translate the following message to multiple languages.
 
 IMPORTANT RULES:
@@ -396,14 +399,14 @@ Example format:
 
     try {
       // Use gpt-5-nano for fast, cost-efficient translation
-      const translations = await this.llmService.generateObject<Translations>({
+      const translations = await this.llmService.generateObject({
         model: 'gpt-5-nano',
-        schema: TranslationsSchema,
+        schema: dynamicSchema,
         prompt: translationPrompt,
         temperature: 0.3, // Low temperature for consistent translation
       });
 
-      return translations;
+      return translations as Translations;
     } catch (error) {
       this.logger.error(
         `LLM translation failed for languages [${targetLanguages.join(', ')}]:`,
