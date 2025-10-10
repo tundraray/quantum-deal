@@ -28,6 +28,7 @@ export class MasterbotService {
       `📊 /stats - View user and subscription statistics\n` +
       `🎫 /code - Generate subscription codes\n` +
       `💡 /help - Show available commands\n\n` +
+      `🔗 /subscription - Manage subscriptions (create, close, broadcast)\n` +
       `Use these commands to monitor and manage the bot ecosystem.\n\n` +
       `_Manager ID: ${manager.telegramId}_`;
 

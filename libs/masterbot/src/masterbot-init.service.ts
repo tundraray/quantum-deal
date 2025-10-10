@@ -15,7 +15,9 @@ export class MasterbotInitService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     try {
-      this.logger.log('Setting up masterbot commands...');
+      const botInfo = await this.bot.telegram.getMe();
+      const botUsername = botInfo.username;
+      this.logger.log(`Setting up masterbot commands for ${botUsername}...`);
 
       // Set up menu button commands (next to text input)
       await this.bot.telegram.setMyCommands([
@@ -23,6 +25,7 @@ export class MasterbotInitService implements OnApplicationBootstrap {
         { command: 'stats', description: '📊 Statistics' },
         { command: 'code', description: '🎫 Generate Code' },
         { command: 'help', description: '💡 Help' },
+        { command: 'subscription', description: '🔗 Subscription' },
       ]);
 
       this.logger.log('Masterbot commands set up successfully');

@@ -5,20 +5,30 @@ import { MasterbotInitService } from './masterbot-init.service';
 import { ManagersMiddleware } from './middleware/managers.middleware';
 import { DbModule } from '@quantumdeal/db';
 import { FrameworkModule } from '@quantumdeal/framework';
+import { BotModule } from '@quantumdeal/bot';
+import { CodeGenerationService } from './services/code-generation.service';
+import { SubscriptionManagementService } from './services/subscription-management.service';
+import { BroadcastService } from './services/broadcast.service';
 
 @Module({
-  imports: [DbModule, FrameworkModule],
+  imports: [DbModule, FrameworkModule, BotModule],
   providers: [
     MasterbotService,
     MasterbotUpdate,
     MasterbotInitService,
     ManagersMiddleware,
+    CodeGenerationService,
+    SubscriptionManagementService,
+    BroadcastService,
   ],
   exports: [
     MasterbotService,
     MasterbotUpdate,
     MasterbotInitService,
     ManagersMiddleware,
+    CodeGenerationService,
+    SubscriptionManagementService,
+    BroadcastService,
   ],
 })
 export class MasterbotModule {}
