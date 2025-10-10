@@ -8,6 +8,7 @@ import {
   MessagesRepository,
   SubscriptionsRepository,
   CodesRepository,
+  UserSubscriptionsRepository,
   SummaryRepository,
 } from './repositories';
 
@@ -45,6 +46,7 @@ export class DrizzleModule {}
     MessagesRepository,
     SubscriptionsRepository,
     CodesRepository,
+    UserSubscriptionsRepository,
     SummaryRepository,
   ],
   exports: [
@@ -57,6 +59,7 @@ export class DrizzleModule {}
     MessagesRepository,
     SubscriptionsRepository,
     CodesRepository,
+    UserSubscriptionsRepository,
     SummaryRepository,
   ],
 })
