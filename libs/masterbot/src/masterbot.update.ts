@@ -935,7 +935,7 @@ export class MasterbotUpdate {
           `📋 Название: ${result.subscription.name}\n` +
           `🆔 ID: ${result.subscription.id}\n` +
           `📅 Создана: ${result.subscription.createdAt.toLocaleString('ru-RU')}\n\n` +
-          '💡 Для генерации кодов используйте команду `/generate_codes`',
+          '💡 Для генерации кодов используйте команду `/codes`',
         { parse_mode: 'Markdown' },
       );
     } catch (error) {
