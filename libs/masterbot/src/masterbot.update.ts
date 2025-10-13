@@ -360,6 +360,7 @@ export class MasterbotUpdate {
         commandContext: null,
         broadcastSubscriptionId: null,
         broadcastMessage: null,
+        broadcastMessageEntities: null,
       } as UserContext['session'];
     }
   }
@@ -793,6 +794,7 @@ export class MasterbotUpdate {
 
     const subscriptionId = ctx.session.broadcastSubscriptionId;
     const message = ctx.session.broadcastMessage;
+    const entities = ctx.session.broadcastMessageEntities;
 
     if (!subscriptionId || !message) {
       await ctx.editMessageText('❌ Ошибка: данные сессии потеряны');
@@ -811,10 +813,11 @@ export class MasterbotUpdate {
 
       await ctx.answerCbQuery('Рассылка началась...');
 
-      // Send broadcast
+      // Send broadcast with entities
       const result = await this.broadcastService.sendBroadcast(
         subscriptionId,
         message,
+        entities || undefined,
         manager.telegramId,
       );
 
@@ -822,12 +825,14 @@ export class MasterbotUpdate {
       ctx.session.flowState = null;
       ctx.session.broadcastSubscriptionId = null;
       ctx.session.broadcastMessage = null;
+      ctx.session.broadcastMessageEntities = null;
 
       // Log the action
       this.masterbotService.logManagerAction(manager, 'BROADCAST_SENT', {
         subscriptionId,
         queuedCount: result.queuedCount,
         errorCount: result.errorCount,
+        hasFormatting: entities && entities.length > 0,
       });
 
       // Send completion report
@@ -843,6 +848,7 @@ export class MasterbotUpdate {
       ctx.session.flowState = null;
       ctx.session.broadcastSubscriptionId = null;
       ctx.session.broadcastMessage = null;
+      ctx.session.broadcastMessageEntities = null;
 
       this.logger.error('Error confirming broadcast', error);
       const errorMessage =
@@ -860,6 +866,7 @@ export class MasterbotUpdate {
     ctx.session.flowState = null;
     ctx.session.broadcastSubscriptionId = null;
     ctx.session.broadcastMessage = null;
+    ctx.session.broadcastMessageEntities = null;
 
     await ctx.editMessageText('❌ Рассылка отменена.');
     await ctx.answerCbQuery('Отменено');
@@ -958,6 +965,10 @@ export class MasterbotUpdate {
 
     const message =
       ctx.message && 'text' in ctx.message ? ctx.message.text : null;
+    const entities =
+      ctx.message && 'entities' in ctx.message
+        ? ctx.message.entities
+        : undefined;
     const subscriptionId = ctx.session.broadcastSubscriptionId;
 
     if (!message || !subscriptionId) {
@@ -988,19 +999,29 @@ export class MasterbotUpdate {
       const subscriberCount =
         await this.broadcastService.countSubscribers(subscriptionId);
 
-      // Save message to session
+      // Save message and entities to session
       ctx.session.broadcastMessage = message;
+      ctx.session.broadcastMessageEntities = entities || null;
       ctx.session.flowState = 'confirming_broadcast';
 
       // Show preview with confirmation
-      await ctx.reply(
-        `📊 *Предпросмотр рассылки*\n\n` +
-          `Подписка: ${subscription.name}\n` +
-          `Получателей: ${subscriberCount} активных пользователей\n\n` +
-          `*Сообщение:*\n${message}\n\n` +
-          `Отправить это сообщение?`,
-        {
-          parse_mode: 'Markdown',
+      // If entities exist, show formatted message by copying the original message
+      if (entities && entities.length > 0) {
+        await ctx.reply(
+          `📊 *Предпросмотр рассылки*\n\n` +
+            `Подписка: ${subscription.name}\n` +
+            `Получателей: ${subscriberCount} активных пользователей\n\n` +
+            `*Сообщение (с форматированием):*`,
+          { parse_mode: 'Markdown' },
+        );
+
+        // Forward or copy the formatted message to show preview
+        await ctx.telegram.sendMessage(ctx.chat!.id, message, {
+          entities: entities,
+        });
+
+        // Show confirmation buttons
+        await ctx.reply(`Отправить это сообщение?`, {
           ...Markup.inlineKeyboard([
             [
               Markup.button.callback(
@@ -1015,11 +1036,38 @@ export class MasterbotUpdate {
               ),
             ],
           ]),
-        },
-      );
+        });
+      } else {
+        // No entities, show plain text preview
+        await ctx.reply(
+          `📊 *Предпросмотр рассылки*\n\n` +
+            `Подписка: ${subscription.name}\n` +
+            `Получателей: ${subscriberCount} активных пользователей\n\n` +
+            `*Сообщение:*\n${message}\n\n` +
+            `Отправить это сообщение?`,
+          {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+              [
+                Markup.button.callback(
+                  '✅ Отправить',
+                  MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM,
+                ),
+              ],
+              [
+                Markup.button.callback(
+                  '❌ Отмена',
+                  MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CANCEL,
+                ),
+              ],
+            ]),
+          },
+        );
+      }
     } catch (error) {
       ctx.session.flowState = null;
       ctx.session.broadcastSubscriptionId = null;
+      ctx.session.broadcastMessageEntities = null;
       this.logger.error('Error handling broadcast message input', error);
       const errorMessage =
         error instanceof Error ? error.message : 'Неизвестная ошибка';
