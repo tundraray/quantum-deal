@@ -12,6 +12,11 @@ import {
 } from '@quantumdeal/bot/interfaces/notification.interface';
 import { LLMService } from '@quantumdeal/framework';
 import { z } from 'zod';
+import type { MessageEntity } from '../interfaces';
+import {
+  convertEntitiesToMarkdown,
+  hasFormattingEntities,
+} from '../utils/entity-converter';
 
 /**
  * Translation response type
@@ -101,10 +106,13 @@ export class BroadcastService {
    * - Automatic translation based on user language preferences
    * - Groups users by language to minimize LLM calls
    * - Preserves message structure (Markdown, emojis, links)
+   * - Preserves message formatting via entities (bold, italic, etc.)
+   * - Converts entities to Markdown for translation preservation
    * - Fallback to original message on translation failure
    *
    * @param subscriptionId - The subscription ID to broadcast to
    * @param message - The message content
+   * @param entities - Message entities for formatting (optional)
    * @param managerId - The manager's Telegram ID who is broadcasting
    * @returns Broadcast result with statistics
    * @throws Error if subscription not found, is not broadcast, or message invalid
@@ -112,6 +120,7 @@ export class BroadcastService {
   async sendBroadcast(
     subscriptionId: number,
     message: string,
+    entities: MessageEntity[] | undefined,
     managerId: number,
   ): Promise<BroadcastResultDto> {
     // Validate subscription type
@@ -142,6 +151,18 @@ export class BroadcastService {
       `Broadcasting message to ${subscribers.length} subscribers for subscription ${subscriptionId}`,
     );
 
+    // Check if message has formatting entities
+    const hasFormatting = hasFormattingEntities(entities);
+
+    // Convert entities to Markdown for translation if present
+    const messageForTranslation = hasFormatting
+      ? convertEntitiesToMarkdown(message, entities)
+      : message;
+
+    this.logger.log(
+      `Message has formatting: ${hasFormatting}, using ${hasFormatting ? 'Markdown conversion' : 'plain text'} for translation`,
+    );
+
     // Group users by language preference
     const usersByLang = this.groupUsersByLanguage(subscribers);
 
@@ -150,8 +171,9 @@ export class BroadcastService {
     );
 
     // Translate message for each language group
+    // If entities exist, we translate the Markdown version
     const translatedMessages = await this.translateMessagesForLanguages(
-      message,
+      messageForTranslation,
       usersByLang,
     );
 
@@ -160,19 +182,24 @@ export class BroadcastService {
       const batchResult = this.notificationService.addMessages(
         subscribers.map((sub) => {
           const userLang = sub.user.lang || 'en';
-          const translatedMessage = translatedMessages.get(userLang) || message;
+          const translatedMessage =
+            translatedMessages.get(userLang) || messageForTranslation;
 
           return {
             userId: sub.user.telegramId,
             message: translatedMessage,
             options: {
               priority: MessagePriority.NORMAL,
-              messageType: QueuedMessageType.MARKDOWN,
+              // Use MARKDOWN if we converted entities, otherwise use TEXT
+              messageType: hasFormatting
+                ? QueuedMessageType.MARKDOWN
+                : QueuedMessageType.TEXT,
               metadata: {
                 subscriptionId,
                 managerId,
                 broadcastType: 'subscription',
                 targetLanguage: userLang,
+                hasFormatting,
               },
             },
           };
