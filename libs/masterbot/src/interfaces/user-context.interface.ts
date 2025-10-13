@@ -1,5 +1,14 @@
 import { Context } from '@quantumdeal/framework';
 import { Manager } from '@quantumdeal/db';
+import type { Message } from 'telegraf/types';
+
+/**
+ * MessageEntity type from Telegram Bot API
+ * Represents special entities like bold text, links, mentions, etc.
+ */
+export type MessageEntity = NonNullable<
+  Message.TextMessage['entities']
+>[number];
 
 /**
  * Extended Telegraf context interface for master bot that includes the authenticated user and manager
@@ -39,5 +48,12 @@ export interface UserContext extends Context {
      * Stored temporarily before confirmation
      */
     broadcastMessage?: string | null;
+
+    /**
+     * Message entities for preserving formatting
+     * Stored along with the broadcast message to maintain text formatting
+     * (bold, italic, links, code blocks, etc.)
+     */
+    broadcastMessageEntities?: MessageEntity[] | null;
   };
 }
