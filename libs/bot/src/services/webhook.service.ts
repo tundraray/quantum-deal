@@ -48,6 +48,16 @@ export class WebhookProcessorService {
   }
 
   /**
+   * Format a numeric value to string with up to 3 decimal places
+   */
+  private formatDecimal(input: number | string | null | undefined): string {
+    if (input === null || input === undefined) return '0';
+    const num = typeof input === 'string' ? Number(input) : input;
+    if (Number.isNaN(num)) return '0';
+    return num.toFixed(3).replace(/\.?0+$/, '');
+  }
+
+  /**
    * Main method to send notifications for order events
    */
   async sendOrderNotifications(
@@ -204,6 +214,11 @@ export class WebhookProcessorService {
     const preparedMessages: PreparedMessage[] = [];
     const placeholders = this.createOrderPlaceholders(order);
 
+    this.logger.debug(
+      `Preparing messages ${eventType}`,
+      JSON.stringify(placeholders),
+    );
+
     for (const user of users) {
       try {
         // Get a random message template for the user's language
@@ -250,13 +265,13 @@ export class WebhookProcessorService {
       symbol: `**\`${order.symbol}\`**`,
       order_type: `#${order.orderType}`,
       lots: order.lots?.toString() || '0',
-      close_price: order.closePrice?.toString(),
-      open_price: order.openPrice?.toString(),
-      profit: order.profit?.toString(),
-      old_take_profit: order.oldTakeProfit?.toString(),
-      old_stop_loss: order.oldStopLoss?.toString(),
-      stop_loss: order.stopLoss?.toString() || '0',
-      take_profit: order.takeProfit?.toString() || '0',
+      close_price: this.formatDecimal(order.closePrice),
+      open_price: this.formatDecimal(order.openPrice),
+      profit: this.formatDecimal(order.profit),
+      old_take_profit: this.formatDecimal(order.oldTakeProfit),
+      old_stop_loss: this.formatDecimal(order.oldStopLoss),
+      stop_loss: this.formatDecimal(order.stopLoss),
+      take_profit: this.formatDecimal(order.takeProfit),
       ticketId: order.ticketId.toString(),
       sector: order.sector || '',
       account: order.account,
@@ -314,10 +329,6 @@ export class WebhookProcessorService {
 
         sentCount++;
         processedIds.push(messageId);
-
-        this.logger.debug(
-          `Notification queued successfully for user ${message.telegramId} with messageId ${messageId}`,
-        );
       } catch (error) {
         failedCount++;
         const errorMessage =

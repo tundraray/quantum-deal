@@ -103,7 +103,9 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       }
       this.messageStats.totalScheduled++;
 
-      this.logger.debug(`Message scheduled: ${messageId} for user ${userId}`);
+      this.logger.debug(
+        `Message scheduled: ${options.messageType ?? QueuedMessageType.TEXT} for user ${userId}`,
+      );
 
       // Track message scheduling in Sentry
       Sentry.addBreadcrumb({
@@ -217,7 +219,6 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       // Success
       message.status = QueueMessageStatus.SENT;
       this.messageStats.successCount++;
-      this.logger.debug(`Message sent successfully: ${message.userId}`);
     } catch (error) {
       this.logger.error(
         `Error sending message ${message.id} to user ${message.userId}:`,
