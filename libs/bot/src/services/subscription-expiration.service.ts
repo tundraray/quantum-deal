@@ -3,8 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import {
-  UsersRepository,
-  SubscriptionsRepository,
   UserSubscriptionsRepository,
   User,
   Subscription,
@@ -52,8 +50,6 @@ export class SubscriptionExpirationService {
   private readonly logger = new Logger(SubscriptionExpirationService.name);
 
   constructor(
-    private readonly usersRepository: UsersRepository,
-    private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly llmService: LLMService,
     private readonly notificationService: NotificationService,

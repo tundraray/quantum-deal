@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  UsersRepository,
   SubscriptionsRepository,
   MessagesRepository,
+  UserSubscriptionsRepository,
 } from '@quantumdeal/db';
 import { MessageType, MergedOrder } from '@quantumdeal/db/schema';
 import {
@@ -21,7 +21,7 @@ export class WebhookProcessorService {
   private readonly logger = new Logger(WebhookProcessorService.name);
 
   constructor(
-    private readonly usersRepository: UsersRepository,
+    private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly messagesRepository: MessagesRepository,
     private readonly notificationService: NotificationService,
@@ -157,34 +157,27 @@ export class WebhookProcessorService {
 
       // Find users with active subscriptions
       const eligibleUsers: NotificationUser[] = [];
-      const now = new Date();
 
       for (const subscriptionId of subscriptionIds) {
         const usersWithSubscription =
-          await this.usersRepository.findBySubscription(subscriptionId);
+          await this.userSubscriptionsRepository.findActiveUsersWithActiveWithSubscriptionId(
+            subscriptionId,
+          );
 
-        for (const user of usersWithSubscription) {
+        for (const { user, subscription } of usersWithSubscription) {
           // Check if subscription is still active
-          if (
-            user.subscribeExpirationDate &&
-            user.subscribeExpirationDate > now
-          ) {
-            const subscription = matchingSubscriptions.find(
-              (sub) => sub.id === subscriptionId,
-            );
 
-            if (subscription) {
-              eligibleUsers.push({
-                telegramId: user.telegramId,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                username: user.username,
-                lang: user.lang || 'en', // Default to English
-                subscriptionId: subscription.id,
-                subscriptionScope: subscription.scope,
-                subscriptionExpirationDate: user.subscribeExpirationDate,
-              });
-            }
+          if (user) {
+            eligibleUsers.push({
+              telegramId: user.telegramId,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              username: user.username,
+              lang: user.lang || 'en', // Default to English
+              subscriptionId: subscription.id,
+              subscriptionScope: subscription.scope,
+              subscriptionExpirationDate: user.subscribeExpirationDate,
+            });
           }
         }
       }

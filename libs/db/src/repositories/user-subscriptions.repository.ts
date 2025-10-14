@@ -304,6 +304,46 @@ export class UserSubscriptionsRepository extends BaseRepository<
    * @param subscriptionType - Optional filter by subscription type ('signals' or 'subscription_%')
    * @returns Array of objects containing user, subscription, and userSubscription data
    */
+  async findActiveUsersWithActiveWithSubscriptionId(
+    subscriptionId: number,
+  ): Promise<
+    Array<{
+      user: User;
+      subscription: Subscription;
+      userSubscription: UserSubscription;
+    }>
+  > {
+    const now = new Date();
+    const conditions = [
+      eq(this.table.isActive, true),
+      eq(users.isActive, true),
+      eq(subscriptions.isActive, true),
+      eq(this.table.subscriptionId, subscriptionId),
+      sql`${this.table.expiresAt} IS NOT NULL`,
+      sql`${this.table.expiresAt} >= ${now}`,
+    ];
+
+    const result = await this.db
+      .select({
+        user: users,
+        subscription: subscriptions,
+        userSubscription: this.table,
+      })
+      .from(this.table)
+      .innerJoin(users, eq(this.table.userId, users.telegramId))
+      .innerJoin(subscriptions, eq(this.table.subscriptionId, subscriptions.id))
+      .where(and(...conditions));
+
+    return result;
+  }
+
+  /**
+   * Find all active users with active subscriptions (non-expired)
+   * Replaces UsersRepository.findActiveUsersWithActiveSubscription()
+   *
+   * @param subscriptionType - Optional filter by subscription type ('signals' or 'subscription_%')
+   * @returns Array of objects containing user, subscription, and userSubscription data
+   */
   async findActiveUsersWithActiveSubscription(
     subscriptionType?: string,
   ): Promise<
