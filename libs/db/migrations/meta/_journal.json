@@ -57,6 +57,13 @@
       "when": 1760047173120,
       "tag": "20251009215933_aromatic_shadow_king",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1760631421843,
+      "tag": "20251016161701_hot_johnny_storm",
+      "breakpoints": true
     }
   ]
 }

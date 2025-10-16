@@ -44,6 +44,41 @@ Bot checks feature → Read subscription_features (is enabled?)
                    + Read user_subscription_features (user's config)
 ```
 
+### Field Deprecation Notice
+
+> **⚠️ DEPRECATED**: The `subscriptions.scope` field is deprecated and will be removed in a future version.
+
+**Migration Details:**
+- **Old location**: `subscriptions.scope` (JSONB array of sectors like `["crypto", "forex"]`)
+- **New location**: `subscription_features.config.sectors` (JSONB array in TIER_BASED_FILTERING feature)
+- **Migration**: Automated via `libs/db/migrations/20251016161701_hot_johnny_storm.sql`
+
+**Example migration:**
+
+```sql
+-- Before (deprecated approach)
+SELECT scope FROM subscriptions WHERE id = 1;
+-- Result: ["crypto", "forex", "stocks"]
+
+-- After (current approach)
+SELECT config FROM subscription_features
+WHERE subscription_id = 1 AND feature_key = 'tier_based_filtering';
+-- Result: {"sectors": ["crypto", "forex", "stocks"]}
+```
+
+**Why the change:**
+- Better separation of concerns (features are independent of subscriptions)
+- More flexible feature configuration
+- Supports feature-specific settings
+- Aligns with feature flags architecture
+- Enables feature-level permissions
+
+**Backward compatibility:**
+- The `scope` field remains in the schema (marked `@deprecated` in TypeScript)
+- `SubscriptionsRepository.findBySector()` now queries `subscription_features.config.sectors`
+- Both old and new approaches coexist during transition period
+- The field will be removed in a future major version (v2.0+)
+
 ### subscription_features Table
 
 This table defines which features are **available** (enabled/disabled) for each subscription tier.
@@ -300,6 +335,7 @@ users
 **Data Flow**:
 1. User has an active subscription via `user_subscriptions`
 2. Subscription has enabled features via `subscription_features` (is feature available?)
+   - For TIER_BASED_FILTERING: `config.sectors` stores sector filtering (replaces deprecated `subscription.scope`)
 3. User configures personal settings via `user_subscription_features` (how does user want to use it?)
 4. Bot reads both tables to determine: (1) Does user have access? (2) What are user's preferences?
 
@@ -885,6 +921,104 @@ const featureUsage = await db
     )
   )
   .groupBy(subscriptionFeatures.featureKey);
+```
+
+### Get User's Custom Filter Settings (Webhook Processing)
+
+**Use Case**: When processing webhooks/signals, check if user has CUSTOM_USER_FILTERING and apply their settings.
+
+```typescript
+// Step 1: Check if subscription has CUSTOM_USER_FILTERING feature
+const hasCustomFiltering = await db
+  .select({ exists: sql<boolean>`1` })
+  .from(subscriptionFeatures)
+  .where(
+    and(
+      eq(subscriptionFeatures.subscriptionId, subscriptionId),
+      eq(subscriptionFeatures.featureKey, 'custom_user_filtering'),
+      eq(subscriptionFeatures.isEnabled, true)
+    )
+  )
+  .limit(1);
+
+if (hasCustomFiltering.length === 0) {
+  // No custom filtering - send signal to user
+  return true;
+}
+
+// Step 2: Get user's custom filter settings
+const userSettings = await db
+  .select({
+    settings: userSubscriptionFeatures.settings,
+  })
+  .from(userSubscriptionFeatures)
+  .where(
+    and(
+      eq(userSubscriptionFeatures.userId, userId),
+      eq(userSubscriptionFeatures.featureKey, 'custom_user_filtering'),
+      eq(userSubscriptionFeatures.isActive, true)
+    )
+  )
+  .limit(1);
+
+if (userSettings.length === 0) {
+  // User hasn't configured filters yet - send signal
+  return true;
+}
+
+// Step 3: Apply user's custom filters
+const { settings } = userSettings[0];
+
+// Example settings structure:
+// {
+//   "instruments": [15, 21, 28],  // Only these instrument IDs
+//   "quietHours": {
+//     "enabled": true,
+//     "start": "22:00",
+//     "end": "06:00"
+//   },
+//   "minWinRate": 70
+// }
+
+// Check if signal matches user's filters
+if (settings.instruments && !settings.instruments.includes(signal.instrumentId)) {
+  return false; // Skip user - instrument not in their list
+}
+
+if (settings.quietHours?.enabled) {
+  const now = new Date();
+  const currentHour = now.getHours();
+  // ... quiet hours logic
+}
+
+return true; // User passed all filters
+```
+
+**SQL Alternative** (for direct database queries):
+
+```sql
+-- Combined query: Check feature and get settings in one go
+SELECT
+  sf.subscription_id,
+  sf.is_enabled as feature_enabled,
+  usf.settings as user_settings,
+  usf.is_active as settings_active
+FROM user_subscriptions us
+LEFT JOIN subscription_features sf ON
+  us.subscription_id = sf.subscription_id
+  AND sf.feature_key = 'custom_user_filtering'
+LEFT JOIN user_subscription_features usf ON
+  us.user_id = usf.user_id
+  AND usf.feature_key = 'custom_user_filtering'
+WHERE us.user_id = $1
+  AND us.subscription_id = $2
+  AND us.is_active = true;
+
+-- Result interpretation:
+-- - feature_enabled IS NULL: subscription doesn't have CUSTOM_USER_FILTERING
+-- - feature_enabled = false: feature disabled
+-- - user_settings IS NULL: user hasn't configured filters
+-- - settings_active = false: user disabled their filters
 ```
 
 ## Query Analysis

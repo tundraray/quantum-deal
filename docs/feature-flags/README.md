@@ -174,15 +174,18 @@ Complete end-to-end flow from user command to feature check:
 
 ### Database Schema Relationships
 
+> **⚠️ IMPORTANT - Field Deprecation**: The `subscriptions.scope` field is deprecated and will be removed in a future version. Sector filtering is now stored in `subscription_features.config.sectors`. See [Subscription Scope Migration](#subscription-scope-migration) section below for details.
+
 ```
 ┌──────────────────────┐         ┌──────────────────────────┐
 │      users           │         │     subscriptions        │
 ├──────────────────────┤         ├──────────────────────────┤
 │ telegram_id (PK)     │         │ id (PK)                  │
 │ username             │         │ name                     │
-│ is_active            │         │ type                     │
-│ created_at           │         │ is_active                │
-└──────────┬───────────┘         └───────────┬──────────────┘
+│ is_active            │         │ scope (DEPRECATED ⚠️)    │
+│ created_at           │         │ type                     │
+└──────────┬───────────┘         │ is_active                │
+           │                     └───────────┬──────────────┘
            │                                 │
            │    ┌────────────────────────────┴───────────┐
            │    │                                        │
@@ -196,7 +199,7 @@ Complete end-to-end flow from user command to feature check:
               │            custom_user_filtering                 │
               │   Note: Signal delivery is core functionality    │
               │ is_enabled (boolean)                             │
-              │ config (jsonb)                                   │
+              │ config (jsonb) ← sectors stored here            │
               └─────────────────┬────────────────────────────────┘
                                 │
            ┌────────────────────┴────────────────────┐
@@ -212,6 +215,47 @@ Complete end-to-end flow from user command to feature check:
   └─────────────────────────┘
 ```
 
+### Subscription Scope Migration
+
+The `subscriptions.scope` field has been **deprecated** as part of the feature flags architecture refactoring.
+
+**What Changed:**
+- **Before**: Sector filtering stored in `subscriptions.scope` JSONB field
+- **After**: Sector filtering stored in `subscription_features.config.sectors` JSONB field
+
+**Why the Change:**
+- Better separation of concerns (features vs subscriptions)
+- More flexible configuration per feature
+- Supports feature-specific settings independently
+- Aligns with feature flags architecture
+
+**Migration Path:**
+The SQL migration file `libs/db/migrations/20251016161701_hot_johnny_storm.sql` automatically migrates existing `scope` data to `subscription_features.config.sectors` when you run `pnpm db:migrate`.
+
+**Example:**
+```typescript
+// Before (deprecated)
+subscription.scope = ['crypto', 'forex', 'stocks'];
+
+// After (current)
+subscriptionFeatures.config = {
+  sectors: ['crypto', 'forex', 'stocks'],  // Migrated from scope
+  minPriority: 'medium',
+  excludedTypes: ['news']
+};
+```
+
+**Current State:**
+- The `scope` field is still present in the schema for backward compatibility
+- It is marked as `@deprecated` in TypeScript definitions (`libs/db/src/schema/subscriptions.ts`)
+- `SubscriptionsRepository.findBySector()` now queries `subscription_features.config.sectors`
+- The field will be removed in a future major version
+
+**For Developers:**
+- Use `subscription_features.config.sectors` for all new code
+- Do not rely on `subscription.scope` field
+- See [database-schema.md](./database-schema.md) for updated query examples
+
 ### Signal Broadcasting with Feature Flags
 
 ```
@@ -222,34 +266,78 @@ Complete end-to-end flow from user command to feature check:
            │
            ▼
 ┌──────────────────────────────────────────────────────────────┐
-│ Broadcast Service - Load all active users                    │
+│ Step 1: findBySector(order.sector)                           │
+│ - Query subscription_features for TIER_BASED_FILTERING       │
+│ - Check config.sectors contains order.sector                 │
+│ - Returns: List of matching subscriptions                    │
+└──────────┬───────────────────────────────────────────────────┘
+           │
+           ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Step 2: Load users with active subscriptions                 │
+│ For each subscription → findActiveUsers()                    │
 └──────────┬───────────────────────────────────────────────────┘
            │ For each user:
            ▼
 ┌──────────────────────────────────────────────────────────────┐
-│ Check if user.isActive (core functionality)                  │
+│ Step 3: Check if user.isActive (core functionality)          │
 │ if (!user.isActive) → Skip user                              │
 └──────────┬───────────────────────────────────────────────────┘
            │ ✓ Has active subscription
            ▼
 ┌──────────────────────────────────────────────────────────────┐
-│ Check TIER_BASED_FILTERING feature                           │
-│ - Has feature? Apply tier filter → Pass/Fail                 │
-│ - No feature? Skip to next check                             │
+│ Step 4: Check CUSTOM_USER_FILTERING feature                  │
+│ - Does subscription have this feature?                       │
+│   - YES: Query user_subscription_features.settings           │
+│          Check if signal matches user's custom filters       │
+│          If NO match → Skip user                             │
+│   - NO: Continue (no additional filtering)                   │
 └──────────┬───────────────────────────────────────────────────┘
-           │
+           │ ✓ Passed all filters
            ▼
 ┌──────────────────────────────────────────────────────────────┐
-│ Check CUSTOM_USER_FILTERING feature                          │
-│ - Has feature? Apply custom filters → Pass/Fail              │
-│ - No feature? Skip to send                                   │
-└──────────┬───────────────────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Send signal to user                                          │
+│ Step 5: Send signal to user                                  │
 │ bot.telegram.sendMessage(user.telegramId, signal)            │
 └──────────────────────────────────────────────────────────────┘
+```
+
+**Detailed Filter Flow:**
+
+1. **TIER_BASED_FILTERING** (Subscription-level):
+   - Checked in `findBySector()` query
+   - Uses `subscription_features.config.sectors` to filter subscriptions
+   - Only subscriptions with matching sectors are returned
+   - This is an **automatic** filter based on subscription tier
+
+2. **CUSTOM_USER_FILTERING** (User-level):
+   - Checked AFTER finding eligible users
+   - If subscription has this feature:
+     - Query `user_subscription_features` table
+     - Get `settings` JSONB field for this user
+     - Apply user's custom filter rules (e.g., instruments, quiet hours, win rate)
+     - Skip user if signal doesn't match their settings
+   - This is a **user-configurable** filter
+
+**Example Query for Custom Filters:**
+
+```sql
+-- Check if user has custom filtering settings
+SELECT settings
+FROM user_subscription_features
+WHERE user_id = $1
+  AND feature_key = 'custom_user_filtering'
+  AND is_active = true;
+
+-- settings might contain:
+{
+  "instruments": [15, 21, 28],  -- Only these instrument IDs
+  "quietHours": {
+    "enabled": true,
+    "start": "22:00",
+    "end": "06:00"
+  },
+  "minWinRate": 70
+}
 ```
 
 ### Layer Architecture

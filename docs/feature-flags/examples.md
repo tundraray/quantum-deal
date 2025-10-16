@@ -650,7 +650,9 @@ export class WebhookProcessorService {
       }
     }
 
-    // Apply custom filtering if enabled (overrides tier filtering)
+    // Apply custom filtering if enabled
+    // Important: Check if subscription has CUSTOM_USER_FILTERING feature
+    // Then load user's personal settings from user_subscription_features
     if (hasFeature(user, FeatureFlag.CUSTOM_USER_FILTERING)) {
       const passesConditions = await this.checkCustomFiltering(user, order);
       if (!passesConditions) {
@@ -690,21 +692,73 @@ export class WebhookProcessorService {
     user: UserWithFeatures,
     order: MergedOrder,
   ): Promise<boolean> {
-    const config = getFeatureConfig(
-      user,
-      FeatureFlag.CUSTOM_USER_FILTERING,
-    ) as CustomFilteringConfig;
+    // Step 1: Check if subscription has CUSTOM_USER_FILTERING feature
+    // (Already confirmed by hasFeature() check in shouldSendToUser)
 
-    if (!config) return true;
+    // Step 2: Get user's custom filter settings from user_subscription_features
+    const userSettings = await this.db
+      .select({
+        settings: userSubscriptionFeatures.settings,
+      })
+      .from(userSubscriptionFeatures)
+      .where(
+        and(
+          eq(userSubscriptionFeatures.userId, user.telegramId),
+          eq(userSubscriptionFeatures.featureKey, 'custom_user_filtering'),
+          eq(userSubscriptionFeatures.isActive, true)
+        )
+      )
+      .limit(1);
 
-    const conditions = config.conditions || [];
-    const matchMode = config.matchMode || 'all';
-
-    if (matchMode === 'any') {
-      return conditions.some(c => this.matchesCondition(order, c));
-    } else {
-      return conditions.every(c => this.matchesCondition(order, c));
+    if (userSettings.length === 0) {
+      // User hasn't configured custom filters yet - allow signal
+      return true;
     }
+
+    // Step 3: Apply user's custom filters from settings field
+    const { settings } = userSettings[0];
+
+    // settings structure:
+    // {
+    //   "instruments": [15, 21, 28],  // Only these instrument IDs
+    //   "quietHours": {
+    //     "enabled": true,
+    //     "start": "22:00",
+    //     "end": "06:00"
+    //   },
+    //   "minWinRate": 70
+    // }
+
+    // Check instrument filter
+    if (settings.instruments && !settings.instruments.includes(order.instrumentId)) {
+      this.logger.debug(`User ${user.telegramId} filtered: instrument ${order.instrumentId} not in whitelist`);
+      return false;
+    }
+
+    // Check quiet hours
+    if (settings.quietHours?.enabled) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const startHour = parseInt(settings.quietHours.start.split(':')[0]);
+      const endHour = parseInt(settings.quietHours.end.split(':')[0]);
+
+      const isQuietTime = (startHour <= endHour)
+        ? (currentHour >= startHour && currentHour < endHour)
+        : (currentHour >= startHour || currentHour < endHour);
+
+      if (isQuietTime) {
+        this.logger.debug(`User ${user.telegramId} filtered: quiet hours active`);
+        return false;
+      }
+    }
+
+    // Check minimum win rate
+    if (settings.minWinRate && order.winRate < settings.minWinRate) {
+      this.logger.debug(`User ${user.telegramId} filtered: win rate ${order.winRate}% below minimum ${settings.minWinRate}%`);
+      return false;
+    }
+
+    return true;
   }
 
   private matchesCondition(order: MergedOrder, condition: FilterCondition): boolean {

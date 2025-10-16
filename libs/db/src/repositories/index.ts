@@ -8,3 +8,4 @@ export * from './subscriptions.repository';
 export * from './codes.repository';
 export * from './user-subscriptions.repository';
 export * from './summary.repository';
+export * from './subscription-features.repository';

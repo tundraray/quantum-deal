@@ -8,6 +8,7 @@ import {
   NewSubscription,
   isBroadcastSubscription,
 } from '../schema/subscriptions';
+import { subscriptionFeatures } from '../schema/subscription-features';
 
 @Injectable()
 export class SubscriptionsRepository extends BaseRepository<
@@ -23,19 +24,44 @@ export class SubscriptionsRepository extends BaseRepository<
   }
 
   /**
-   * Find subscriptions that match a specific sector
-   * Supports wildcard '*' for all sectors
+   * Find subscriptions that have TIER_BASED_FILTERING feature enabled
+   * for a specific sector.
+   *
+   * This method now queries subscription_features.config.sectors instead
+   * of the deprecated subscriptions.scope field.
+   *
+   * @param sector - The sector to filter by (e.g., 'crypto', 'forex', 'stocks')
+   * @returns Array of subscriptions that have access to the specified sector
    */
   async findBySector(sector: string): Promise<Subscription[]> {
     return this.db
-      .select()
+      .selectDistinct({
+        id: subscriptions.id,
+        name: subscriptions.name,
+        scope: subscriptions.scope,
+        type: subscriptions.type,
+        isActive: subscriptions.isActive,
+        createdAt: subscriptions.createdAt,
+        updatedAt: subscriptions.updatedAt,
+        closedAt: subscriptions.closedAt,
+        closedBy: subscriptions.closedBy,
+      })
       .from(subscriptions)
+      .innerJoin(
+        subscriptionFeatures,
+        eq(subscriptions.id, subscriptionFeatures.subscriptionId),
+      )
       .where(
-        or(
-          // Check if scope contains the specific sector
-          sql`${subscriptions.scope} ? ${sector}`,
-          // Check if scope contains wildcard '*' (all sectors)
-          sql`${subscriptions.scope} ? '*'`,
+        and(
+          eq(subscriptions.isActive, true),
+          eq(subscriptionFeatures.featureKey, 'tier_based_filtering'),
+          eq(subscriptionFeatures.isEnabled, true),
+          or(
+            // Check if config.sectors contains the specific sector
+            sql`${subscriptionFeatures.config}->>'sectors' @> ${JSON.stringify([sector])}`,
+            // Check if config.sectors contains wildcard '*' (all sectors)
+            sql`${subscriptionFeatures.config}->>'sectors' @> '["*"]'`,
+          ),
         ),
       );
   }
