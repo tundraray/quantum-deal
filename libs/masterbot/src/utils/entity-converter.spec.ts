@@ -1,4 +1,7 @@
-import { convertEntitiesToMarkdown, hasFormattingEntities } from './entity-converter';
+import {
+  convertEntitiesToMarkdown,
+  hasFormattingEntities,
+} from './entity-converter';
 import type { MessageEntity } from '../interfaces';
 
 describe('EntityConverter', () => {
@@ -101,7 +104,12 @@ describe('EntityConverter', () => {
     it('should handle pre entity with language', () => {
       const text = 'const x = 1;';
       const entities: MessageEntity[] = [
-        { type: 'pre', offset: 0, length: 12, language: 'javascript' } as MessageEntity,
+        {
+          type: 'pre',
+          offset: 0,
+          length: 12,
+          language: 'javascript',
+        } as MessageEntity,
       ];
       const result = convertEntitiesToMarkdown(text, entities);
       expect(result).toBe('```javascript\nconst x = 1;\n```');
@@ -140,7 +148,12 @@ describe('EntityConverter', () => {
 
     it('should return true for text_link entity', () => {
       const entities: MessageEntity[] = [
-        { type: 'text_link', offset: 0, length: 5, url: 'https://example.com' } as MessageEntity,
+        {
+          type: 'text_link',
+          offset: 0,
+          length: 5,
+          url: 'https://example.com',
+        } as MessageEntity,
       ];
       expect(hasFormattingEntities(entities)).toBe(true);
     });
