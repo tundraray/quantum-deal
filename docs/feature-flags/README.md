@@ -16,9 +16,9 @@ Quick reference for key terms used throughout this documentation:
 | **Signal Delivery** | Core bot functionality (NOT a feature flag) - all active subscribers receive signals |
 | **Subscription Features** | Set of features available for a specific subscription type/tier |
 | **User Features** | Union of all features from a user's active subscriptions |
-| **TIER_BASED_FILTERING** | System-controlled automatic filtering based on subscription tier (VIP) |
-| **CUSTOM_USER_FILTERING** | User-configurable instrument filtering preferences (VIP) |
-| **Basic Tier** | Entry-level subscription with signal delivery only (no filtering features) |
+| **TIER_BASED_FILTERING** | System-controlled automatic filtering based on subscription tier (All tiers: Basic + VIP) |
+| **CUSTOM_USER_FILTERING** | User-configurable instrument filtering preferences (VIP only) |
+| **Basic Tier** | Entry-level subscription with signal delivery + tier-based filtering |
 | **VIP Tier** | Premium subscription with both filtering features enabled |
 | **Settings JSONB** | JSON field in `user_subscription_features` storing feature-specific configuration |
 | **Feature Template** | Predefined feature set for quick subscription creation (e.g., SIGNALS_VIP) |
@@ -73,8 +73,8 @@ Quick reference for key terms used throughout this documentation:
 
 The system supports **2 filtering features** across subscription tiers:
 
-1. **TIER_BASED_FILTERING** - System-controlled filtering by subscription tier (VIP)
-2. **CUSTOM_USER_FILTERING** - User-configurable custom filtering rules (VIP)
+1. **TIER_BASED_FILTERING** - System-controlled filtering by subscription tier (All tiers: Basic + VIP)
+2. **CUSTOM_USER_FILTERING** - User-configurable custom filtering rules (VIP only)
 
 ## Architecture
 
@@ -174,7 +174,7 @@ Complete end-to-end flow from user command to feature check:
 
 ### Database Schema Relationships
 
-> **⚠️ IMPORTANT - Field Deprecation**: The `subscriptions.scope` field is deprecated and will be removed in a future version. Sector filtering is now stored in `subscription_features.config.sectors`. See [Subscription Scope Migration](#subscription-scope-migration) section below for details.
+> **⚠️ IMPORTANT - Field Deprecation**: The `subscriptions.scope` field is deprecated and will be removed in a future version. Sector filtering is now stored in `subscription_features.config.sectors`. See [database-schema.md](./database-schema.md#subscription-scope-migration) for migration details.
 
 ```
 ┌──────────────────────┐         ┌──────────────────────────┐
@@ -206,139 +206,25 @@ Complete end-to-end flow from user command to feature check:
            │                                         │
            ▼                                         ▼
   ┌─────────────────────────┐          ┌──────────────────────────┐
-  │  user_subscriptions     │          │  Indexes:                │
-  ├─────────────────────────┤          ├──────────────────────────┤
-  │ id (PK)                 │          │ idx_sf_subscription_id   │
-  │ user_id (FK)            │          │ idx_sf_feature_key       │
-  │ subscription_id (FK)    │          │ idx_sf_enabled           │
-  │ is_active               │          └──────────────────────────┘
-  └─────────────────────────┘
+  │  user_subscriptions     │          │  user_subscription_      │
+  ├─────────────────────────┤          │  features                │
+  │ id (PK)                 │          ├──────────────────────────┤
+  │ user_id (FK)            │          │ user_id (FK)             │
+  │ subscription_id (FK)    │          │ feature_key              │
+  │ is_active               │          │ settings (jsonb)         │
+  └─────────────────────────┘          │ is_active                │
+                                       └──────────────────────────┘
 ```
 
-### Subscription Scope Migration
+**Key Relationships:**
+- **subscriptions** → **subscription_features**: Defines which features are available for each subscription tier
+- **users** → **user_subscriptions** → **subscriptions**: Links users to their active subscriptions
+- **users** → **user_subscription_features**: Stores user-specific settings for features they have access to
 
-The `subscriptions.scope` field has been **deprecated** as part of the feature flags architecture refactoring.
-
-**What Changed:**
-- **Before**: Sector filtering stored in `subscriptions.scope` JSONB field
-- **After**: Sector filtering stored in `subscription_features.config.sectors` JSONB field
-
-**Why the Change:**
-- Better separation of concerns (features vs subscriptions)
-- More flexible configuration per feature
-- Supports feature-specific settings independently
-- Aligns with feature flags architecture
-
-**Migration Path:**
-The SQL migration file `libs/db/migrations/20251016161701_hot_johnny_storm.sql` automatically migrates existing `scope` data to `subscription_features.config.sectors` when you run `pnpm db:migrate`.
-
-**Example:**
-```typescript
-// Before (deprecated)
-subscription.scope = ['crypto', 'forex', 'stocks'];
-
-// After (current)
-subscriptionFeatures.config = {
-  sectors: ['crypto', 'forex', 'stocks'],  // Migrated from scope
-  minPriority: 'medium',
-  excludedTypes: ['news']
-};
-```
-
-**Current State:**
-- The `scope` field is still present in the schema for backward compatibility
-- It is marked as `@deprecated` in TypeScript definitions (`libs/db/src/schema/subscriptions.ts`)
-- `SubscriptionsRepository.findBySector()` now queries `subscription_features.config.sectors`
-- The field will be removed in a future major version
-
-**For Developers:**
-- Use `subscription_features.config.sectors` for all new code
-- Do not rely on `subscription.scope` field
-- See [database-schema.md](./database-schema.md) for updated query examples
-
-### Signal Broadcasting with Feature Flags
-
-```
-┌─────────────────────┐
-│  Webhook Received   │
-│  (Trading Signal)   │
-└──────────┬──────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Step 1: findBySector(order.sector)                           │
-│ - Query subscription_features for TIER_BASED_FILTERING       │
-│ - Check config.sectors contains order.sector                 │
-│ - Returns: List of matching subscriptions                    │
-└──────────┬───────────────────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Step 2: Load users with active subscriptions                 │
-│ For each subscription → findActiveUsers()                    │
-└──────────┬───────────────────────────────────────────────────┘
-           │ For each user:
-           ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Step 3: Check if user.isActive (core functionality)          │
-│ if (!user.isActive) → Skip user                              │
-└──────────┬───────────────────────────────────────────────────┘
-           │ ✓ Has active subscription
-           ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Step 4: Check CUSTOM_USER_FILTERING feature                  │
-│ - Does subscription have this feature?                       │
-│   - YES: Query user_subscription_features.settings           │
-│          Check if signal matches user's custom filters       │
-│          If NO match → Skip user                             │
-│   - NO: Continue (no additional filtering)                   │
-└──────────┬───────────────────────────────────────────────────┘
-           │ ✓ Passed all filters
-           ▼
-┌──────────────────────────────────────────────────────────────┐
-│ Step 5: Send signal to user                                  │
-│ bot.telegram.sendMessage(user.telegramId, signal)            │
-└──────────────────────────────────────────────────────────────┘
-```
-
-**Detailed Filter Flow:**
-
-1. **TIER_BASED_FILTERING** (Subscription-level):
-   - Checked in `findBySector()` query
-   - Uses `subscription_features.config.sectors` to filter subscriptions
-   - Only subscriptions with matching sectors are returned
-   - This is an **automatic** filter based on subscription tier
-
-2. **CUSTOM_USER_FILTERING** (User-level):
-   - Checked AFTER finding eligible users
-   - If subscription has this feature:
-     - Query `user_subscription_features` table
-     - Get `settings` JSONB field for this user
-     - Apply user's custom filter rules (e.g., instruments, quiet hours, win rate)
-     - Skip user if signal doesn't match their settings
-   - This is a **user-configurable** filter
-
-**Example Query for Custom Filters:**
-
-```sql
--- Check if user has custom filtering settings
-SELECT settings
-FROM user_subscription_features
-WHERE user_id = $1
-  AND feature_key = 'custom_user_filtering'
-  AND is_active = true;
-
--- settings might contain:
-{
-  "instruments": [15, 21, 28],  -- Only these instrument IDs
-  "quietHours": {
-    "enabled": true,
-    "start": "22:00",
-    "end": "06:00"
-  },
-  "minWinRate": 70
-}
-```
+**For detailed database documentation, see:**
+- [database-schema.md](./database-schema.md) - Complete schema, tables, indexes, migrations
+- [database-schema.md#subscription-scope-migration](./database-schema.md#subscription-scope-migration) - Scope field deprecation details
+- [database-schema.md#signal-broadcasting-with-feature-flags](./database-schema.md#signal-broadcasting-with-feature-flags) - Query patterns for signal broadcasting
 
 ### Layer Architecture
 
@@ -379,7 +265,17 @@ WHERE user_id = $1
 - Easy to query and index
 - Supports feature-specific settings
 
-See [database-schema.md](./database-schema.md) for detailed schema design.
+**user_subscription_features table**
+- Stores user-specific settings for enabled features
+- JSONB settings field for flexible configuration
+- Links to users via telegram_id
+
+**See comprehensive database documentation:**
+- [database-schema.md](./database-schema.md) - Complete schema design, tables, indexes
+- [database-schema.md#table-definitions](./database-schema.md#table-definitions) - Detailed SQL table definitions
+- [database-schema.md#typescript-schema-drizzle-orm](./database-schema.md#typescript-schema-drizzle-orm) - TypeScript/Drizzle ORM schemas
+- [database-schema.md#migration-scripts](./database-schema.md#migration-scripts) - Migration examples
+- [database-schema.md#signal-broadcasting-with-feature-flags](./database-schema.md#signal-broadcasting-with-feature-flags) - Query patterns for broadcasting
 
 ### 2. Feature Flag Enumeration
 
@@ -461,50 +357,46 @@ interface UserWithFeatures extends UserWithSubscriptions {
 
 **Basic Signals (Tier 1)**
 ```typescript
-// No feature flags needed - just active subscription
-const BASIC_SIGNALS_FEATURES = [];
+// Basic tier has tier-based filtering
+const BASIC_SIGNALS_FEATURES = [
+  FeatureFlag.TIER_BASED_FILTERING, // System-controlled sector filtering
+];
 ```
 - Receive all trading signals (core functionality)
-- No filtering options
-- Standard delivery
+- Tier-based filtering by subscription sectors
+- System-controlled (user cannot configure)
 
 **VIP Signals (Tier 2)**
 ```typescript
 const VIP_SIGNALS_FEATURES = [
-  FeatureFlag.TIER_BASED_FILTERING,
-  FeatureFlag.CUSTOM_USER_FILTERING,
+  FeatureFlag.TIER_BASED_FILTERING,   // System-controlled sector filtering
+  FeatureFlag.CUSTOM_USER_FILTERING,  // User-configurable instrument selection
 ];
 ```
 - Core signal delivery (automatic)
-- Tier-based filtering (pre-configured by tier)
-- Custom user filtering (user-configurable rules)
-- Advanced condition builder
-- Filter by symbols, priority levels
+- Tier-based filtering (system-controlled by subscription sectors)
+- Custom user filtering (user chooses specific instruments)
 
 ### 2. Feature-Specific Configuration
 
-**Tier-Based Filtering Config**
+**Tier-Based Filtering Config** (Subscription-level)
 ```typescript
+// Configured in subscription_features.config
 {
   feature: FeatureFlag.TIER_BASED_FILTERING,
   config: {
-    allowedSymbols: ['BTC/USD', 'ETH/USD', 'GOLD'],
-    minPriority: 'medium',
-    excludedTypes: ['news', 'analysis']
+    sectors: ['crypto', 'forex', 'stocks']  // Subscription sectors
   }
 }
 ```
 
-**Custom User Filtering Config**
+**Custom User Filtering Settings** (User-level)
 ```typescript
+// Configured in user_subscription_features.settings
 {
   feature: FeatureFlag.CUSTOM_USER_FILTERING,
-  config: {
-    conditions: [
-      { symbol: 'BTC/USD', minPrice: 40000, maxPrice: 50000 },
-      { symbol: 'ETH/USD', priority: 'high' }
-    ],
-    matchMode: 'any' // or 'all'
+  settings: {
+    symbols: ['GBPUSD.a', 'EURUSD.a', 'BTCUSD.a']  // User-selected symbols
   }
 }
 ```
@@ -519,14 +411,16 @@ const FEATURE_TEMPLATES = {
   // Signals Subscriptions
   SIGNALS_BASIC: {
     name: 'Basic Signals',
-    features: [], // No feature flags - just active subscription
+    features: [
+      FeatureFlag.TIER_BASED_FILTERING, // Tier-based sector filtering
+    ],
   },
 
   SIGNALS_VIP: {
     name: 'VIP Signals',
     features: [
-      FeatureFlag.TIER_BASED_FILTERING,
-      FeatureFlag.CUSTOM_USER_FILTERING,
+      FeatureFlag.TIER_BASED_FILTERING,   // Tier-based sector filtering
+      FeatureFlag.CUSTOM_USER_FILTERING,  // Custom instrument selection
     ],
   },
 };
@@ -553,19 +447,9 @@ const FEATURE_TEMPLATES = {
    await redis.setex(cacheKey, 900, JSON.stringify(features));
    ```
 
-### Query Optimization
-
-```sql
--- Efficient query to load user features
-SELECT DISTINCT sf.feature_key, sf.config
-FROM user_subscriptions us
-JOIN subscription_features sf ON sf.subscription_id = us.subscription_id
-WHERE us.user_id = $1
-  AND us.is_active = true
-  AND us.subscription_id IN (
-    SELECT id FROM subscriptions WHERE is_active = true
-  );
-```
+**For detailed caching and query optimization strategies, see:**
+- [database-schema.md#caching-strategy](./database-schema.md#caching-strategy) - Complete caching patterns
+- [database-schema.md#common-read-queries-used-by-bot](./database-schema.md#common-read-queries-used-by-bot) - Optimized query examples
 
 ## Security Considerations
 

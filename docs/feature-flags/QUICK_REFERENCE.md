@@ -53,15 +53,15 @@ interface UserWithSubscriptions {
 
 ### TIER_BASED_FILTERING
 - **Key**: `tier_based_filtering`
-- **Description**: System-controlled filtering by subscription tier
-- **Tier**: VIP subscriptions
-- **Use Case**: Automatic filtering of signals based on tier level
+- **Description**: System-controlled filtering by subscription sectors
+- **Tier**: All tiers (Basic + VIP)
+- **Use Case**: Automatic filtering of signals based on subscription sector configuration
 
 ### CUSTOM_USER_FILTERING
 - **Key**: `custom_user_filtering`
-- **Description**: User-configurable filtering preferences
-- **Tier**: VIP subscriptions
-- **Use Case**: Allow users to create custom filters for signals
+- **Description**: User-configurable instrument selection
+- **Tier**: VIP tier only
+- **Use Case**: Allow users to select specific instruments to receive signals for
 
 ## Quick Reference by Feature
 
@@ -105,16 +105,22 @@ if (hasFeature(ctx.user, FeatureFlag.CUSTOM_USER_FILTERING)) {
 
 | Template | Features | SQL to Apply |
 |----------|----------|--------------|
-| **SIGNALS_BASIC** | None (core only) | No features needed |
+| **SIGNALS_BASIC** | tier_based_filtering | See SQL below |
 | **SIGNALS_VIP** | tier_based_filtering, custom_user_filtering | See SQL below |
 
 ### Apply Templates via SQL
 
 ```sql
+-- Apply SIGNALS_BASIC template (tier-based filtering only)
+INSERT INTO subscription_features (subscription_id, feature_key, is_enabled, config)
+VALUES (1, 'tier_based_filtering', true, '{"sectors": ["crypto"]}')
+ON CONFLICT (subscription_id, feature_key)
+DO UPDATE SET is_enabled = true, updated_at = NOW();
+
 -- Apply SIGNALS_VIP template (both features)
 INSERT INTO subscription_features (subscription_id, feature_key, is_enabled, config)
 VALUES
-  (1, 'tier_based_filtering', true, '{}'),
+  (1, 'tier_based_filtering', true, '{"sectors": ["crypto", "forex", "stocks"]}'),
   (1, 'custom_user_filtering', true, '{}')
 ON CONFLICT (subscription_id, feature_key)
 DO UPDATE SET is_enabled = true, updated_at = NOW();
@@ -262,21 +268,21 @@ async showSettings(@Ctx() ctx: UserContext) {
     message.push('✅ Trading Signals: Enabled (Core)');
   }
 
-  // VIP features
+  // Tier-based filtering (all tiers)
   if (hasFeature(ctx.user, FeatureFlag.TIER_BASED_FILTERING)) {
-    message.push('✅ Tier-Based Filtering: Active');
-    message.push('   Your Tier: VIP or higher');
-  } else {
-    message.push('🔒 Tier-Based Filtering: Upgrade to VIP');
+    const config = getFeatureConfig(ctx.user, FeatureFlag.TIER_BASED_FILTERING);
+    const sectors = config?.sectors || [];
+    message.push(`✅ Tier-Based Filtering: Active`);
+    message.push(`   Sectors: ${sectors.join(', ')}`);
   }
 
-  // VIP features
+  // Custom filtering (VIP only)
   if (hasFeature(ctx.user, FeatureFlag.CUSTOM_USER_FILTERING)) {
     const config = getFeatureConfig(ctx.user, FeatureFlag.CUSTOM_USER_FILTERING);
-    const filterCount = config?.filters?.length || 0;
-    message.push(`✅ Custom Filters: ${filterCount} active`);
+    const symbols = config?.symbols || [];
+    message.push(`✅ Custom Instrument Selection: ${symbols.length} instruments`);
   } else {
-    message.push('🔒 Custom Filters: Upgrade to VIP');
+    message.push('🔒 Custom Filtering: Upgrade to VIP');
   }
 
   await ctx.reply(message.join('\n'));
@@ -298,8 +304,12 @@ const mockBasicUser: UserWithSubscriptions = {
   isActive: true, // Active subscription for core signal delivery
   createdAt: new Date(),
   activeSubscriptions: [],
-  enabledFeatures: new Set([]), // No feature flags
-  featureConfigs: new Map(),
+  enabledFeatures: new Set([
+    FeatureFlag.TIER_BASED_FILTERING, // Basic has tier-based filtering
+  ]),
+  featureConfigs: new Map([
+    [FeatureFlag.TIER_BASED_FILTERING, { sectors: ['crypto'] }],
+  ]),
 };
 
 const mockVIPUser: UserWithSubscriptions = {
@@ -314,13 +324,17 @@ const mockVIPUser: UserWithSubscriptions = {
   activeSubscriptions: [],
   enabledFeatures: new Set([
     FeatureFlag.TIER_BASED_FILTERING,
+    FeatureFlag.CUSTOM_USER_FILTERING,
   ]),
-  featureConfigs: new Map(),
+  featureConfigs: new Map([
+    [FeatureFlag.TIER_BASED_FILTERING, { sectors: ['crypto', 'forex', 'stocks'] }],
+    [FeatureFlag.CUSTOM_USER_FILTERING, { symbols: [] }],
+  ]),
 };
 
-const mockVIPUserWithAllFeatures: UserWithSubscriptions = {
+const mockVIPUserWithCustomFilters: UserWithSubscriptions = {
   telegramId: 789,
-  username: 'vip_premium_user',
+  username: 'vip_user_custom',
   firstName: 'VIP',
   lastName: 'User',
   lang: 'en',
@@ -333,7 +347,8 @@ const mockVIPUserWithAllFeatures: UserWithSubscriptions = {
     FeatureFlag.CUSTOM_USER_FILTERING,
   ]),
   featureConfigs: new Map([
-    [FeatureFlag.CUSTOM_USER_FILTERING, { maxFilters: 10, filters: [] }],
+    [FeatureFlag.TIER_BASED_FILTERING, { sectors: ['crypto', 'forex'] }],
+    [FeatureFlag.CUSTOM_USER_FILTERING, { symbols: ['BTCUSD.a', 'EURUSD.a'] }],
   ]),
 };
 ```
@@ -341,22 +356,25 @@ const mockVIPUserWithAllFeatures: UserWithSubscriptions = {
 ### Test Feature Check
 
 ```typescript
-it('should allow basic users to access signals', () => {
+it('should allow basic users to access tier-based filtering', () => {
   expect(mockBasicUser.isActive).toBe(true); // Core signal delivery
-  expect(hasFeature(mockBasicUser, FeatureFlag.TIER_BASED_FILTERING)).toBe(false);
-  expect(hasFeature(mockBasicUser, FeatureFlag.CUSTOM_USER_FILTERING)).toBe(false);
+  expect(hasFeature(mockBasicUser, FeatureFlag.TIER_BASED_FILTERING)).toBe(true); // Basic has this
+  expect(hasFeature(mockBasicUser, FeatureFlag.CUSTOM_USER_FILTERING)).toBe(false); // But not this
 });
 
-it('should allow VIP users to access tier filtering', () => {
+it('should allow VIP users to access both features', () => {
   expect(mockVIPUser.isActive).toBe(true); // Core signal delivery
   expect(hasFeature(mockVIPUser, FeatureFlag.TIER_BASED_FILTERING)).toBe(true);
-  expect(hasFeature(mockVIPUser, FeatureFlag.CUSTOM_USER_FILTERING)).toBe(false);
+  expect(hasFeature(mockVIPUser, FeatureFlag.CUSTOM_USER_FILTERING)).toBe(true);
 });
 
-it('should allow VIP users to access all features', () => {
-  expect(mockVIPUserWithAllFeatures.isActive).toBe(true); // Core signal delivery
-  expect(hasFeature(mockVIPUserWithAllFeatures, FeatureFlag.TIER_BASED_FILTERING)).toBe(true);
-  expect(hasFeature(mockVIPUserWithAllFeatures, FeatureFlag.CUSTOM_USER_FILTERING)).toBe(true);
+it('should allow VIP users to have custom filter settings', () => {
+  expect(mockVIPUserWithCustomFilters.isActive).toBe(true); // Core signal delivery
+  expect(hasFeature(mockVIPUserWithCustomFilters, FeatureFlag.TIER_BASED_FILTERING)).toBe(true);
+  expect(hasFeature(mockVIPUserWithCustomFilters, FeatureFlag.CUSTOM_USER_FILTERING)).toBe(true);
+
+  const config = getFeatureConfig(mockVIPUserWithCustomFilters, FeatureFlag.CUSTOM_USER_FILTERING);
+  expect(config?.symbols).toEqual(['BTCUSD.a', 'EURUSD.a']);
 });
 ```
 
@@ -441,8 +459,8 @@ it('should allow VIP users to access all features', () => {
 
 | Tier | Features | Use Case |
 |------|----------|----------|
-| **Basic** | None (core signals only) | Entry-level users, receive all signals |
-| **VIP** | TIER_BASED_FILTERING<br/>CUSTOM_USER_FILTERING | Power users, full customization with both tier-based and custom filtering |
+| **Basic** | TIER_BASED_FILTERING | Entry-level users, signals filtered by subscription sectors |
+| **VIP** | TIER_BASED_FILTERING<br/>CUSTOM_USER_FILTERING | Power users, tier filtering + custom instrument selection |
 
 ## Feature Management (Database Level)
 
@@ -451,9 +469,9 @@ it('should allow VIP users to access all features', () => {
 ### Enable a Feature (SQL)
 
 ```sql
--- Basic → VIP: Enable tier-based filtering
+-- Basic → VIP: Enable custom user filtering
 INSERT INTO subscription_features (subscription_id, feature_key, is_enabled, config)
-VALUES (1, 'tier_based_filtering', true, '{}')
+VALUES (1, 'custom_user_filtering', true, '{}')
 ON CONFLICT (subscription_id, feature_key)
 DO UPDATE SET is_enabled = true, updated_at = NOW();
 ```
@@ -470,11 +488,9 @@ WHERE subscription_id = 1 AND feature_key = 'tier_based_filtering';
 ### Apply Feature Template (SQL)
 
 ```sql
--- Basic → VIP: Add both filtering features
+-- Basic → VIP: Add custom user filtering (tier-based already exists)
 INSERT INTO subscription_features (subscription_id, feature_key, is_enabled, config)
-VALUES
-  (1, 'tier_based_filtering', true, '{}'),
-  (1, 'custom_user_filtering', true, '{"maxFilters": 10, "filters": []}')
+VALUES (1, 'custom_user_filtering', true, '{}')
 ON CONFLICT (subscription_id, feature_key)
 DO UPDATE SET is_enabled = true, config = EXCLUDED.config, updated_at = NOW();
 ```

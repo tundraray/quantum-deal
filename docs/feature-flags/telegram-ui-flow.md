@@ -105,7 +105,7 @@ User clicked "💱 Валюты (28)":
 
 | Button | Action | Result |
 |--------|--------|--------|
-| ☑️/☐ EURUSD.a | `toggle:1` | Toggle selection for instrument ID 1 |
+| ☑️/☐ EURUSD.a | `toggle:EURUSD.a` | Toggle selection for EURUSD.a symbol |
 | ✅ Выбрать все валюты | `select_all_group:forex` | Select all 28 Forex instruments |
 | 🗑️ Отменить выбор | `deselect_all_group:forex` | Deselect all 28 Forex instruments |
 | 💾 Сохранить | `save:forex` | Persist changes to database |
@@ -525,10 +525,10 @@ interface FilterSessionState {
   sessionId: string;
 
   // Original state (from database)
-  originalFilters: Set<number>; // Instrument IDs
+  originalFilters: Set<string>; // Symbol names (e.g., 'EURUSD.a', 'GBPUSD.a')
 
   // Working copy (in session)
-  sessionFilters: Set<number>;  // Modified during navigation
+  sessionFilters: Set<string>;  // Modified during navigation
 
   // Navigation state
   currentScreen: ScreenType;
@@ -551,15 +551,15 @@ interface FilterSessionState {
   userId: 123456789,
   sessionId: 'sess_abc123',
 
-  originalFilters: Set([1, 5, 12]), // EURUSD, GBPUSD, USDCAD from DB
+  originalFilters: Set(['EURUSD.a', 'GBPUSD.a', 'USDCAD.a']), // From DB
 
-  sessionFilters: Set([1, 5, 12, 28, 15]), // Added USDJPY, EURJPY in session
+  sessionFilters: Set(['EURUSD.a', 'GBPUSD.a', 'USDCAD.a', 'USDJPY.a', 'EURJPY.a']), // Added USDJPY, EURJPY in session
 
   currentScreen: 'forex_list',
   currentPage: 1,
   breadcrumb: ['main', 'forex'],
 
-  isDirty: true,  // Has unsaved changes (2 new instruments)
+  isDirty: true,  // Has unsaved changes (2 new symbols)
   createdAt: '2025-10-15T10:30:00Z',
   lastModified: '2025-10-15T10:32:15Z'
 }
@@ -645,7 +645,7 @@ interface FilterSessionState {
 // Toggle instrument
 {
   action: 'toggle_instrument',
-  instrumentId: 15  // EURUSD.a
+  symbol: 'EURUSD.a'
 }
 
 // Select all in group
@@ -710,7 +710,7 @@ interface FilterSessionState {
 // Toggle instrument
 {
   action: 'toggle_instrument',
-  instrumentId: 42
+  symbol: 'Adidas.a'
 }
 
 // Select all in subgroup
@@ -835,7 +835,7 @@ function buildMainMenuKeyboard(
 function buildGroupListKeyboard(
   group: InstrumentGroup,
   instruments: Instrument[],
-  userSelection: Set<number>,
+  userSelection: Set<string>,  // Set of symbol names
   currentPage: number
 ): InlineKeyboardMarkup {
   const buttons: InlineKeyboardButton[][] = [];
@@ -858,13 +858,13 @@ function buildGroupListKeyboard(
 
   // Instrument buttons (10 rows, 1 per instrument)
   for (const instrument of pageInstruments) {
-    const isSelected = userSelection.has(instrument.id);
+    const isSelected = userSelection.has(instrument.symbol);
     const checkbox = isSelected ? '☑️' : '☐';
 
     buttons.push([
       Markup.button.callback(
         `${checkbox} ${instrument.symbol}`,
-        JSON.stringify({ action: 'toggle_instrument', instrumentId: instrument.id })
+        JSON.stringify({ action: 'toggle_instrument', symbol: instrument.symbol })
       )
     ]);
   }
@@ -958,13 +958,13 @@ export class InstrumentFilterScene {
     await this.showGroupList(ctx, group);
   }
 
-  @Action(/^toggle_instrument:(\d+)$/)
+  @Action(/^toggle_instrument:(.+)$/)
   async onToggleInstrument(@Ctx() ctx: SceneContext) {
     const callbackData = JSON.parse(ctx.callbackQuery.data);
-    const instrumentId = callbackData.instrumentId;
+    const symbol = callbackData.symbol;
 
     // Toggle in session state
-    await this.sessionService.toggleInstrument(ctx.from.id, instrumentId);
+    await this.sessionService.toggleInstrument(ctx.from.id, symbol);
 
     // Refresh current screen
     await this.refreshCurrentScreen(ctx);
@@ -1004,16 +1004,16 @@ export class FilterSessionService {
   private sessions = new Map<number, FilterSessionState>();
 
   async initializeSession(userId: number): Promise<void> {
-    // Load current filters from DB
+    // Load current filters from DB (user_subscription_features.settings.symbols)
     const userFilters = await this.filterService.getUserFilters(userId);
-    const filterIds = new Set(userFilters.map(f => f.id));
+    const filterSymbols = new Set(userFilters.map(f => f.symbol));
 
     // Create session state
     const session: FilterSessionState = {
       userId,
       sessionId: uuidv4(),
-      originalFilters: new Set(filterIds),
-      sessionFilters: new Set(filterIds),
+      originalFilters: new Set(filterSymbols),
+      sessionFilters: new Set(filterSymbols),
       currentScreen: 'main',
       currentPage: 0,
       breadcrumb: ['main'],
@@ -1030,14 +1030,14 @@ export class FilterSessionService {
     }, 15 * 60 * 1000);
   }
 
-  async toggleInstrument(userId: number, instrumentId: number): Promise<void> {
+  async toggleInstrument(userId: number, symbol: string): Promise<void> {
     const session = this.sessions.get(userId);
     if (!session) throw new Error('Session not found');
 
-    if (session.sessionFilters.has(instrumentId)) {
-      session.sessionFilters.delete(instrumentId);
+    if (session.sessionFilters.has(symbol)) {
+      session.sessionFilters.delete(symbol);
     } else {
-      session.sessionFilters.add(instrumentId);
+      session.sessionFilters.add(symbol);
     }
 
     session.isDirty = !this.areEqual(session.originalFilters, session.sessionFilters);
@@ -1050,7 +1050,7 @@ export class FilterSessionService {
 
     const groupInstruments = await this.instrumentService.getInstrumentsByGroup(group);
     for (const instrument of groupInstruments) {
-      session.sessionFilters.add(instrument.id);
+      session.sessionFilters.add(instrument.symbol);
     }
 
     session.isDirty = true;
@@ -1063,7 +1063,7 @@ export class FilterSessionService {
 
     const groupInstruments = await this.instrumentService.getInstrumentsByGroup(group);
     for (const instrument of groupInstruments) {
-      session.sessionFilters.delete(instrument.id);
+      session.sessionFilters.delete(instrument.symbol);
     }
 
     session.isDirty = true;
@@ -1079,7 +1079,7 @@ export class FilterSessionService {
     session.isDirty = false;
   }
 
-  private areEqual(set1: Set<number>, set2: Set<number>): boolean {
+  private areEqual(set1: Set<string>, set2: Set<string>): boolean {
     if (set1.size !== set2.size) return false;
     for (const item of set1) {
       if (!set2.has(item)) return false;

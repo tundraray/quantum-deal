@@ -1,5 +1,9 @@
 # Feature Flags Database Schema
 
+## Overview
+
+This document provides comprehensive database schema documentation for the feature flags system, including table definitions, relationships, migrations, queries, and optimization strategies.
+
 ## Important: Database-Level Management
 
 **Features are managed directly in the database**, not through bot API methods:
@@ -79,6 +83,8 @@ WHERE subscription_id = 1 AND feature_key = 'tier_based_filtering';
 - Both old and new approaches coexist during transition period
 - The field will be removed in a future major version (v2.0+)
 
+## Table Definitions
+
 ### subscription_features Table
 
 This table defines which features are **available** (enabled/disabled) for each subscription tier.
@@ -152,9 +158,9 @@ CREATE INDEX idx_user_subscription_features_jsonb
   ON user_subscription_features USING GIN(settings);
 ```
 
-### TypeScript Schema (Drizzle ORM)
+## TypeScript Schema (Drizzle ORM)
 
-#### subscription_features Schema
+### subscription_features Schema
 
 ```typescript
 // libs/db/src/schema/subscription-features.ts
@@ -246,7 +252,7 @@ export type SubscriptionFeature = typeof subscriptionFeatures.$inferSelect;
 export type NewSubscriptionFeature = typeof subscriptionFeatures.$inferInsert;
 ```
 
-#### user_subscription_features Schema
+### user_subscription_features Schema
 
 ```typescript
 // libs/db/src/schema/user-subscription-features.ts
@@ -277,8 +283,8 @@ export type UserSubscriptionFeatures = Record<string, unknown>;
  * This allows users to customize how enabled features behave.
  *
  * Examples:
- * - TIER_BASED_FILTERING: { minWinRate: 70, categories: ['crypto', 'forex'] }
- * - CUSTOM_USER_FILTERING: { filterMode: 'whitelist', quietHours: { start: '22:00', end: '06:00' } }
+ * - TIER_BASED_FILTERING: User configures at subscription level via subscription_features.config
+ * - CUSTOM_USER_FILTERING: User configures personal settings via user_subscription_features.settings
  */
 export const userSubscriptionFeatures = pgTable(
   'user_subscription_features',
@@ -316,6 +322,49 @@ export type UserSubscriptionFeature = typeof userSubscriptionFeatures.$inferSele
 export type NewUserSubscriptionFeature = typeof userSubscriptionFeatures.$inferInsert;
 ```
 
+## Database Schema Relationships
+
+> **⚠️ IMPORTANT - Field Deprecation**: The `subscriptions.scope` field is deprecated and will be removed in a future version. Sector filtering is now stored in `subscription_features.config.sectors`.
+
+```
+┌──────────────────────┐         ┌──────────────────────────┐
+│      users           │         │     subscriptions        │
+├──────────────────────┤         ├──────────────────────────┤
+│ telegram_id (PK)     │         │ id (PK)                  │
+│ username             │         │ name                     │
+│ is_active            │         │ scope (DEPRECATED ⚠️)    │
+│ created_at           │         │ type                     │
+└──────────┬───────────┘         │ is_active                │
+           │                     └───────────┬──────────────┘
+           │                                 │
+           │    ┌────────────────────────────┴───────────┐
+           │    │                                        │
+           │    ▼                                        ▼
+           │  ┌──────────────────────────────────────────────────┐
+           │  │          subscription_features                   │
+           │  ├──────────────────────────────────────────────────┤
+           │  │ id (PK)                                          │
+           │  │ subscription_id (FK → subscriptions.id)          │
+           └──│ feature_key: tier_based_filtering                │
+              │            custom_user_filtering                 │
+              │   Note: Signal delivery is core functionality    │
+              │ is_enabled (boolean)                             │
+              │ config (jsonb) ← sectors stored here            │
+              └─────────────────┬────────────────────────────────┘
+                                │
+           ┌────────────────────┴────────────────────┐
+           │                                         │
+           ▼                                         ▼
+  ┌─────────────────────────┐          ┌──────────────────────────┐
+  │  user_subscriptions     │          │  Indexes:                │
+  ├─────────────────────────┤          ├──────────────────────────┤
+  │ id (PK)                 │          │ idx_sf_subscription_id   │
+  │ user_id (FK)            │          │ idx_sf_feature_key       │
+  │ subscription_id (FK)    │          │ idx_sf_enabled           │
+  │ is_active               │          └──────────────────────────┘
+  └─────────────────────────┘
+```
+
 ### Table Relationships
 
 ```
@@ -339,9 +388,299 @@ users
 3. User configures personal settings via `user_subscription_features` (how does user want to use it?)
 4. Bot reads both tables to determine: (1) Does user have access? (2) What are user's preferences?
 
-### Example Data
+## Subscription Scope Migration
 
-#### Example 1: User with VIP Subscription
+The `subscriptions.scope` field has been **deprecated** as part of the feature flags architecture refactoring.
+
+**What Changed:**
+- **Before**: Sector filtering stored in `subscriptions.scope` JSONB field
+- **After**: Sector filtering stored in `subscription_features.config.sectors` JSONB field
+
+**Why the Change:**
+- Better separation of concerns (features vs subscriptions)
+- More flexible configuration per feature
+- Supports feature-specific settings independently
+- Aligns with feature flags architecture
+
+**Migration Path:**
+The SQL migration file `libs/db/migrations/20251016161701_hot_johnny_storm.sql` automatically migrates existing `scope` data to `subscription_features.config.sectors` when you run `pnpm db:migrate`.
+
+**Example:**
+```typescript
+// Before (deprecated)
+subscription.scope = ['crypto', 'forex', 'stocks'];
+
+// After (current)
+subscriptionFeatures.config = {
+  sectors: ['crypto', 'forex', 'stocks']  // Migrated from scope
+};
+```
+
+**Current State:**
+- The `scope` field is still present in the schema for backward compatibility
+- It is marked as `@deprecated` in TypeScript definitions (`libs/db/src/schema/subscriptions.ts`)
+- `SubscriptionsRepository.findBySector()` now queries `subscription_features.config.sectors`
+- The field will be removed in a future major version
+
+**For Developers:**
+- Use `subscription_features.config.sectors` for all new code
+- Do not rely on `subscription.scope` field
+- See query examples below for updated patterns
+
+## Signal Broadcasting with Feature Flags
+
+This section explains how feature flags integrate with signal broadcasting, including critical database query patterns.
+
+### Broadcasting Flow
+
+```
+┌─────────────────────┐
+│  Webhook Received   │
+│  (Trading Signal)   │
+└──────────┬──────────┘
+           │
+           ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Step 1: findBySector(order.sector)                           │
+│ - Query subscription_features for TIER_BASED_FILTERING       │
+│ - Check config.sectors contains order.sector                 │
+│ - Returns: List of matching subscriptions                    │
+│                                                               │
+│ ⚠️ IMPORTANT: For each subscription returned:                │
+│ - Check if subscription has CUSTOM_USER_FILTERING feature    │
+│ - If YES: Load user_subscription_features for that feature   │
+│ - Return settings from user_subscription_features            │
+└──────────┬───────────────────────────────────────────────────┘
+           │
+           ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Step 2: Load users with active subscriptions                 │
+│ For each subscription → findActiveUsers()                    │
+└──────────┬───────────────────────────────────────────────────┘
+           │ For each user:
+           ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Step 3: Check if user.isActive (core functionality)          │
+│ if (!user.isActive) → Skip user                              │
+└──────────┬───────────────────────────────────────────────────┘
+           │ ✓ Has active subscription
+           ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Step 4: Apply CUSTOM_USER_FILTERING (if available)           │
+│ - Use settings returned from Step 1                          │
+│ - Apply user's custom filter rules from settings field       │
+│ - Check if signal matches user's configured filters          │
+│ - If NO match → Skip user                                    │
+│ - If NO settings or feature not available → Continue         │
+└──────────┬───────────────────────────────────────────────────┘
+           │ ✓ Passed all filters
+           ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Step 5: Send signal to user                                  │
+│ bot.telegram.sendMessage(user.telegramId, signal)            │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Detailed Filter Flow
+
+1. **TIER_BASED_FILTERING** (Subscription-level):
+   - Checked in `findBySector()` query
+   - Uses `subscription_features.config.sectors` to filter subscriptions
+   - Only subscriptions with matching sectors are returned
+   - This is an **automatic** filter based on subscription tier
+
+2. **CUSTOM_USER_FILTERING** (User-level):
+   - ⚠️ **IMPORTANT**: Check during `findBySector()` execution
+   - For each subscription returned by TIER_BASED_FILTERING:
+     1. Check if subscription has `CUSTOM_USER_FILTERING` feature enabled
+     2. If YES: Query `user_subscription_features` table for this feature
+     3. Get `settings` JSONB field containing user's filter configuration
+     4. Return this settings data along with subscription info
+   - When processing users:
+     - Apply user's custom filter rules from the settings
+     - Check if signal matches their configured filters (instruments, quiet hours, win rate, etc.)
+     - Skip user if signal doesn't match their settings
+     - If no settings found or feature not available → Continue (no additional filtering)
+   - This is a **user-configurable** filter
+
+### findBySector() Implementation
+
+**Purpose**: Find all subscriptions that match the signal's sector AND check for CUSTOM_USER_FILTERING.
+
+```typescript
+// libs/db/src/repositories/subscriptions.repository.ts
+async findBySector(sector: string): Promise<SubscriptionWithCustomFiltering[]> {
+  // Query subscription_features for subscriptions with TIER_BASED_FILTERING
+  // that have this sector in their config.sectors array
+  const result = await this.db
+    .select({
+      subscriptionId: subscriptions.id,
+      subscriptionName: subscriptions.name,
+      hasCustomFiltering: sql<boolean>`
+        CASE WHEN sf_custom.is_enabled = true THEN true ELSE false END
+      `,
+    })
+    .from(subscriptions)
+    .innerJoin(
+      subscriptionFeatures,
+      eq(subscriptions.id, subscriptionFeatures.subscriptionId)
+    )
+    .leftJoin(
+      sql`subscription_features sf_custom`,
+      sql`subscriptions.id = sf_custom.subscription_id AND sf_custom.feature_key = 'custom_user_filtering'`
+    )
+    .where(
+      and(
+        eq(subscriptions.isActive, true),
+        eq(subscriptionFeatures.featureKey, 'tier_based_filtering'),
+        eq(subscriptionFeatures.isEnabled, true),
+        sql`${subscriptionFeatures.config}->>'sectors' @> ${JSON.stringify([sector])}`
+      )
+    );
+
+  return result;
+}
+```
+
+**SQL Alternative**:
+
+```sql
+-- Find subscriptions by sector with custom filtering check
+SELECT
+  s.id as subscription_id,
+  s.name as subscription_name,
+  CASE WHEN sf_custom.is_enabled = true THEN true ELSE false END as has_custom_filtering
+FROM subscriptions s
+INNER JOIN subscription_features sf_tier ON s.id = sf_tier.subscription_id
+LEFT JOIN subscription_features sf_custom ON
+  s.id = sf_custom.subscription_id
+  AND sf_custom.feature_key = 'custom_user_filtering'
+WHERE s.is_active = true
+  AND sf_tier.feature_key = 'tier_based_filtering'
+  AND sf_tier.is_enabled = true
+  AND sf_tier.config->>'sectors' @> '["crypto"]';
+```
+
+### Loading User Custom Filter Settings
+
+**When**: After finding subscriptions with CUSTOM_USER_FILTERING enabled
+
+```typescript
+// For each subscription with hasCustomFiltering = true
+async getUserCustomFilterSettings(
+  subscriptionId: number,
+  instrumentId: number
+): Promise<UserCustomFilterSettings[]> {
+  const result = await this.db
+    .select({
+      userId: userSubscriptionFeatures.userId,
+      settings: userSubscriptionFeatures.settings,
+    })
+    .from(userSubscriptionFeatures)
+    .innerJoin(
+      userSubscriptions,
+      eq(userSubscriptionFeatures.userId, userSubscriptions.userId)
+    )
+    .where(
+      and(
+        eq(userSubscriptions.subscriptionId, subscriptionId),
+        eq(userSubscriptions.isActive, true),
+        eq(userSubscriptionFeatures.featureKey, 'custom_user_filtering'),
+        eq(userSubscriptionFeatures.isActive, true)
+      )
+    );
+
+  // Filter by instrument ID if present in settings
+  return result.filter((user) => {
+    const instruments = user.settings?.instruments as number[] | undefined;
+    if (!instruments || instruments.length === 0) {
+      return true; // No filter configured, include user
+    }
+    return instruments.includes(instrumentId);
+  });
+}
+```
+
+**SQL Alternative**:
+
+```sql
+-- Load user custom filter settings for a subscription
+SELECT
+  usf.user_id,
+  usf.settings
+FROM user_subscription_features usf
+INNER JOIN user_subscriptions us ON usf.user_id = us.user_id
+WHERE us.subscription_id = $1
+  AND us.is_active = true
+  AND usf.feature_key = 'custom_user_filtering'
+  AND usf.is_active = true;
+
+-- settings might contain:
+{
+  "symbols": ["GBPUSD.a", "EURUSD.a", "BTCUSD.a"]  -- Only these symbol names
+}
+```
+
+### Complete Broadcasting Query Example
+
+```typescript
+// Complete flow for signal broadcasting
+async broadcastSignal(signal: TradingSignal): Promise<void> {
+  // Step 1: Find subscriptions by sector
+  const subscriptions = await subscriptionsRepository.findBySector(signal.sector);
+
+  for (const subscription of subscriptions) {
+    // Step 2: Load users for this subscription
+    const users = await userSubscriptionsRepository.findActiveUsers(subscription.subscriptionId);
+
+    for (const user of users) {
+      // Step 3: Check if user is active
+      if (!user.isActive) continue;
+
+      // Step 4: Apply CUSTOM_USER_FILTERING if available
+      if (subscription.hasCustomFiltering) {
+        const settings = await this.getUserCustomFilterSettings(
+          subscription.subscriptionId,
+          signal.instrumentId
+        );
+
+        const userSettings = settings.find(s => s.userId === user.id);
+
+        if (userSettings) {
+          // Apply user's custom filters
+          if (!this.matchesCustomFilters(signal, userSettings.settings)) {
+            continue; // Skip user - doesn't match their filters
+          }
+        }
+      }
+
+      // Step 5: Send signal to user
+      await bot.telegram.sendMessage(user.telegramId, formatSignal(signal));
+    }
+  }
+}
+
+private matchesCustomFilters(signal: TradingSignal, settings: any): boolean {
+  // Check symbols (only filter implemented)
+  const { symbols } = settings;
+
+  // No symbol filter configured = allow all signals
+  if (!symbols || symbols.length === 0) {
+    return true;
+  }
+
+  // Check if signal symbol is in user's whitelist
+  if (!symbols.includes(signal.symbol)) {
+    return false;
+  }
+
+  return true;
+}
+```
+
+## Example Data
+
+### Example 1: User with VIP Subscription
 
 **User 123 with VIP subscription:**
 
@@ -349,25 +688,25 @@ users
 ```sql
 subscription_id | feature_key             | is_enabled | config
 ----------------|-------------------------|------------|-------
-2               | tier_based_filtering    | true       | {}
+2               | tier_based_filtering    | true       | {"sectors": ["crypto", "forex"]}
 2               | custom_user_filtering   | true       | {}
 ```
 
 **user_subscription_features** (user's personal configuration):
 ```sql
-user_id | feature_key             | settings                                  | is_active
---------|-------------------------|-------------------------------------------|----------
-123     | tier_based_filtering    | {"minWinRate": 70, "categories": ["crypto", "forex"], "excludeWeekends": true} | true
-123     | custom_user_filtering   | {"instruments": [15, 21, 28, 37, 38]} | true
+user_id | feature_key             | settings                                     | is_active
+--------|-------------------------|----------------------------------------------|----------
+123     | custom_user_filtering   | {"symbols": ["GBPUSD.a", "EURUSD.a", "USDJPY.a", "BTCUSD.a", "ETHUSD.a"]} | true
 ```
 
 **Interpretation**:
 - User 123 has VIP subscription (id=2)
 - VIP subscription has both filtering features enabled
-- User 123 configured tier filtering: min 70% win rate, crypto/forex only, no weekends
-- User 123 configured custom filtering: 5 instruments selected (EURUSD, GBPUSD, USDJPY, BTCUSD, ETHUSD)
+- VIP subscription's TIER_BASED_FILTERING includes crypto and forex sectors
+- User 123 configured custom filtering: 5 symbols selected (EURUSD.a, GBPUSD.a, USDJPY.a, BTCUSD.a, ETHUSD.a)
+- Note: TIER_BASED_FILTERING is configured at subscription level, not user level
 
-#### Example 2: User with Basic Subscription
+### Example 2: User with Basic Subscription
 
 **User 456 with Basic subscription:**
 
@@ -375,7 +714,7 @@ user_id | feature_key             | settings                                  | 
 ```sql
 subscription_id | feature_key             | is_enabled | config
 ----------------|-------------------------|------------|-------
-1               | (no entries)            |            |
+1               | tier_based_filtering    | true       | {"sectors": ["crypto"]}
 ```
 
 **user_subscription_features** (user's personal configuration):
@@ -387,48 +726,10 @@ user_id | feature_key             | settings                                  | 
 
 **Interpretation**:
 - User 456 has Basic subscription (id=1)
-- Basic subscription has NO feature flags (signal delivery is core functionality)
-- User 456 has no settings because no features are available
-- User 456 receives all signals (default behavior, no filtering)
-
-## Alternative Approach: JSONB Column
-
-If you prefer simplicity over flexibility, you can add a JSONB column to the subscriptions table:
-
-```sql
--- Add to existing subscriptions table
-ALTER TABLE subscriptions
-ADD COLUMN features JSONB DEFAULT '{}';
-
--- Example data structure:
-{
-  "basic_signals": { "enabled": true },
-  "event_filtering": { "enabled": true },
-  "export_data": {
-    "enabled": true,
-    "config": {
-      "maxExportsPerDay": 50,
-      "formats": ["csv", "json"]
-    }
-  }
-}
-
--- Index for JSONB queries
-CREATE INDEX idx_subscriptions_features
-  ON subscriptions USING GIN (features);
-```
-
-**Pros:**
-- Simpler schema (no new table)
-- Faster writes (no JOIN needed)
-- All data in one place
-
-**Cons:**
-- Harder to query specific features across subscriptions
-- No referential integrity for feature keys
-- Complex JSONB queries for feature lookups
-- Harder to analyze feature usage
-- Less type-safe
+- Basic subscription has TIER_BASED_FILTERING (available on all tiers)
+- Basic subscription's TIER_BASED_FILTERING includes crypto sector only
+- User 456 has no settings because TIER_BASED_FILTERING is not user-configurable
+- User 456 receives signals filtered by subscription sectors (crypto only)
 
 ## Migration Scripts
 
@@ -528,7 +829,7 @@ export async function seedFeatureFlags() {
     let features: FeatureFlag[] = [];
 
     // Determine features based on subscription type and name
-    // Note: Signal delivery is core - Basic tier has no feature flags
+    // Note: Signal delivery is core functionality, not a feature flag
     if (subscription.type === 'signals') {
       const name = subscription.name.toLowerCase();
 
@@ -538,9 +839,11 @@ export async function seedFeatureFlags() {
           FeatureFlag.TIER_BASED_FILTERING,
           FeatureFlag.CUSTOM_USER_FILTERING,
         ];
-      } else {
-        // Basic Signals: No feature flags (receives all signals)
-        features = [];
+      } else if (name.includes('basic')) {
+        // Basic Signals: TIER_BASED_FILTERING only
+        features = [
+          FeatureFlag.TIER_BASED_FILTERING,
+        ];
       }
     }
 
@@ -577,9 +880,9 @@ VALUES (1, 'tier_based_filtering', true, '{}')
 ON CONFLICT (subscription_id, feature_key)
 DO UPDATE SET is_enabled = true, updated_at = NOW();
 
--- Enable with custom configuration
+-- Enable with custom configuration (e.g., sectors for tier-based filtering)
 INSERT INTO subscription_features (subscription_id, feature_key, is_enabled, config)
-VALUES (1, 'custom_user_filtering', true, '{"maxFilters": 10, "filters": []}')
+VALUES (1, 'tier_based_filtering', true, '{"sectors": ["crypto", "forex"]}')
 ON CONFLICT (subscription_id, feature_key)
 DO UPDATE SET is_enabled = true, config = EXCLUDED.config, updated_at = NOW();
 ```
@@ -603,7 +906,7 @@ WHERE subscription_id = 1 AND feature_key = 'tier_based_filtering';
 -- Apply VIP template (both features)
 INSERT INTO subscription_features (subscription_id, feature_key, is_enabled, config)
 VALUES
-  (2, 'tier_based_filtering', true, '{}'),
+  (2, 'tier_based_filtering', true, '{"sectors": ["crypto", "forex", "stocks"]}'),
   (2, 'custom_user_filtering', true, '{}')
 ON CONFLICT (subscription_id, feature_key)
 DO UPDATE SET is_enabled = true, updated_at = NOW();
@@ -614,7 +917,7 @@ DO UPDATE SET is_enabled = true, updated_at = NOW();
 ```sql
 -- Enable feature for multiple subscriptions
 INSERT INTO subscription_features (subscription_id, feature_key, is_enabled, config)
-SELECT id, 'tier_based_filtering', true, '{}'
+SELECT id, 'tier_based_filtering', true, '{"sectors": ["crypto"]}'
 FROM subscriptions
 WHERE type = 'signals' AND name ILIKE '%vip%'
 ON CONFLICT (subscription_id, feature_key)
@@ -631,13 +934,13 @@ WHERE feature_key = 'tier_based_filtering';
 ```sql
 -- Update configuration for existing feature
 UPDATE subscription_features
-SET config = '{"maxFilters": 20, "filters": []}', updated_at = NOW()
-WHERE subscription_id = 1 AND feature_key = 'custom_user_filtering';
+SET config = '{"sectors": ["crypto", "forex", "stocks"]}', updated_at = NOW()
+WHERE subscription_id = 1 AND feature_key = 'tier_based_filtering';
 
 -- Merge new config with existing (PostgreSQL jsonb)
 UPDATE subscription_features
 SET config = config || '{"newOption": true}'::jsonb, updated_at = NOW()
-WHERE subscription_id = 1 AND feature_key = 'custom_user_filtering';
+WHERE subscription_id = 1 AND feature_key = 'tier_based_filtering';
 ```
 
 ### Feature Audit Queries
@@ -664,17 +967,12 @@ ORDER BY s.name;
 ### Save User Settings for a Feature
 
 ```sql
--- User 123 configures tier-based filtering
-INSERT INTO user_subscription_features (user_id, feature_key, settings, is_active)
-VALUES (123, 'tier_based_filtering', '{"minWinRate": 70, "categories": ["crypto", "forex"], "excludeWeekends": true}', true)
-ON CONFLICT (user_id, feature_key)
-DO UPDATE SET
-  settings = EXCLUDED.settings,
-  updated_at = NOW();
+-- Note: TIER_BASED_FILTERING is configured at subscription level, not user level
+-- Users cannot configure tier-based filtering settings
 
--- User 123 configures custom filtering
+-- User 123 configures custom filtering (VIP only)
 INSERT INTO user_subscription_features (user_id, feature_key, settings, is_active)
-VALUES (123, 'custom_user_filtering', '{"filterMode": "whitelist", "quietHours": {"enabled": true, "start": "22:00", "end": "06:00", "timezone": "Europe/Moscow"}}', true)
+VALUES (123, 'custom_user_filtering', '{"symbols": ["GBPUSD.a", "EURUSD.a", "BTCUSD.a"]}', true)
 ON CONFLICT (user_id, feature_key)
 DO UPDATE SET
   settings = EXCLUDED.settings,
@@ -684,19 +982,23 @@ DO UPDATE SET
 ### Update Specific Settings
 
 ```sql
--- Update only quiet hours (merge with existing settings)
+-- Update symbols list (merge with existing settings)
 UPDATE user_subscription_features
 SET
-  settings = settings || '{"quietHours": {"enabled": true, "start": "23:00", "end": "07:00"}}'::jsonb,
+  settings = jsonb_set(settings, '{symbols}', '["GBPUSD.a", "EURUSD.a", "BTCUSD.a", "ETHUSD.a"]'::jsonb),
   updated_at = NOW()
 WHERE user_id = 123 AND feature_key = 'custom_user_filtering';
 
--- Update only categories
+-- Add a new symbol to existing list
 UPDATE user_subscription_features
 SET
-  settings = jsonb_set(settings, '{categories}', '["crypto"]'::jsonb),
+  settings = jsonb_set(
+    settings,
+    '{symbols}',
+    (settings->'symbols')::jsonb || '["USDJPY.a"]'::jsonb
+  ),
   updated_at = NOW()
-WHERE user_id = 123 AND feature_key = 'tier_based_filtering';
+WHERE user_id = 123 AND feature_key = 'custom_user_filtering';
 ```
 
 ### Deactivate User Settings
@@ -705,25 +1007,25 @@ WHERE user_id = 123 AND feature_key = 'tier_based_filtering';
 -- Temporarily disable settings (user can re-enable)
 UPDATE user_subscription_features
 SET is_active = false, updated_at = NOW()
-WHERE user_id = 123 AND feature_key = 'tier_based_filtering';
+WHERE user_id = 123 AND feature_key = 'custom_user_filtering';
 
 -- Re-enable settings
 UPDATE user_subscription_features
 SET is_active = true, updated_at = NOW()
-WHERE user_id = 123 AND feature_key = 'tier_based_filtering';
+WHERE user_id = 123 AND feature_key = 'custom_user_filtering';
 ```
 
 ### Reset to Default Settings
 
 ```sql
--- Reset to defaults (empty settings object)
+-- Reset to defaults (empty symbols array = receive all signals)
 UPDATE user_subscription_features
-SET settings = '{}', updated_at = NOW()
-WHERE user_id = 123 AND feature_key = 'tier_based_filtering';
+SET settings = '{"symbols": []}', updated_at = NOW()
+WHERE user_id = 123 AND feature_key = 'custom_user_filtering';
 
--- Or delete the record entirely
+-- Or delete the record entirely (same effect - receive all signals)
 DELETE FROM user_subscription_features
-WHERE user_id = 123 AND feature_key = 'tier_based_filtering';
+WHERE user_id = 123 AND feature_key = 'custom_user_filtering';
 ```
 
 ### Get User Settings
@@ -736,11 +1038,11 @@ WHERE user_id = 123
   AND is_active = true
 ORDER BY feature_key;
 
--- Get settings for a specific feature
+-- Get custom filtering settings for a user
 SELECT settings
 FROM user_subscription_features
 WHERE user_id = 123
-  AND feature_key = 'tier_based_filtering'
+  AND feature_key = 'custom_user_filtering'
   AND is_active = true;
 
 -- Get settings with feature availability check
@@ -763,33 +1065,33 @@ WHERE ufs.user_id = 123
 ### Query Specific Setting Values
 
 ```sql
--- Get quiet hours for a user
-SELECT settings->'quietHours' as quiet_hours
+-- Get user's selected symbols
+SELECT settings->'symbols' as selected_symbols
 FROM user_subscription_features
 WHERE user_id = 123
   AND feature_key = 'custom_user_filtering'
-  AND settings ? 'quietHours';
+  AND settings ? 'symbols';
 
--- Get users with specific setting value
-SELECT user_id, settings->'minWinRate' as min_win_rate
+-- Get users who have configured custom symbol filtering
+SELECT user_id, settings->'symbols' as symbols
 FROM user_subscription_features
-WHERE feature_key = 'tier_based_filtering'
-  AND (settings->>'minWinRate')::int >= 70;
+WHERE feature_key = 'custom_user_filtering'
+  AND jsonb_array_length(settings->'symbols') > 0;
 
--- Get users who exclude weekends
+-- Check if user has specific symbol in their filter
 SELECT user_id
 FROM user_subscription_features
-WHERE feature_key = 'tier_based_filtering'
-  AND (settings->>'excludeWeekends')::boolean = true;
+WHERE feature_key = 'custom_user_filtering'
+  AND settings->'symbols' @> '["BTCUSD.a"]'::jsonb;
 ```
 
 ### Bulk Operations
 
 ```sql
--- Reset all users to default settings for a feature
+-- Reset all users to default settings for custom filtering (empty = receive all)
 UPDATE user_subscription_features
-SET settings = '{}', updated_at = NOW()
-WHERE feature_key = 'tier_based_filtering';
+SET settings = '{"symbols": []}', updated_at = NOW()
+WHERE feature_key = 'custom_user_filtering';
 
 -- Deactivate settings for users without active subscriptions
 UPDATE user_subscription_features ufs
@@ -838,6 +1140,19 @@ const userFeatures = await db
   );
 ```
 
+**SQL Alternative**:
+
+```sql
+SELECT DISTINCT sf.feature_key, sf.config
+FROM subscription_features sf
+INNER JOIN user_subscriptions us ON sf.subscription_id = us.subscription_id
+INNER JOIN subscriptions s ON us.subscription_id = s.id
+WHERE us.user_id = $1
+  AND us.is_active = true
+  AND s.is_active = true
+  AND sf.is_enabled = true;
+```
+
 ### Check if User Has Specific Feature
 
 ```typescript
@@ -874,7 +1189,6 @@ const features = await db
     )
   );
 ```
-
 
 ### Get All Subscriptions with Specific Feature
 
@@ -971,24 +1285,20 @@ const { settings } = userSettings[0];
 
 // Example settings structure:
 // {
-//   "instruments": [15, 21, 28],  // Only these instrument IDs
-//   "quietHours": {
-//     "enabled": true,
-//     "start": "22:00",
-//     "end": "06:00"
-//   },
-//   "minWinRate": 70
+//   "symbols": ["GBPUSD.a", "EURUSD.a", "BTCUSD.a"]  // Symbol names
 // }
 
 // Check if signal matches user's filters
-if (settings.instruments && !settings.instruments.includes(signal.instrumentId)) {
-  return false; // Skip user - instrument not in their list
+const { symbols } = settings;
+
+// No symbol filter configured = allow all signals
+if (!symbols || symbols.length === 0) {
+  return true; // No filtering, send signal
 }
 
-if (settings.quietHours?.enabled) {
-  const now = new Date();
-  const currentHour = now.getHours();
-  // ... quiet hours logic
+// Check if signal symbol is in user's whitelist
+if (!symbols.includes(signal.symbol)) {
+  return false; // Skip user - symbol not in their list
 }
 
 return true; // User passed all filters
@@ -1021,7 +1331,49 @@ WHERE us.user_id = $1
 -- - settings_active = false: user disabled their filters
 ```
 
-## Query Analysis
+## Caching Strategy
+
+### 1. User Context Cache
+
+- Cache features in user session/context
+- Duration: 15 minutes or until subscription change
+- Invalidate on subscription activation/deactivation
+
+### 2. Database Query Optimization
+
+Load features with subscriptions in single JOIN query:
+
+```sql
+-- Efficient query to load user features
+SELECT DISTINCT sf.feature_key, sf.config
+FROM user_subscriptions us
+JOIN subscription_features sf ON sf.subscription_id = us.subscription_id
+WHERE us.user_id = $1
+  AND us.is_active = true
+  AND us.subscription_id IN (
+    SELECT id FROM subscriptions WHERE is_active = true
+  );
+```
+
+**Optimization Strategies:**
+- Index on `subscription_id` and `feature_key`
+- Use database connection pooling
+- Composite index for common JOIN patterns
+
+### 3. Redis Cache (Optional)
+
+```typescript
+// Cache key pattern
+const cacheKey = `user:${userId}:features`;
+
+// TTL: 15 minutes
+await redis.setex(cacheKey, 900, JSON.stringify(features));
+
+// Invalidation on subscription change
+await redis.del(`user:${userId}:features`);
+```
+
+### Query Performance Analysis
 
 ```sql
 -- Analyze the most common query (user features lookup)
@@ -1054,6 +1406,20 @@ CREATE TRIGGER trg_subscription_features_updated_at
 BEFORE UPDATE ON subscription_features
 FOR EACH ROW
 EXECUTE FUNCTION update_subscription_features_updated_at();
+
+-- Same for user_subscription_features
+CREATE OR REPLACE FUNCTION update_user_subscription_features_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_user_subscription_features_updated_at
+BEFORE UPDATE ON user_subscription_features
+FOR EACH ROW
+EXECUTE FUNCTION update_user_subscription_features_updated_at();
 ```
 
 ### Audit Trail (Optional)
@@ -1094,9 +1460,9 @@ INSERT INTO subscription_features (subscription_id, feature_key, is_enabled, con
   -- Basic Signals: No features (receives all signals)
   -- (no entries for subscription 1)
 
-  -- VIP Signals: Both filtering features
-  (2, 'tier_based_filtering', true, '{}'),
-  (2, 'custom_user_filtering', true, '{"maxFilters": 10, "filters": []}');
+  -- VIP Signals: Both filtering features with sectors
+  (2, 'tier_based_filtering', true, '{"sectors": ["crypto", "forex"]}'),
+  (2, 'custom_user_filtering', true, '{}');
 
 -- Create test user with VIP subscription
 INSERT INTO user_subscriptions (user_id, subscription_id, activated_at, expires_at, is_active) VALUES
@@ -1142,19 +1508,13 @@ import { FeatureFlag } from '../schema/subscription-features';
 
 // Define schemas for the 2 filtering features
 const TierBasedFilteringConfigSchema = z.object({
-  allowedSymbols: z.array(z.string()).optional(),
-  minPriority: z.enum(['low', 'medium', 'high']).optional(),
-  excludedTypes: z.array(z.string()).optional(),
+  // Sectors for tier-based filtering (configured at subscription level)
+  sectors: z.array(z.string()).optional(), // e.g., ['crypto', 'forex', 'stocks']
 });
 
 const CustomUserFilteringConfigSchema = z.object({
-  maxFilters: z.number().min(1).max(20).default(10),
-  filters: z.array(z.object({
-    symbol: z.string().optional(),
-    minPrice: z.number().optional(),
-    maxPrice: z.number().optional(),
-    priority: z.string().optional(),
-  })).default([]),
+  // Symbol names for custom user filtering (configured at user level)
+  symbols: z.array(z.string()).optional(), // e.g., ['GBPUSD.a', 'EURUSD.a', 'BTCUSD.a']
 });
 
 // Map features to their config schemas
@@ -1183,6 +1543,46 @@ export function validateFeatureConfig(
 }
 ```
 
+## Alternative Approach: JSONB Column
+
+If you prefer simplicity over flexibility, you can add a JSONB column to the subscriptions table:
+
+```sql
+-- Add to existing subscriptions table
+ALTER TABLE subscriptions
+ADD COLUMN features JSONB DEFAULT '{}';
+
+-- Example data structure:
+{
+  "tier_based_filtering": {
+    "enabled": true,
+    "config": {
+      "sectors": ["crypto", "forex"]
+    }
+  },
+  "custom_user_filtering": {
+    "enabled": true,
+    "config": {}
+  }
+}
+
+-- Index for JSONB queries
+CREATE INDEX idx_subscriptions_features
+  ON subscriptions USING GIN (features);
+```
+
+**Pros:**
+- Simpler schema (no new table)
+- Faster writes (no JOIN needed)
+- All data in one place
+
+**Cons:**
+- Harder to query specific features across subscriptions
+- No referential integrity for feature keys
+- Complex JSONB queries for feature lookups
+- Harder to analyze feature usage
+- Less type-safe
+
 ## Best Practices
 
 1. **Always use transactions** when modifying multiple features
@@ -1192,11 +1592,16 @@ export function validateFeatureConfig(
 5. **Use soft deletes** (is_enabled = false) instead of hard deletes
 6. **Cache user features** in application layer (Redis or in-memory)
 7. **Refresh cache** on subscription activation/deactivation
-8. **Monitor query** with pg_stat_statements
+8. **Monitor queries** with pg_stat_statements
 9. **Document feature configs** in code comments
+10. **Test migrations** on staging before production
+11. **Use JSONB operators** efficiently for config queries
+12. **Implement proper error handling** for missing features
 
 ## Related Documentation
 
-- [Feature Flags Architecture](./README.md)
-- [Implementation Plan](./implementation-plan.md)
-- [Usage Examples](./examples.md)
+- [Feature Flags Architecture](./README.md) - High-level overview and system design
+- [Implementation Plan](./implementation-plan.md) - Step-by-step implementation guide
+- [Feature Catalog](./FEATURE_CATALOG.md) - Complete feature specifications
+- [Usage Examples](./examples.md) - Code examples and patterns
+- [Quick Reference](./QUICK_REFERENCE.md) - Developer cheat sheet

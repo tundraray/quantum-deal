@@ -29,11 +29,11 @@ async handleCommand(@Ctx() ctx: UserContext) {
   }
 
   if (hasFeature(ctx.user, FeatureFlag.TIER_BASED_FILTERING)) {
-    // User has access to tier-based filtering
-    await ctx.reply('Your VIP tier includes advanced filtering...');
+    // User has access to tier-based filtering (available on all tiers)
+    await ctx.reply('Your subscription includes tier-based filtering...');
   } else {
-    // User doesn't have access
-    await ctx.reply('Upgrade to VIP to access filtering features.');
+    // User doesn't have an active subscription
+    await ctx.reply('Activate a subscription to access features.');
   }
 }
 ```
@@ -52,13 +52,11 @@ async handleFilter(@Ctx() ctx: UserContext) {
     return;
   }
 
-  const allowedSymbols = config.allowedSymbols as string[];
-  const minPriority = config.minPriority as string;
+  const sectors = config.sectors as string[];
 
   await ctx.reply(
-    `Your filter settings:\n` +
-    `Symbols: ${allowedSymbols.join(', ')}\n` +
-    `Min Priority: ${minPriority}`
+    `Your tier-based filter settings:\n` +
+    `Sectors: ${sectors?.join(', ') || 'All'}`
   );
 }
 ```
@@ -88,25 +86,16 @@ export class SignalsCommands {
   }
 
   /**
-   * Tier-based filtering - VIP feature
-   */
-  @Command('filter')
-  @RequireFeature(FeatureFlag.TIER_BASED_FILTERING)
-  async filterSignals(@Ctx() ctx: UserContext) {
-    // Only VIP users can access
-    await ctx.reply('Your tier-based filtering is active:');
-    // ... show tier filter settings
-  }
-
-  /**
-   * Custom user filtering - VIP feature
+   * Custom user filtering - VIP only feature
+   * Note: TIER_BASED_FILTERING is available on all tiers, so we only
+   * need to protect custom filtering
    */
   @Command('customfilter')
   @RequireFeature(FeatureFlag.CUSTOM_USER_FILTERING)
   async customFilterSignals(@Ctx() ctx: UserContext) {
-    // Only VIP users can access (both features)
-    await ctx.reply('Configure your custom filters:');
-    // ... show custom filter UI
+    // Only VIP users can access
+    await ctx.reply('Configure your custom instrument filters:');
+    // ... show custom filter UI (select specific symbols)
   }
 }
 ```
@@ -157,20 +146,23 @@ export class CustomCommands {
     let message = 'Your Filtering Options:\n\n';
 
     if (hasTierFilter) {
-      message += '✅ Tier-Based Filtering (VIP)\n';
-      message += '   • Pre-configured filters for your tier\n';
-      message += '   • Symbol and priority filtering\n\n';
+      message += '✅ Tier-Based Filtering (All tiers)\n';
+      message += '   • System-controlled filters by subscription\n';
+      message += '   • Sector-based signal filtering\n\n';
     }
 
     if (hasCustomFilter) {
-      message += '✅ Custom User Filtering (VIP)\n';
-      message += '   • Create your own filter rules\n';
-      message += '   • Advanced condition builder\n\n';
+      message += '✅ Custom User Filtering (VIP only)\n';
+      message += '   • Choose specific instruments\n';
+      message += '   • Personalize which signals you receive\n\n';
     }
 
-    if (!hasTierFilter && !hasCustomFilter) {
-      message += '❌ No filtering features available\n\n';
-      message += 'Upgrade to VIP to unlock filtering.';
+    if (!hasTierFilter) {
+      message += '❌ No active subscription\n\n';
+      message += 'Subscribe to start receiving filtered signals.';
+    } else if (!hasCustomFilter) {
+      message += '💡 Upgrade to VIP for custom filtering\n';
+      message += 'Choose exactly which instruments you want.';
     }
 
     await ctx.reply(message);
@@ -230,8 +222,8 @@ async showFeatures(@Ctx() ctx: UserContext) {
   lines.push(`  ${ctx.user.isActive ? '✅' : '❌'} Signal Delivery (Core)`);
 
   lines.push('\n🔍 Filtering Features:');
-  lines.push(`  ${hasTierFilter ? '✅' : '❌'} Tier-Based Filtering (VIP)`);
-  lines.push(`  ${hasCustomFilter ? '✅' : '❌'} Custom User Filtering (VIP)`);
+  lines.push(`  ${hasTierFilter ? '✅' : '❌'} Tier-Based Filtering (All tiers)`);
+  lines.push(`  ${hasCustomFilter ? '✅' : '❌'} Custom User Filtering (VIP only)`);
 
   // Show upgrade CTA if user is missing features
   if (!hasTierFilter || !hasCustomFilter) {
@@ -262,23 +254,11 @@ export class TierFilteringService {
       return signals;
     }
 
-    const allowedSymbols = config.allowedSymbols as string[] | undefined;
-    const minPriority = config.minPriority as string | undefined;
-    const excludedTypes = config.excludedTypes as string[] | undefined;
+    const sectors = config.sectors as string[] | undefined;
 
     return signals.filter(signal => {
-      // Filter by allowed symbols
-      if (allowedSymbols && !allowedSymbols.includes(signal.symbol)) {
-        return false;
-      }
-
-      // Filter by minimum priority
-      if (minPriority && signal.priority < minPriority) {
-        return false;
-      }
-
-      // Filter out excluded types
-      if (excludedTypes && excludedTypes.includes(signal.type)) {
+      // Filter by subscription sectors
+      if (sectors && !sectors.includes(signal.sector)) {
         return false;
       }
 
@@ -293,66 +273,43 @@ export class TierFilteringService {
 ```typescript
 @Injectable()
 export class CustomFilteringService {
-  async applyCustomFilters(ctx: UserContext, signals: Signal[]): Promise<Signal[]> {
-    const config = getFeatureConfig(ctx.user, FeatureFlag.CUSTOM_USER_FILTERING);
+  constructor(
+    private readonly userFeaturesRepo: UserSubscriptionFeaturesRepository,
+  ) {}
 
-    if (!config) {
-      // No custom filtering
+  /**
+   * Apply custom user filtering based on selected symbols
+   */
+  async applyCustomFilters(
+    userId: number,
+    signals: Signal[],
+  ): Promise<Signal[]> {
+    // Get user's custom filter settings
+    const userSettings = await this.userFeaturesRepo.getUserFeatureSettings(
+      userId,
+      FeatureFlag.CUSTOM_USER_FILTERING,
+    );
+
+    if (!userSettings || !userSettings.settings) {
+      // No custom filtering configured - return all signals
       return signals;
     }
 
-    const conditions = config.conditions as FilterCondition[];
-    const matchMode = config.matchMode as 'any' | 'all' || 'all';
+    const { symbols } = userSettings.settings as CustomFilterSettings;
 
-    return signals.filter(signal => {
-      if (matchMode === 'any') {
-        // Signal must match at least one condition
-        return conditions.some(condition => this.matchesCondition(signal, condition));
-      } else {
-        // Signal must match all conditions
-        return conditions.every(condition => this.matchesCondition(signal, condition));
-      }
-    });
-  }
-
-  private matchesCondition(signal: Signal, condition: FilterCondition): boolean {
-    // Symbol condition
-    if (condition.symbol && signal.symbol !== condition.symbol) {
-      return false;
+    // No symbols configured - return all signals
+    if (!symbols || symbols.length === 0) {
+      return signals;
     }
 
-    // Price range condition
-    if (condition.minPrice && signal.price < condition.minPrice) {
-      return false;
-    }
-    if (condition.maxPrice && signal.price > condition.maxPrice) {
-      return false;
-    }
-
-    // Priority condition
-    if (condition.priority && signal.priority !== condition.priority) {
-      return false;
-    }
-
-    // Tag condition
-    if (condition.tags && condition.tags.length > 0) {
-      const signalTags = signal.tags || [];
-      const hasMatchingTag = condition.tags.some(tag => signalTags.includes(tag));
-      if (!hasMatchingTag) {
-        return false;
-      }
-    }
-
-    return true;
+    // Filter signals by selected symbols
+    return signals.filter(signal => symbols.includes(signal.symbol));
   }
 }
 
-interface FilterCondition {
-  symbol?: string;
-  minPrice?: number;
-  maxPrice?: number;
-  priority?: string;
-  tags?: string[];
+interface CustomFilterSettings {
+  // Array of symbol names like ['GBPUSD.a', 'EURUSD.a', 'BTCUSD.a']
+  symbols: string[];
 }
 ```
 
@@ -410,184 +367,6 @@ export class SignalProcessingService {
 }
 ```
 
-## Testing
-
-### Unit Tests with Feature Mocking
-
-```typescript
-import { Test, TestingModule } from '@nestjs/testing';
-import { FeatureFlagService } from './feature-flag.service';
-import { FeatureFlag } from '@quantumdeal/db/schema';
-import { UserWithSubscriptions } from '../interfaces/user.dto';
-
-describe('SignalsCommands', () => {
-  let service: SignalsCommands;
-  let featureService: FeatureFlagService;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        SignalsCommands,
-        {
-          provide: FeatureFlagService,
-          useValue: {
-            hasFeature: jest.fn(),
-            getUserFeatures: jest.fn(),
-          },
-        },
-      ],
-    }).compile();
-
-    service = module.get<SignalsCommands>(SignalsCommands);
-    featureService = module.get<FeatureFlagService>(FeatureFlagService);
-  });
-
-  it('should allow access to signals for all active subscribers', async () => {
-    const mockUser: UserWithSubscriptions = {
-      telegramId: 123,
-      username: 'testuser',
-      firstName: 'Test',
-      lastName: 'User',
-      lang: 'en',
-      isPremium: false,
-      isActive: true, // Active subscription for core signal delivery
-      createdAt: new Date(),
-      activeSubscriptions: [],
-      enabledFeatures: new Set([
-        // No feature flags needed for basic signals
-      ]),
-      featureConfigs: new Map(),
-    };
-
-    const mockCtx = createMockContext(mockUser);
-    await service.showSignals(mockCtx);
-
-    expect(mockCtx.reply).toHaveBeenCalledWith(
-      expect.stringContaining('latest signals')
-    );
-  });
-
-  it('should allow tier filtering for VIP users', async () => {
-    const mockUser: UserWithSubscriptions = {
-      telegramId: 123,
-      enabledFeatures: new Set([
-        FeatureFlag.TIER_BASED_FILTERING,
-      ]),
-      featureConfigs: new Map(),
-    };
-
-    jest.spyOn(featureService, 'hasFeature').mockReturnValue(true);
-
-    const mockCtx = createMockContext(mockUser);
-    await service.filterSignals(mockCtx);
-
-    expect(mockCtx.reply).toHaveBeenCalledWith(
-      expect.stringContaining('tier-based filtering')
-    );
-  });
-
-  it('should deny tier filtering for Basic users', async () => {
-    const mockUser: UserWithSubscriptions = {
-      telegramId: 123,
-      enabledFeatures: new Set([]), // No feature flags
-      featureConfigs: new Map(),
-    };
-
-    jest.spyOn(featureService, 'hasFeature').mockReturnValue(false);
-
-    const mockCtx = createMockContext(mockUser);
-    await service.filterSignals(mockCtx);
-
-    expect(mockCtx.reply).toHaveBeenCalledWith(
-      expect.stringContaining('not available')
-    );
-  });
-
-  it('should allow custom filtering for VIP users', async () => {
-    const mockUser: UserWithSubscriptions = {
-      telegramId: 123,
-      enabledFeatures: new Set([
-        FeatureFlag.TIER_BASED_FILTERING,
-        FeatureFlag.CUSTOM_USER_FILTERING,
-      ]),
-      featureConfigs: new Map(),
-    };
-
-    jest.spyOn(featureService, 'hasFeature').mockReturnValue(true);
-
-    const mockCtx = createMockContext(mockUser);
-    await service.customFilterSignals(mockCtx);
-
-    expect(mockCtx.reply).toHaveBeenCalledWith(
-      expect.stringContaining('custom filters')
-    );
-  });
-});
-```
-
-### Integration Tests
-
-```typescript
-describe('Feature Flags Integration', () => {
-  let app: INestApplication;
-  let db: Database;
-
-  beforeAll(async () => {
-    const moduleFixture = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    await app.init();
-
-    db = app.get(Database);
-  });
-
-  it('should load user features from database', async () => {
-    // Create test user
-    const userId = await db.users.create({
-      telegramId: 999999,
-      username: 'testuser',
-    });
-
-    // Create VIP subscription with tier filtering
-    const subscriptionId = await db.subscriptions.create({
-      name: 'Test VIP',
-      type: 'signals',
-    });
-
-    // Note: Signal delivery is core functionality, not a feature flag
-    await db.subscriptionFeatures.create({
-      subscriptionId,
-      featureKey: FeatureFlag.TIER_BASED_FILTERING,
-      isEnabled: true,
-      config: {
-        allowedSymbols: ['BTC/USD', 'ETH/USD'],
-        minPriority: 'medium',
-      },
-    });
-
-    // Activate subscription for user
-    await db.userSubscriptions.create({
-      userId: 999999,
-      subscriptionId,
-      isActive: true,
-    });
-
-    // Test feature loading (2 features only)
-    const featureService = app.get(FeatureFlagService);
-    const userFeatures = await featureService.getUserFeatures(999999);
-
-    expect(userFeatures.enabledFeatures.has(FeatureFlag.TIER_BASED_FILTERING)).toBe(true);
-    expect(userFeatures.enabledFeatures.has(FeatureFlag.CUSTOM_USER_FILTERING)).toBe(false);
-  });
-
-  afterAll(async () => {
-    await app.close();
-  });
-});
-```
-
 ## Real-World Example: Webhook-Based Broadcasting
 
 ### Overview
@@ -601,8 +380,8 @@ A trading signals bot receives webhook notifications from MT5 and broadcasts the
 > **Note**: All active subscribers receive signals by default (core functionality).
 > Feature flags control only filtering behavior.
 
-- **Basic Users**: Receive all signals (no filtering)
-- **VIP Users**: Both tier-based filtering AND custom filtering rules with complex conditions
+- **Basic Users**: Receive signals filtered by TIER_BASED_FILTERING (subscription sectors)
+- **VIP Users**: Receive signals filtered by TIER_BASED_FILTERING + CUSTOM_USER_FILTERING (choose specific symbols)
 
 ### Quick Example: Feature-Aware Webhook Processing
 
@@ -675,13 +454,8 @@ export class WebhookProcessorService {
 
     if (!config) return true;
 
-    // Check allowed symbols
-    if (config.allowedSymbols && !config.allowedSymbols.includes(order.symbol)) {
-      return false;
-    }
-
-    // Check minimum priority
-    if (config.minPriority && order.priority < config.minPriority) {
+    // Check subscription sectors
+    if (config.sectors && !config.sectors.includes(order.sector)) {
       return false;
     }
 
@@ -720,62 +494,27 @@ export class WebhookProcessorService {
 
     // settings structure:
     // {
-    //   "instruments": [15, 21, 28],  // Only these instrument IDs
-    //   "quietHours": {
-    //     "enabled": true,
-    //     "start": "22:00",
-    //     "end": "06:00"
-    //   },
-    //   "minWinRate": 70
+    //   "symbols": ["GBPUSD.a", "EURUSD.a", "BTCUSD.a"]
     // }
 
-    // Check instrument filter
-    if (settings.instruments && !settings.instruments.includes(order.instrumentId)) {
-      this.logger.debug(`User ${user.telegramId} filtered: instrument ${order.instrumentId} not in whitelist`);
-      return false;
+    const { symbols } = settings;
+
+    // No symbols configured - allow all signals
+    if (!symbols || symbols.length === 0) {
+      return true;
     }
 
-    // Check quiet hours
-    if (settings.quietHours?.enabled) {
-      const now = new Date();
-      const currentHour = now.getHours();
-      const startHour = parseInt(settings.quietHours.start.split(':')[0]);
-      const endHour = parseInt(settings.quietHours.end.split(':')[0]);
-
-      const isQuietTime = (startHour <= endHour)
-        ? (currentHour >= startHour && currentHour < endHour)
-        : (currentHour >= startHour || currentHour < endHour);
-
-      if (isQuietTime) {
-        this.logger.debug(`User ${user.telegramId} filtered: quiet hours active`);
-        return false;
-      }
-    }
-
-    // Check minimum win rate
-    if (settings.minWinRate && order.winRate < settings.minWinRate) {
-      this.logger.debug(`User ${user.telegramId} filtered: win rate ${order.winRate}% below minimum ${settings.minWinRate}%`);
+    // Check if signal symbol is in user's whitelist
+    if (!symbols.includes(order.symbol)) {
+      this.logger.debug(
+        `User ${user.telegramId} filtered: symbol ${order.symbol} not in whitelist`,
+      );
       return false;
     }
 
     return true;
   }
 
-  private matchesCondition(order: MergedOrder, condition: FilterCondition): boolean {
-    if (condition.symbol && order.symbol !== condition.symbol) {
-      return false;
-    }
-
-    if (condition.minPrice && order.openPrice < condition.minPrice) {
-      return false;
-    }
-
-    if (condition.maxPrice && order.openPrice > condition.maxPrice) {
-      return false;
-    }
-
-    return true;
-  }
 }
 ```
 
@@ -785,68 +524,8 @@ export class WebhookProcessorService {
 
 | User | Features | What Happens |
 |------|----------|-------------|
-| **Alice** (Basic) | None (core signals only) | ✅ Receives signal (no filtering) |
-| **Bob** (VIP) | `tier_based_filtering`<br>`custom_user_filtering`<br>(BTC > $44k) | ✅ Receives signal (matches custom condition) |
-
-### Testing Webhook Broadcasting
-
-```typescript
-describe('Webhook Broadcasting with Features', () => {
-  it('should filter VIP user by allowed symbols', async () => {
-    // Setup VIP user who only wants BTC signals
-    const vipUser = {
-      isActive: true,
-      enabledFeatures: new Set([
-        FeatureFlag.TIER_BASED_FILTERING,
-      ]),
-      featureConfigs: new Map([
-        [FeatureFlag.TIER_BASED_FILTERING, {
-          allowedSymbols: ['BTC/USD'],
-        }],
-      ]),
-    };
-
-    const btcSignal = { symbol: 'BTC/USD' };
-    const ethSignal = { symbol: 'ETH/USD' };
-
-    // Act
-    const shouldReceiveBtc = await shouldSendToUser(vipUser, btcSignal);
-    const shouldReceiveEth = await shouldSendToUser(vipUser, ethSignal);
-
-    // Assert
-    expect(shouldReceiveBtc).toBe(true);  // BTC matches
-    expect(shouldReceiveEth).toBe(false); // ETH doesn't match
-  });
-
-  it('should apply custom conditions for VIP users', async () => {
-    const vipUser = {
-      isActive: true,
-      enabledFeatures: new Set([
-        FeatureFlag.CUSTOM_USER_FILTERING,
-      ]),
-      featureConfigs: new Map([
-        [FeatureFlag.CUSTOM_USER_FILTERING, {
-          conditions: [
-            { symbol: 'BTC/USD', minPrice: 44000 },
-          ],
-          matchMode: 'all',
-        }],
-      ]),
-    };
-
-    const aboveThreshold = { symbol: 'BTC/USD', openPrice: 45000 };
-    const belowThreshold = { symbol: 'BTC/USD', openPrice: 43000 };
-
-    // Act
-    const shouldReceiveAbove = await shouldSendToUser(vipUser, aboveThreshold);
-    const shouldReceiveBelow = await shouldSendToUser(vipUser, belowThreshold);
-
-    // Assert
-    expect(shouldReceiveAbove).toBe(true);  // Above $44k
-    expect(shouldReceiveBelow).toBe(false); // Below $44k
-  });
-});
-```
+| **Alice** (Basic) | `tier_based_filtering` | ✅ Receives signal (matches tier sectors) |
+| **Bob** (VIP) | `tier_based_filtering`<br>`custom_user_filtering`<br>(symbols: ['BTCUSD.a']) | ✅ Receives signal (BTC in whitelist) |
 
 ### Performance Best Practices for Webhooks
 
@@ -934,23 +613,16 @@ The code examples above provide the complete implementation for webhook-based br
    });
    ```
 
-6. **Test with different feature combinations**
-   - User with no subscriptions
-   - User with basic subscription (no filtering)
-   - User with VIP subscription (both tier filtering AND custom filtering)
-   - User with expired subscription
-
-7. **Document feature configurations** in code
+6. **Document feature configurations** in code
    ```typescript
    interface TierFilteringConfig {
-     allowedSymbols?: string[];
-     minPriority?: string;
-     excludedTypes?: string[];
+     // Configured at subscription level in subscription_features.config
+     sectors: string[]; // e.g., ['crypto', 'forex']
    }
 
    interface CustomFilteringConfig {
-     conditions: FilterCondition[];
-     matchMode: 'any' | 'all';
+     // Configured at user level in user_subscription_features.settings
+     symbols: string[]; // e.g., ['GBPUSD.a', 'EURUSD.a']
    }
    ```
 

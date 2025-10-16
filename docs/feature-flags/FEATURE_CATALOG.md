@@ -63,213 +63,92 @@ Signal filtering capabilities that control which signals reach users
 
 **Category**: Trading Signals & Filtering
 **Status**: Production
-**Description**: System automatically filters signals based on subscription tier
-**Business Value**: Ensures users receive appropriate signals for their tier without manual configuration
-**Recommended Tiers**: VIP
+**Description**: System automatically filters signals based on subscription tier configuration
+**Business Value**: Ensures users receive signals filtered by subscription sectors without manual configuration
+**Recommended Tiers**: All tiers (Basic + VIP)
 
-**Note**: Basic tier does NOT have this feature. Basic users receive all signals (no filtering, core functionality only).
+**Note**: This feature is available on ALL tiers. It filters signals based on subscription sectors configured in `subscription_features.config.sectors`.
 
 ##### Detailed Description
 
-The `TIER_BASED_FILTERING` feature applies automatic, system-controlled filters to incoming signals based on the user's subscription tier. This ensures that:
+The `TIER_BASED_FILTERING` feature applies automatic, system-controlled filters to incoming signals based on the subscription's sector configuration. This ensures that:
 
-1. **Basic users** - NOT APPLICABLE (Basic tier has no filtering, receives all signals - core functionality only)
-2. **VIP users** receive filtered signals based on VIP tier rules (pre-configured by tier)
+1. **Basic users** - Receive signals filtered by subscription sectors (e.g., crypto, forex)
+2. **VIP users** - Receive signals filtered by subscription sectors + can add custom user filtering on top
 
-The filtering happens **automatically in the webhook processor** before signals reach users. Users cannot modify these tier-based rules directly, but VIP users can add additional custom filtering on top.
+The filtering happens **automatically in the webhook processor** (via `findBySector()`) before signals reach users. Users cannot modify these tier-based rules - they are controlled at the subscription level.
 
-##### Tier-Specific Filter Rules
+##### Tier-Specific Filter Configuration
 
 **Basic Tier:**
 ```typescript
-// Basic tier does NOT use TIER_BASED_FILTERING
-// Basic users receive all signals (core functionality)
-// No feature flags needed
+// Basic subscription with crypto sector
 {
   tier: 'basic',
-  autoFilters: null  // No filtering
+  sectors: ['crypto']  // Only receive crypto signals
 }
 ```
 
 **VIP Tier:**
 ```typescript
+// VIP subscription with multiple sectors
 {
   tier: 'vip',
-  autoFilters: {
-    // VIP tier automatic filtering
-    allowedSymbols: ['BTC/USD', 'ETH/USD', 'GOLD', 'SILVER', 'OIL'],
-    minPriority: 'medium',
-    excludedTypes: ['news', 'analysis']
-  }
+  sectors: ['crypto', 'forex', 'stocks']  // Multiple sectors
 }
 ```
 
 ##### Configuration Options
 
+Configured at subscription level in `subscription_features` table:
+
 ```typescript
 interface TierBasedFilteringConfig {
-  // Subscription tier
-  tier: 'basic' | 'vip';
-
-  // Automatic filter rules
-  autoFilters: {
-    // Minimum win rate percentage
-    minWinRate?: number; // e.g., 60, 70
-
-    // Allowed symbols (whitelist)
-    symbols?: string[]; // e.g., ['BTC', 'ETH', 'SOL']
-
-    // Signal priority filter
-    priority?: 'high' | 'normal' | 'low';
-
-    // Allowed categories
-    categories?: string[]; // e.g., ['crypto', 'forex', 'stocks']
-
-    // Minimum signal confidence
-    minConfidence?: number; // 0-100
-
-    // Allowed timeframes
-    timeframes?: string[]; // e.g., ['1h', '4h', '1d']
-
-    // Maximum leverage
-    maxLeverage?: number; // e.g., 10, 20, 50
-  };
-
-  // Filter behavior
-  strictMode?: boolean; // Default: true (reject if any filter fails)
-  logFiltered?: boolean; // Default: true (log filtered signals)
+  // Sectors (configured in subscription_features.config)
+  sectors: string[];  // e.g., ['crypto', 'forex', 'stocks']
 }
 ```
 
-##### User Settings
-
-Users can customize tier-based filtering behavior through the `user_subscription_features` table.
-
-**Settings Schema:**
-```typescript
-interface TierBasedFilteringSettings {
-  // Override minimum win rate
-  minWinRate?: number;              // e.g., 65, 70, 75
-
-  // Customize categories filter
-  categories?: string[];            // e.g., ['crypto', 'forex']
-
-  // Weekend signal preference
-  excludeWeekends?: boolean;        // Default: false
-
-  // Only high-priority signals
-  priorityOnly?: boolean;           // Default: false
-
-  // Timeframe preferences
-  preferredTimeframes?: string[];   // e.g., ['1h', '4h']
-}
-```
-
-**Default Settings:**
-```typescript
-{
-  minWinRate: null,              // Use tier default
-  categories: null,              // Use tier default (all categories)
-  excludeWeekends: false,        // Receive weekend signals
-  priorityOnly: false,           // Receive all priority levels
-  preferredTimeframes: null      // Use tier default (all timeframes)
-}
-```
-
-**Example User Settings:**
-```typescript
-// User 123 (VIP) customizes tier filtering
-{
-  minWinRate: 70,                    // Higher than tier default (60)
-  categories: ['crypto', 'forex'],   // Only crypto and forex
-  excludeWeekends: true,             // No signals on weekends
-  priorityOnly: false,               // All priorities OK
-  preferredTimeframes: ['4h', '1d']  // Prefer longer timeframes
-}
-```
-
-**Validation Rules:**
-- `minWinRate`: 0-100, must be >= tier minimum
-- `categories`: Must be valid category names
-- `excludeWeekends`: Boolean
-- `priorityOnly`: Boolean
-- `preferredTimeframes`: Must be valid timeframe codes
-
-**Storage:**
+**Storage (subscription level):**
 ```sql
--- Example: User 123 customizes tier-based filtering
-INSERT INTO user_subscription_features (user_id, feature_key, settings)
-VALUES (123, 'tier_based_filtering', '{
-  "minWinRate": 70,
-  "categories": ["crypto", "forex"],
-  "excludeWeekends": true
-}')
-ON CONFLICT (user_id, feature_key)
-DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW();
+-- Example: VIP subscription with multiple sectors
+INSERT INTO subscription_features (subscription_id, feature_key, is_enabled, config)
+VALUES (1, 'tier_based_filtering', true, '{"sectors": ["crypto", "forex", "stocks"]}');
+
+-- Example: Basic subscription with crypto sector only
+INSERT INTO subscription_features (subscription_id, feature_key, is_enabled, config)
+VALUES (2, 'tier_based_filtering', true, '{"sectors": ["crypto"]}');
 ```
+
+**Note**: TIER_BASED_FILTERING is NOT configurable by users. It's set at the subscription level. Users cannot change sectors - only admins can via subscription configuration.
 
 ##### Code Example
 
 ```typescript
 import { FeatureFlag } from '@quantumdeal/db/schema';
-import { hasFeature, getFeatureConfig } from '@quantumdeal/bot/interfaces/user.dto';
 
 // In webhook processor
-async processWebhookSignal(signal: TradingSignal): Promise<void> {
-  const users = await this.getUsersWithActiveSubscriptions();
+async processWebhookSignal(order: MergedOrder): Promise<void> {
+  // Step 1: Find subscriptions by sector (TIER_BASED_FILTERING)
+  const subscriptions = await this.subscriptionsRepo.findBySector(order.sector);
 
-  for (const user of users) {
-    // All users with active subscriptions receive signals (signal delivery is core functionality)
-    // Check if tier-based filtering should be applied
-    if (hasFeature(user, FeatureFlag.TIER_BASED_FILTERING)) {
-      const config = getFeatureConfig<TierBasedFilteringConfig>(
-        user,
-        FeatureFlag.TIER_BASED_FILTERING
+  for (const subscription of subscriptions) {
+    // Step 2: Get eligible users for this subscription
+    const eligibleUsers = await this.getEligibleUsers(subscription.subscriptionId);
+
+    for (const user of eligibleUsers) {
+      // Step 3: Apply custom filtering if user has that feature
+      const shouldSend = await this.shouldSendSignal(
+        user.userId,
+        order,
+        subscription.hasCustomFiltering,
       );
 
-      // Apply tier-specific filters
-      if (!this.matchesTierFilters(signal, config.autoFilters)) {
-        this.logger.debug(`Signal filtered by tier rules for user ${user.id}`, {
-          userId: user.id,
-          tier: config.tier,
-          signal: signal.symbol,
-          filters: config.autoFilters
-        });
-        continue; // Skip this user
+      if (shouldSend) {
+        await this.sendSignalToUser(user.userId, order);
       }
     }
-
-    // Send signal to user
-    await this.sendSignalToUser(user, signal);
   }
-}
-
-// Filter matching logic
-private matchesTierFilters(
-  signal: TradingSignal,
-  filters: TierBasedFilteringConfig['autoFilters']
-): boolean {
-  // Check minimum win rate
-  if (filters.minWinRate && signal.historicalWinRate < filters.minWinRate) {
-    return false;
-  }
-
-  // Check symbols whitelist
-  if (filters.symbols && !filters.symbols.includes(signal.symbol)) {
-    return false;
-  }
-
-  // Check priority
-  if (filters.priority && signal.priority !== filters.priority) {
-    return false;
-  }
-
-  // Check categories
-  if (filters.categories && !filters.categories.includes(signal.category)) {
-    return false;
-  }
-
-  return true;
 }
 ```
 
@@ -305,102 +184,37 @@ private matchesTierFilters(
 
 The `CUSTOM_USER_FILTERING` feature allows users to create personalized filtering rules that determine which signals they receive. This feature works alongside `TIER_BASED_FILTERING` in VIP tier - VIP users get both automatic tier-based filtering AND the ability to add custom rules on top.
 
-**Note**: Only VIP tier has this feature. Basic tier has no filtering at all.
+**Note**: Only VIP tier has this feature. Basic tier has TIER_BASED_FILTERING but not CUSTOM_USER_FILTERING.
 
-Users can create rules like:
-- "Only show BTC signals when price > $44,000"
-- "Only futures signals with leverage <= 10x"
-- "No signals between 22:00 and 06:00 (my sleep time)"
-- "Only signals with confidence > 80%"
-- "Only long positions (no shorts)"
-
-Rules can be combined with AND/OR logic for complex conditions.
+Users can select specific instruments to receive signals for:
+- Choose only crypto instruments (BTC, ETH)
+- Choose specific forex pairs (EUR/USD, GBP/USD)
+- Mix instruments from different sectors
+- Or receive all instruments (default)
 
 ##### User Commands
 
 ```bash
-# Set a simple filter
-/filter set symbol BTC
+# Open instrument filter UI
+/filter
 
-# Set filter with condition
-/filter set price > 44000
+# User selects instruments via Telegram inline keyboard:
+# - Navigate through groups (Forex, Commodities, Crypto, Stocks)
+# - Toggle individual instruments on/off
+# - Save selection
 
-# Set filter with AND logic
-/filter set symbol BTC AND price > 44000
-
-# Set filter with OR logic
-/filter set symbol BTC OR symbol ETH
-
-# Set quiet hours (no signals during sleep)
-/filter quiet 22:00 06:00
-
-# List active filters
-/filter list
-
-# Remove a filter
-/filter remove 1
-
-# Clear all filters
-/filter clear
-
-# Test filter against sample signal
-/filter test symbol BTC price 45000
+# Example: User selects only BTC and ETH
+# Result: Only receives signals for BTCUSD.a and ETHUSD.a
 ```
 
 ##### Configuration Options
 
+Configured at subscription level (feature enabled/disabled):
+
 ```typescript
 interface CustomUserFilteringConfig {
-  // Enable/disable user filtering
-  enabled: boolean; // Default: true
-
-  // User-defined filter rules
-  rules: Array<{
-    // Field to filter on
-    field: string; // 'symbol', 'price', 'priority', 'leverage', 'timeframe', etc.
-
-    // Comparison operator
-    operator: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'contains' | 'startsWith' | 'endsWith';
-
-    // Value to compare against
-    value: string | number | boolean;
-
-    // Combine with next rule
-    combineWith?: 'AND' | 'OR'; // Default: 'AND'
-
-    // Rule ID (for removal)
-    id?: string;
-
-    // Rule description (user-friendly)
-    description?: string;
-  }>;
-
-  // Schedule-based filters
-  scheduleFilters?: {
-    // User's timezone
-    timezone: string; // e.g., 'America/New_York', 'Europe/London'
-
-    // Quiet hours (no signals)
-    quietHours?: {
-      start: string; // e.g., '22:00'
-      end: string;   // e.g., '06:00'
-    };
-
-    // Active days (1-7, Monday-Sunday)
-    activeDays?: number[]; // e.g., [1, 2, 3, 4, 5] (weekdays only)
-
-    // Specific time windows (only receive during these times)
-    activeWindows?: Array<{
-      start: string;
-      end: string;
-      days?: number[]; // Optional: specific days for this window
-    }>;
-  };
-
-  // Advanced options
-  maxRules?: number; // Maximum rules allowed (default: 10)
-  allowComplexLogic?: boolean; // Allow nested AND/OR (default: false)
-  caseSensitive?: boolean; // Case-sensitive string matching (default: false)
+  // No subscription-level config needed
+  // Feature is simply enabled/disabled in subscription_features
 }
 ```
 
@@ -411,17 +225,17 @@ Users store their custom filtering preferences in the `user_subscription_feature
 **Settings Schema:**
 ```typescript
 interface CustomUserFilteringSettings {
-  // Selected instruments (instrument IDs from instruments table)
+  // Selected instruments (symbol names from instruments table)
   // Empty array = no filters (receive all signals)
-  // Non-empty array = only receive signals for these instruments
-  instruments: number[];                  // e.g., [1, 5, 12, 15, 28, 37, 38]
+  // Non-empty array = only receive signals for these symbols
+  symbols: string[];  // e.g., ['GBPUSD.a', 'EURUSD.a', 'BTCUSD.a']
 }
 ```
 
 **Default Settings:**
 ```typescript
 {
-  instruments: []                    // Empty = no filtering, receive all signals
+  symbols: []  // Empty = no filtering, receive all signals
 }
 ```
 
@@ -429,25 +243,20 @@ interface CustomUserFilteringSettings {
 ```typescript
 // User 123 (VIP) configures custom filtering
 {
-  instruments: [15, 21, 28, 37, 38]  // 5 instruments selected:
-                                      // 15 = EURUSD.a
-                                      // 21 = GBPUSD.a
-                                      // 28 = USDJPY.a
-                                      // 37 = BTCUSD.a
-                                      // 38 = ETHUSD.a
+  symbols: ['GBPUSD.a', 'EURUSD.a', 'USDJPY.a', 'BTCUSD.a', 'ETHUSD.a']
 }
 ```
 
 **Validation Rules:**
-- `instruments`: Must be array of valid instrument IDs from `instruments` table
+- `symbols`: Must be array of valid symbol names from `instruments` table
 - Empty array `[]` = no filtering (receive all signals - default behavior)
-- Non-empty array = only receive signals for listed instrument IDs
+- Non-empty array = only receive signals for listed symbols
 
 **Storage:**
 ```sql
 -- Example: User 123 configures custom filtering
 INSERT INTO user_subscription_features (user_id, feature_key, settings, is_active)
-VALUES (123, 'custom_user_filtering', '{"instruments": [15, 21, 28, 37, 38]}', true)
+VALUES (123, 'custom_user_filtering', '{"symbols": ["GBPUSD.a", "EURUSD.a", "BTCUSD.a"]}', true)
 ON CONFLICT (user_id, feature_key)
 DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW();
 
@@ -460,105 +269,37 @@ WHERE user_id = 123 AND feature_key = 'custom_user_filtering';
 
 ```typescript
 import { FeatureFlag } from '@quantumdeal/db/schema';
-import { hasFeature, getFeatureConfig } from '@quantumdeal/bot/interfaces/user.dto';
 
-// In webhook processor (after tier-based filtering if applicable)
-async processWebhookSignal(signal: TradingSignal): Promise<void> {
-  const users = await this.getUsersWithActiveSubscriptions();
+// In webhook processor - applyCustomFiltering()
+private async applyCustomFiltering(
+  userId: number,
+  order: MergedOrder,
+  settings: any,
+): Promise<boolean> {
+  const { symbols } = settings;
 
-  for (const user of users) {
-    // All users receive signals (signal delivery is core functionality)
-    // Apply tier-based filtering if enabled
-    if (hasFeature(user, FeatureFlag.TIER_BASED_FILTERING)) {
-      // ... tier filtering logic
-    }
-
-    // Then apply custom user filtering if enabled
-    if (hasFeature(user, FeatureFlag.CUSTOM_USER_FILTERING)) {
-      const config = getFeatureConfig<CustomUserFilteringConfig>(
-        user,
-        FeatureFlag.CUSTOM_USER_FILTERING
-      );
-
-      if (!config.enabled) {
-        // User has disabled custom filtering
-        await this.sendSignalToUser(user, signal);
-        continue;
-      }
-
-      // Check schedule filters
-      if (!this.isWithinActiveSchedule(config.scheduleFilters)) {
-        this.logger.debug(`Signal filtered by schedule for user ${user.id}`);
-        continue;
-      }
-
-      // Apply custom rules
-      if (!this.matchesCustomRules(signal, config.rules)) {
-        this.logger.debug(`Signal filtered by custom rules for user ${user.id}`);
-        continue;
-      }
-    }
-
-    // Send signal to user
-    await this.sendSignalToUser(user, signal);
-  }
-}
-
-// Custom rules matching logic
-private matchesCustomRules(
-  signal: TradingSignal,
-  rules: CustomUserFilteringConfig['rules']
-): boolean {
-  if (!rules || rules.length === 0) {
-    return true; // No rules = pass all
+  // No symbol filter configured = receive all signals
+  if (!symbols || symbols.length === 0) {
+    return true;
   }
 
-  let result = true;
-
-  for (let i = 0; i < rules.length; i++) {
-    const rule = rules[i];
-    const ruleMatches = this.evaluateRule(signal, rule);
-
-    if (i === 0) {
-      result = ruleMatches;
-    } else {
-      const previousRule = rules[i - 1];
-      if (previousRule.combineWith === 'OR') {
-        result = result || ruleMatches;
-      } else { // AND
-        result = result && ruleMatches;
-      }
-    }
+  // Get instrument symbol from order
+  const instrument = await this.instrumentsRepo.findById(order.instrumentId);
+  if (!instrument) {
+    this.logger.warn(`Instrument ${order.instrumentId} not found`);
+    return false;
   }
 
-  return result;
-}
+  // Check if instrument symbol is in user's whitelist
+  const isAllowed = symbols.includes(instrument.symbol);
 
-// Evaluate single rule
-private evaluateRule(
-  signal: TradingSignal,
-  rule: CustomUserFilteringConfig['rules'][0]
-): boolean {
-  const fieldValue = this.getFieldValue(signal, rule.field);
-
-  switch (rule.operator) {
-    case '=':
-      return fieldValue === rule.value;
-    case '!=':
-      return fieldValue !== rule.value;
-    case '>':
-      return Number(fieldValue) > Number(rule.value);
-    case '<':
-      return Number(fieldValue) < Number(rule.value);
-    case '>=':
-      return Number(fieldValue) >= Number(rule.value);
-    case '<=':
-      return Number(fieldValue) <= Number(rule.value);
-    case 'contains':
-      return String(fieldValue).toLowerCase().includes(String(rule.value).toLowerCase());
-    default:
-      return false;
+  if (!isAllowed) {
+    this.logger.debug(
+      `User ${userId} filtered: symbol ${instrument.symbol} not in whitelist`,
+    );
   }
+
+  return isAllowed;
 }
 ```
 
@@ -566,38 +307,50 @@ private evaluateRule(
 
 **Setup Filters:**
 ```
-User: /filter set symbol BTC
-Bot: ✅ Filter added: Symbol equals BTC
+User: /filter
+Bot: [Shows inline keyboard UI]
 
-User: /filter set price > 44000
-Bot: ✅ Filter added: Price greater than 44000
-     Current filters: 2
+     🎯 Фильтр инструментов
+     ────────────────────
+     Текущий статус:
+     ✅ Все инструменты (72)
 
-User: /filter quiet 22:00 06:00
-Bot: ✅ Quiet hours set: 22:00 - 06:00
-     You won't receive signals during these hours.
+     Выберите категорию:
+     [💱 Валюты (28)]
+     [🛢️ Товары (7)]
+     [💰 Криптовалюты (2)]
+     [📈 Акции (35)]
 
-User: /filter list
-Bot: 📋 Your Active Filters:
+User: [Selects 💰 Криптовалюты]
+Bot: [Shows crypto instruments]
 
-     1. Symbol = BTC (AND)
-     2. Price > 44000 (AND)
+     💰 Криптовалюты (2 инструмента)
+     ────────────────────
+     ☑️ BTCUSD.a (Bitcoin)
+     ☑️ ETHUSD.a (Ethereum)
 
-     🌙 Quiet Hours: 22:00 - 06:00
-     Timezone: America/New_York
+     [💾 Сохранить]
 
-     🧪 Test your filters: /filter test
+User: [Clicks 💾 Сохранить]
+Bot: ✅ Фильтр сохранён!
+
+     Вы будете получать сигналы только по выбранным инструментам:
+
+     💰 Криптовалюты: 2 инструмента
+       • BTCUSD.a
+       • ETHUSD.a
+
+     Всего выбрано: 2 из 72
 ```
 
 ##### Implementation Notes
 
-- User filters are stored in database (user_filter_rules table)
-- Filters are cached per user
-- Filter evaluation happens after tier-based filtering
-- Maximum 10 rules per user (configurable per tier)
-- VIP: 10 rules (can be adjusted per deployment needs)
-- Schedule filters use user's timezone (from profile or auto-detected)
-- Filtered signals are logged for user analytics (show what they missed)
+- User settings are stored in `user_subscription_features` table
+- Settings are cached in-memory during webhook processing
+- Custom filtering happens after tier-based filtering
+- Users select instruments via Telegram inline keyboard (see telegram-ui-flow.md)
+- Symbol names are stored, not instrument IDs
+- Empty symbols array = receive all signals (default)
 
 ##### Dependencies
 
@@ -619,20 +372,20 @@ This matrix shows which filtering features are available in each subscription ti
 | Feature | Basic | VIP |
 |---------|-------|-----|
 | Signal Delivery | ✅ (Core) | ✅ (Core) |
-| TIER_BASED_FILTERING | ❌ | ✅ |
+| TIER_BASED_FILTERING | ✅ | ✅ |
 | CUSTOM_USER_FILTERING | ❌ | ✅ |
 
 ### Tier Descriptions
 
 **Basic Tier**
 - Signal delivery (core functionality)
-- No filtering capabilities
-- Receives all signals (no feature flags)
+- TIER_BASED_FILTERING (system-controlled filtering by sectors)
+- NO custom user filtering
 
 **VIP Tier**
 - Signal delivery (core functionality)
-- Automatic tier-based filtering (system-controlled)
-- Full custom user filtering (additional personalization on top of tier filtering)
+- TIER_BASED_FILTERING (system-controlled filtering by sectors)
+- CUSTOM_USER_FILTERING (user selects specific instruments)
 
 ---
 
@@ -663,14 +416,14 @@ Both features can be enabled simultaneously:
 ### Upgrade Paths
 
 **Basic → VIP**
-- Gain: `TIER_BASED_FILTERING` + `CUSTOM_USER_FILTERING`
-- Impact: Both automatic tier-based and user-controlled filtering (highest flexibility, reduces signal volume)
+- Gain: `CUSTOM_USER_FILTERING` (TIER_BASED_FILTERING already exists on Basic)
+- Impact: User can now select specific instruments in addition to tier-based sector filtering
 
 ### Downgrade Paths
 
 **VIP → Basic**
-- Lose: `TIER_BASED_FILTERING` + `CUSTOM_USER_FILTERING`
-- Impact: Lose all filtering, receive all signals (back to core functionality only). Custom filters are preserved in database for future upgrade.
+- Lose: `CUSTOM_USER_FILTERING` (TIER_BASED_FILTERING remains)
+- Impact: Lose ability to select specific instruments. Custom filter settings are preserved in database for future upgrade.
 
 ---
 
@@ -739,7 +492,7 @@ export const FEATURE_TEMPLATES: Record<
 > = {
   [FeatureTemplate.BASIC_SIGNALS]: {
     name: 'Basic Signals',
-    features: [], // No filtering features - receives all signals (core functionality)
+    features: [FeatureFlag.TIER_BASED_FILTERING], // Tier-based filtering by sectors
   },
   [FeatureTemplate.VIP_SIGNALS]: {
     name: 'VIP Signals',
@@ -757,10 +510,10 @@ export const FEATURE_TEMPLATES: Record<
 
 The Feature Flags system provides two core filtering features that control signal delivery behavior:
 
-1. **TIER_BASED_FILTERING**: System-controlled filtering for VIP tier
-2. **CUSTOM_USER_FILTERING**: User-controlled filtering for VIP tier
+1. **TIER_BASED_FILTERING**: System-controlled filtering by subscription sectors (All tiers)
+2. **CUSTOM_USER_FILTERING**: User-controlled instrument selection (VIP tier only)
 
-**Important**: Signal delivery is core bot functionality available to all users. These feature flags control only the filtering behavior applied to signals. Basic tier users receive all signals (no filtering), VIP users get both automatic tier-based filtering AND custom user filtering.
+**Important**: Signal delivery is core bot functionality available to all users. These feature flags control only the filtering behavior applied to signals. Both Basic and VIP tiers have TIER_BASED_FILTERING (sector-based). VIP additionally gets CUSTOM_USER_FILTERING (instrument selection).
 
 ---
 
