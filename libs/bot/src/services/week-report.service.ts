@@ -756,7 +756,28 @@ export class WeekReportService {
     // Instrument filtering statistics (optional)
     const filteredStats = data.tradingActivity.filteredByInstruments;
 
-    const templateName = `weekly_report_${data.client.subscription.id}`;
+    // Determine template name based on subscription and filter status
+    // VIP users with active filters get special template with filter stats
+    const hasActiveFilters = filteredStats !== undefined;
+    const isVipSubscription = data.client.subscription.id === 3;
+
+    let templateName: string;
+    if (hasActiveFilters && isVipSubscription) {
+      // VIP with active filters - use special template with filter stats section
+      templateName = 'weekly_report_3';
+    } else if (isVipSubscription) {
+      // VIP without filters - use base template (no filter stats section)
+      templateName = 'weekly_report';
+    } else {
+      // Other subscriptions - use subscription-specific template
+      templateName = `weekly_report_${data.client.subscription.id}`;
+    }
+
+    this.logger.debug(
+      `Using template '${templateName}' for user ${data.client.telegramId} ` +
+        `(subscription: ${data.client.subscription.id}, VIP: ${isVipSubscription}, hasFilters: ${hasActiveFilters})`,
+    );
+
     try {
       let template = await this.messagesRepository
         .getReportTemplate(templateName as MessageType, clientLang)

@@ -13,6 +13,7 @@ export type MessageType =
   | 'close_plus'
   | 'position_sltp_update'
   | 'weekly_report'
+  | 'weekly_report_3'
   | 'monthly_report';
 
 export type Message = typeof messages.$inferSelect;
