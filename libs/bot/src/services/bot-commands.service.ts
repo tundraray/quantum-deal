@@ -87,13 +87,12 @@ export class BotCommandsService {
     try {
       const commands = this.buildCommandsForUser(enabledFeatures, lang);
 
-      await this.bot.telegram.setMyCommands(commands, {
+      const result = await this.bot.telegram.setMyCommands(commands, {
         scope: { type: 'chat', chat_id: userId },
-        language_code: lang,
       });
 
       this.logger.debug(
-        `Set ${commands.length} commands for user ${userId} (lang: ${lang})`,
+        `Set ${commands.length} commands for user ${userId} (lang: ${lang} result: ${result})`,
       );
     } catch (error) {
       this.logger.error(`Failed to set commands for user ${userId}`, error);
