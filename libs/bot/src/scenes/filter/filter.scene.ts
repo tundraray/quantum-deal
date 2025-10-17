@@ -11,6 +11,7 @@ import {
   sendFeatureNotAvailable,
 } from '../../helpers/feature-access.helper';
 import { FeatureFlag } from '@quantumdeal/db/schema';
+import { FilterI18nHelper } from './filter.i18n.helper';
 
 interface CallbackData {
   action: string;
@@ -33,6 +34,7 @@ export class FilterScene {
     private readonly sessionService: FilterSessionService,
     private readonly keyboardBuilder: FilterKeyboardBuilder,
     private readonly instrumentsRepository: InstrumentsRepository,
+    private readonly i18n: FilterI18nHelper,
   ) {}
 
   /**
@@ -45,7 +47,8 @@ export class FilterScene {
     const userCtx = ctx as UserContext;
     const userId = userCtx.from?.id;
     if (!userId) {
-      await userCtx.reply('Ошибка: не удалось определить пользователя');
+      const lang = userCtx.user?.lang || 'en';
+      await userCtx.reply(this.i18n.t(lang, 'errors.user_not_found'));
       await userCtx.scene.leave();
       return;
     }
@@ -66,10 +69,13 @@ export class FilterScene {
       // Show main menu
       await this.showMainMenu(userCtx);
     } catch (error) {
-      this.logger.error(`Error entering filter scene: ${error.message}`, error);
-      await userCtx.reply(
-        'Произошла ошибка при загрузке фильтров. Попробуйте позже.',
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(
+        `Error entering filter scene: ${err.message}`,
+        err.stack,
       );
+      const lang = userCtx.user?.lang || 'en';
+      await userCtx.reply(this.i18n.t(lang, 'errors.loading_failed'));
       await userCtx.scene.leave();
     }
   }
@@ -80,10 +86,9 @@ export class FilterScene {
   private async showMainMenu(ctx: UserContext): Promise<void> {
     const userId = ctx.from!.id;
     const session = this.sessionService.getSession(userId);
+    const lang = ctx.user?.lang || 'en';
     if (!session) {
-      await ctx.reply(
-        'Сессия истекла. Используйте /filter для повторного входа.',
-      );
+      await ctx.reply(this.i18n.t(lang, 'errors.session_expired'));
       await ctx.scene.leave();
       return;
     }
@@ -92,23 +97,21 @@ export class FilterScene {
       Array.from(session.sessionFilters),
     );
 
-    let statusText: string;
-    if (summary.isAllSelected) {
-      statusText = `✅ Все инструменты (${summary.totalInstruments})`;
-    } else {
-      statusText = `📊 Выбрано: ${summary.selectedCount} из ${summary.totalInstruments}`;
-    }
+    const statusText =
+      summary.selectedCount === 0
+        ? this.i18n.t(lang, 'ui.all_instruments', {
+            count: summary.totalInstruments,
+          })
+        : this.i18n.t(lang, 'ui.selected_count', {
+            count: summary.selectedCount,
+            total: summary.totalInstruments,
+          });
 
-    const messageText = `🎯 *Фильтр инструментов*
-
-Текущий статус:
-${statusText}
-
-Выберите категорию:`;
+    const messageText = `${this.i18n.t(lang, 'ui.filter_title')}\n\n${this.i18n.t(lang, 'ui.current_status')}\n${statusText}\n\n${this.i18n.t(lang, 'ui.select_category')}`;
 
     const keyboard = this.keyboardBuilder.buildMainMenuKeyboard(
+      lang,
       summary.groupCounts,
-      summary.isAllSelected,
     );
 
     this.sessionService.updateNavigation(userId, 'main');
@@ -136,11 +139,11 @@ ${statusText}
     const userId = userCtx.from?.id;
     if (!userId) return;
 
-    const callbackData = userCtx.callbackQuery?.['data'];
-    if (!callbackData) return;
+    const callbackData = userCtx.callbackQuery?.['data'] as unknown;
+    if (typeof callbackData !== 'string') return;
 
     try {
-      const data: CallbackData = JSON.parse(callbackData);
+      const data = JSON.parse(callbackData) as CallbackData;
 
       switch (data.action) {
         case 'select_group':
@@ -203,13 +206,19 @@ ${statusText}
         case 'cancel_clear':
           await this.handleCancelClear(userCtx);
           break;
-        default:
+        default: {
           this.logger.warn(`Unknown action: ${data.action}`);
-          await userCtx.answerCbQuery('Неизвестное действие');
+          const lang = userCtx.user?.lang || 'en';
+          await userCtx.answerCbQuery(
+            this.i18n.t(lang, 'errors.unknown_action'),
+          );
+        }
       }
     } catch (error) {
-      this.logger.error(`Error handling action: ${error.message}`, error);
-      await userCtx.answerCbQuery('Произошла ошибка');
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(`Error handling action: ${err.message}`, err.stack);
+      const lang = userCtx.user?.lang || 'en';
+      await userCtx.answerCbQuery(this.i18n.t(lang, 'errors.action_failed'));
     }
   }
 
@@ -217,8 +226,6 @@ ${statusText}
     ctx: UserContext,
     group: string,
   ): Promise<void> {
-    const userId = ctx.from!.id;
-
     if (group === 'stocks') {
       await this.showStocksSubgroups(ctx);
     } else {
@@ -231,40 +238,29 @@ ${statusText}
     const session = this.sessionService.getSession(userId);
     if (!session) return;
 
+    const lang = ctx.user?.lang || 'en';
     const instruments = await this.filterService.getInstrumentsByGroup(group);
     const selectedSymbols = session.sessionFilters;
 
-    const groupEmojis = {
-      forex: '💱',
-      commodities: '🛢️',
-      crypto: '💰',
-    };
-
-    const groupNames = {
-      forex: 'Валюты',
-      commodities: 'Товары',
-      crypto: 'Криптовалюты',
-    };
-
-    const emoji = groupEmojis[group] || '📊';
-    const name = groupNames[group] || group;
+    const groupName = this.i18n.t(lang, `groups.${group}`);
+    const emoji = this.getGroupEmoji(group);
 
     const selectedCount = instruments.filter((i) =>
       selectedSymbols.has(i.symbol),
     ).length;
 
-    let messageText = `${emoji} *${name}* (${instruments.length} ${this.pluralizeInstruments(instruments.length)})
-
-Выбрано: ${selectedCount} из ${instruments.length}`;
+    const plural = this.i18n.plural(lang, 'instruments', instruments.length);
+    let messageText = `${emoji} *${groupName}* (${instruments.length} ${plural})\n\n${this.i18n.t(lang, 'ui.selected_instruments', { count: selectedCount, total: instruments.length })}`;
 
     const currentPage = session.currentPage;
     const totalPages = Math.ceil(instruments.length / 10);
 
     if (totalPages > 1) {
-      messageText += `\n\n« Страница ${currentPage + 1} из ${totalPages} »`;
+      messageText += `\n\n${this.i18n.t(lang, 'ui.page_indicator', { current: currentPage + 1, total: totalPages })}`;
     }
 
     const keyboard = this.keyboardBuilder.buildGroupListKeyboard(
+      lang,
       group,
       instruments,
       selectedSymbols,
@@ -285,15 +281,17 @@ ${statusText}
     const session = this.sessionService.getSession(userId);
     if (!session) return;
 
+    const lang = ctx.user?.lang || 'en';
+
     // Get European stocks
     const europeanStocks =
-      await this.instrumentsRepository.findBySector('european');
+      await this.instrumentsRepository.findBySubgroup('european');
     const europeanSelected = europeanStocks.filter((i) =>
       session.sessionFilters.has(i.symbol),
     ).length;
 
     // Get US stocks
-    const usStocks = await this.instrumentsRepository.findBySector('us');
+    const usStocks = await this.instrumentsRepository.findBySubgroup('us');
     const usSelected = usStocks.filter((i) =>
       session.sessionFilters.has(i.symbol),
     ).length;
@@ -301,13 +299,11 @@ ${statusText}
     const totalStocks = europeanStocks.length + usStocks.length;
     const totalSelected = europeanSelected + usSelected;
 
-    const messageText = `📈 *Акции* (${totalStocks} ${this.pluralizeInstruments(totalStocks)})
-
-Выбрано: ${totalSelected} из ${totalStocks}
-
-Выберите подгруппу:`;
+    const plural = this.i18n.plural(lang, 'instruments', totalStocks);
+    const messageText = `📈 *${this.i18n.t(lang, 'groups.stocks')}* (${totalStocks} ${plural})\n\n${this.i18n.t(lang, 'ui.selected_instruments', { count: totalSelected, total: totalStocks })}\n\n${this.i18n.t(lang, 'ui.select_category')}`;
 
     const keyboard = this.keyboardBuilder.buildStocksSubgroupKeyboard(
+      lang,
       { selected: europeanSelected, total: europeanStocks.length },
       { selected: usSelected, total: usStocks.length },
     );
@@ -336,38 +332,33 @@ ${statusText}
     const session = this.sessionService.getSession(userId);
     if (!session) return;
 
-    const instruments = await this.instrumentsRepository.findBySector(subgroup);
+    const lang = ctx.user?.lang || 'en';
+    const instruments =
+      await this.instrumentsRepository.findBySubgroup(subgroup);
     const selectedSymbols = session.sessionFilters;
 
-    const subgroupEmojis = {
-      european: '🇪🇺',
-      us: '🇺🇸',
-    };
-
-    const subgroupNames = {
-      european: 'Европейские акции',
-      us: 'Американские акции',
-    };
-
-    const emoji = subgroupEmojis[subgroup] || '📈';
-    const name = subgroupNames[subgroup] || subgroup;
+    const subgroupName =
+      subgroup === 'european'
+        ? this.i18n.t(lang, 'groups.european')
+        : this.i18n.t(lang, 'groups.us');
+    const emoji = subgroup === 'european' ? '🇪🇺' : '🇺🇸';
 
     const selectedCount = instruments.filter((i) =>
       selectedSymbols.has(i.symbol),
     ).length;
 
-    let messageText = `${emoji} *${name}* (${instruments.length} ${this.pluralizeInstruments(instruments.length)})
-
-Выбрано: ${selectedCount} из ${instruments.length}`;
+    const plural = this.i18n.plural(lang, 'instruments', instruments.length);
+    let messageText = `${emoji} *${subgroupName}* (${instruments.length} ${plural})\n\n${this.i18n.t(lang, 'ui.selected_instruments', { count: selectedCount, total: instruments.length })}`;
 
     const currentPage = session.currentPage;
     const totalPages = Math.ceil(instruments.length / 10);
 
     if (totalPages > 1) {
-      messageText += `\n\n« Страница ${currentPage + 1} из ${totalPages} »`;
+      messageText += `\n\n${this.i18n.t(lang, 'ui.page_indicator', { current: currentPage + 1, total: totalPages })}`;
     }
 
     const keyboard = this.keyboardBuilder.buildSubgroupListKeyboard(
+      lang,
       subgroup,
       instruments,
       selectedSymbols,
@@ -398,17 +389,12 @@ ${statusText}
   }
 
   private async handleClearFiltersConfirm(ctx: UserContext): Promise<void> {
+    const lang = ctx.user?.lang || 'en';
     const summary = await this.filterService.calculateFilterSummary([]);
 
-    const messageText = `⚠️ *Подтверждение*
+    const messageText = `${this.i18n.t(lang, 'confirmation.title')}\n\n${this.i18n.t(lang, 'confirmation.clear_warning', { count: summary.totalInstruments })}`;
 
-Вы уверены, что хотите очистить все фильтры?
-
-После очистки вы снова будете получать сигналы по всем ${summary.totalInstruments} инструментам.`;
-
-    const keyboard = this.keyboardBuilder.buildClearConfirmationKeyboard(
-      summary.totalInstruments,
-    );
+    const keyboard = this.keyboardBuilder.buildClearConfirmationKeyboard(lang);
 
     await ctx.editMessageText(messageText, {
       parse_mode: 'Markdown',
@@ -419,6 +405,7 @@ ${statusText}
 
   private async handleConfirmClearFilters(ctx: UserContext): Promise<void> {
     const userId = ctx.from!.id;
+    const lang = ctx.user?.lang || 'en';
 
     try {
       await this.filterService.clearUserFilters(userId);
@@ -427,20 +414,19 @@ ${statusText}
 
       const summary = await this.filterService.calculateFilterSummary([]);
 
-      const messageText = `✅ *Фильтр очищен!*
+      const messageText = `${this.i18n.t(lang, 'messages.filter_cleared')}\n\n${this.i18n.t(lang, 'confirmation.after_clear', { count: summary.totalInstruments })}`;
 
-Вы будете получать сигналы по всем ${summary.totalInstruments} инструментам.`;
-
-      const keyboard = this.keyboardBuilder.buildConfirmationKeyboard();
+      const keyboard = this.keyboardBuilder.buildConfirmationKeyboard(lang);
 
       await ctx.editMessageText(messageText, {
         parse_mode: 'Markdown',
         ...keyboard,
       });
-      await ctx.answerCbQuery('Фильтр очищен');
+      await ctx.answerCbQuery(this.i18n.t(lang, 'messages.filter_cleared'));
     } catch (error) {
-      this.logger.error(`Error clearing filters: ${error.message}`, error);
-      await ctx.answerCbQuery('Ошибка при очистке фильтров');
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(`Error clearing filters: ${err.message}`, err.stack);
+      await ctx.answerCbQuery(this.i18n.t(lang, 'errors.clearing_failed'));
     }
   }
 
@@ -450,10 +436,11 @@ ${statusText}
 
   private async handleClose(ctx: UserContext): Promise<void> {
     const userId = ctx.from!.id;
+    const lang = ctx.user?.lang || 'en';
     this.sessionService.clearSession(userId);
 
     await ctx.deleteMessage();
-    await ctx.answerCbQuery('Меню закрыто');
+    await ctx.answerCbQuery(this.i18n.t(lang, 'messages.menu_closed'));
     await ctx.scene.leave();
   }
 
@@ -556,6 +543,7 @@ ${statusText}
   private async handleSave(ctx: UserContext): Promise<void> {
     const userId = ctx.from!.id;
     const session = this.sessionService.getSession(userId);
+    const lang = ctx.user?.lang || 'en';
     if (!session) return;
 
     try {
@@ -565,19 +553,23 @@ ${statusText}
 
       const summary = await this.filterService.calculateFilterSummary(symbols);
 
-      let messageText = `✅ *Фильтр сохранён!*\n\n`;
-      messageText += this.filterService.formatConfirmationSummary(summary);
+      const confirmationText = this.filterService.formatConfirmationSummary(
+        summary,
+        lang,
+      );
+      const messageText = `${this.i18n.t(lang, 'messages.filter_saved')}\n\n${confirmationText}`;
 
-      const keyboard = this.keyboardBuilder.buildConfirmationKeyboard();
+      const keyboard = this.keyboardBuilder.buildConfirmationKeyboard(lang);
 
       await ctx.editMessageText(messageText, {
         parse_mode: 'Markdown',
         ...keyboard,
       });
-      await ctx.answerCbQuery('Настройки сохранены');
+      await ctx.answerCbQuery(this.i18n.t(lang, 'messages.settings_saved'));
     } catch (error) {
-      this.logger.error(`Error saving filters: ${error.message}`, error);
-      await ctx.answerCbQuery('Ошибка при сохранении');
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(`Error saving filters: ${err.message}`, err.stack);
+      await ctx.answerCbQuery(this.i18n.t(lang, 'errors.saving_failed'));
     }
   }
 
@@ -614,16 +606,13 @@ ${statusText}
     }
   }
 
-  private pluralizeInstruments(count: number): string {
-    const mod10 = count % 10;
-    const mod100 = count % 100;
-
-    if (mod10 === 1 && mod100 !== 11) {
-      return 'инструмент';
-    }
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
-      return 'инструмента';
-    }
-    return 'инструментов';
+  private getGroupEmoji(group: string): string {
+    const emojis: Record<string, string> = {
+      forex: '💱',
+      commodities: '🛢️',
+      crypto: '💰',
+      stocks: '📈',
+    };
+    return emojis[group] || '📊';
   }
 }

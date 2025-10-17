@@ -22,6 +22,14 @@ export class InstrumentsRepository {
       .orderBy(instruments.symbol);
   }
 
+  async findBySubgroup(subgroup: string): Promise<Instrument[]> {
+    return this.db
+      .select()
+      .from(instruments)
+      .where(eq(instruments.subgroup, subgroup))
+      .orderBy(instruments.symbol);
+  }
+
   async findByGroup(group: string): Promise<Instrument[]> {
     return this.db
       .select()

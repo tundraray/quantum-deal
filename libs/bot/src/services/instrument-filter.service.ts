@@ -5,6 +5,7 @@ import {
   Instrument,
 } from '@quantumdeal/db';
 import { FeatureFlag } from '@quantumdeal/db/schema';
+import { FilterI18nHelper } from '../scenes/filter/filter.i18n.helper';
 
 export interface GroupCount {
   selected: number;
@@ -32,6 +33,7 @@ export class InstrumentFilterService {
   constructor(
     private readonly instrumentsRepository: InstrumentsRepository,
     private readonly userFeaturesRepository: UserSubscriptionFeaturesRepository,
+    private readonly i18n: FilterI18nHelper,
   ) {}
 
   /**
@@ -55,10 +57,26 @@ export class InstrumentFilterService {
       }
 
       // Extract symbols array from settings JSONB
-      const symbols = (settings.settings as any).symbols as string[];
-      return Array.isArray(symbols) ? symbols : [];
+      if (
+        typeof settings.settings === 'object' &&
+        settings.settings !== null &&
+        'symbols' in settings.settings
+      ) {
+        const symbols = settings.settings.symbols;
+        if (Array.isArray(symbols)) {
+          return symbols.filter(
+            (item): item is string => typeof item === 'string',
+          );
+        }
+      }
+
+      return [];
     } catch (error) {
-      this.logger.error(`Error loading user filters: ${error.message}`, error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(
+        `Error loading user filters: ${err.message}`,
+        err.stack,
+      );
       return [];
     }
   }
@@ -87,7 +105,8 @@ export class InstrumentFilterService {
         `Saved filters for user ${userId}: ${symbols.length} instruments`,
       );
     } catch (error) {
-      this.logger.error(`Error saving user filters: ${error.message}`, error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(`Error saving user filters: ${err.message}`, err.stack);
       throw error;
     }
   }
@@ -107,7 +126,11 @@ export class InstrumentFilterService {
       );
       this.logger.log(`Cleared filters for user ${userId}`);
     } catch (error) {
-      this.logger.error(`Error clearing user filters: ${error.message}`, error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error(
+        `Error clearing user filters: ${err.message}`,
+        err.stack,
+      );
       throw error;
     }
   }
@@ -130,7 +153,7 @@ export class InstrumentFilterService {
     }
 
     // Sort instruments within each group by symbol
-    for (const [group, instruments] of grouped) {
+    for (const instruments of grouped.values()) {
       instruments.sort((a, b) => a.symbol.localeCompare(b.symbol));
     }
 
@@ -217,39 +240,37 @@ export class InstrumentFilterService {
    * Creates a user-friendly summary of selected instruments.
    *
    * @param summary - Filter summary
+   * @param lang - Language code
    * @returns Formatted text for confirmation screen
    */
-  formatConfirmationSummary(summary: FilterSummary): string {
+  formatConfirmationSummary(summary: FilterSummary, lang: string): string {
     if (summary.isAllSelected) {
-      return `✅ Все инструменты (${summary.totalInstruments})`;
+      return this.i18n.t(lang, 'ui.all_instruments', {
+        count: summary.totalInstruments,
+      });
     }
 
     const lines: string[] = [];
-    lines.push(
-      `Вы будете получать сигналы только по выбранным инструментам:\n`,
-    );
+    lines.push(this.i18n.t(lang, 'ui.you_will_receive'));
+    lines.push('');
 
-    const groupEmojis = {
+    const groupEmojis: Record<string, string> = {
       forex: '💱',
       commodities: '🛢️',
       crypto: '💰',
       stocks: '📈',
     };
 
-    const groupNames = {
-      forex: 'Валюты',
-      commodities: 'Товары',
-      crypto: 'Криптовалюты',
-      stocks: 'Акции',
-    };
-
-    for (const [group, instruments] of summary.selectedByGroup) {
+    for (const [groupKey, instruments] of summary.selectedByGroup) {
       if (instruments.length > 0) {
-        const emoji = groupEmojis[group] || '📊';
-        const name = groupNames[group] || group;
-        lines.push(
-          `${emoji} ${name}: ${instruments.length} ${this.pluralize(instruments.length, 'инструмент', 'инструмента', 'инструментов')}`,
+        const emoji = groupEmojis[groupKey] || '📊';
+        const groupName = this.i18n.t(lang, `groups.${groupKey}`);
+        const plural = this.i18n.plural(
+          lang,
+          'instruments',
+          instruments.length,
         );
+        lines.push(`${emoji} ${groupName}: ${instruments.length} ${plural}`);
 
         // Show first 5 instruments
         const toShow = instruments.slice(0, 5);
@@ -263,8 +284,13 @@ export class InstrumentFilterService {
         // If more than 5, show "and X more"
         if (instruments.length > 5) {
           const remaining = instruments.length - 5;
+          const remainingPlural = this.i18n.plural(
+            lang,
+            'instruments',
+            remaining,
+          );
           lines.push(
-            `  ... и ещё ${remaining} ${this.pluralize(remaining, 'инструмент', 'инструмента', 'инструментов')}`,
+            `  ${this.i18n.t(lang, 'ui.and_more', { count: remaining, plural: remainingPlural })}`,
           );
         }
 
@@ -272,30 +298,18 @@ export class InstrumentFilterService {
       }
     }
 
+    const totalPlural = this.i18n.plural(
+      lang,
+      'instruments',
+      summary.selectedCount,
+    );
     lines.push(
-      `Всего выбрано: ${summary.selectedCount} из ${summary.totalInstruments}`,
+      this.i18n.t(lang, 'ui.total_selected', {
+        count: summary.selectedCount,
+        total: summary.totalInstruments,
+        plural: totalPlural,
+      }),
     );
     return lines.join('\n');
-  }
-
-  /**
-   * Russian pluralization helper
-   */
-  private pluralize(
-    count: number,
-    one: string,
-    few: string,
-    many: string,
-  ): string {
-    const mod10 = count % 10;
-    const mod100 = count % 100;
-
-    if (mod10 === 1 && mod100 !== 11) {
-      return one;
-    }
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
-      return few;
-    }
-    return many;
   }
 }
