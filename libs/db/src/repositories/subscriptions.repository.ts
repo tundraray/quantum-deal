@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { sql, or, eq, and, like } from 'drizzle-orm';
+import { sql, eq, and, like } from 'drizzle-orm';
 import { BaseRepository } from './base.repository';
 import { DRIZZLE_CLIENT, type DrizzleClient } from '../database.provider';
 import {
@@ -9,6 +9,36 @@ import {
   isBroadcastSubscription,
 } from '../schema/subscriptions';
 import { subscriptionFeatures } from '../schema/subscription-features';
+import { users } from '../schema/users';
+import { userSubscriptions } from '../schema/user-subscriptions';
+
+/**
+ * Extended subscription interface that includes feature flag information
+ * and user details for webhook processing
+ */
+export interface SubscriptionWithFeatures {
+  // Subscription fields
+  subscriptionId: number;
+  subscriptionName: string;
+  subscriptionIsActive: boolean;
+
+  // Feature flag: hasCustomFiltering
+  hasCustomFiltering: boolean;
+
+  // User fields
+  userId: number;
+  userTelegramId: string;
+  userFirstName: string;
+  userLastName: string | null;
+  userUsername: string | null;
+
+  // UserSubscription fields
+  userSubscriptionId: number;
+  userSubscriptionActivatedAt: Date;
+  userSubscriptionExpiresAt: Date | null;
+  userSubscriptionEndDate: Date | null; // For backward compatibility with webhook
+  userSubscriptionIsActive: boolean;
+}
 
 @Injectable()
 export class SubscriptionsRepository extends BaseRepository<
@@ -24,46 +54,80 @@ export class SubscriptionsRepository extends BaseRepository<
   }
 
   /**
-   * Find subscriptions that have TIER_BASED_FILTERING feature enabled
-   * for a specific sector.
+   * Find subscriptions with users that have TIER_BASED_FILTERING feature enabled
+   * for a specific sector, including hasCustomFiltering flag for webhook filtering.
    *
-   * This method now queries subscription_features.config.sectors instead
-   * of the deprecated subscriptions.scope field.
+   * This method returns user-subscription pairs with feature flag information,
+   * enabling the webhook processor to apply custom filtering per user.
    *
    * @param sector - The sector to filter by (e.g., 'crypto', 'forex', 'stocks')
-   * @returns Array of subscriptions that have access to the specified sector
+   * @returns Array of user-subscription pairs with feature flags
    */
-  async findBySector(sector: string): Promise<Subscription[]> {
-    return this.db
-      .selectDistinct({
-        id: subscriptions.id,
-        name: subscriptions.name,
-        scope: subscriptions.scope,
-        type: subscriptions.type,
-        isActive: subscriptions.isActive,
-        createdAt: subscriptions.createdAt,
-        updatedAt: subscriptions.updatedAt,
-        closedAt: subscriptions.closedAt,
-        closedBy: subscriptions.closedBy,
+  async findBySector(sector: string): Promise<SubscriptionWithFeatures[]> {
+    // Alias for tier-based filtering join
+    const sfTier = subscriptionFeatures;
+
+    const result = await this.db
+      .select({
+        // Subscription fields
+        subscriptionId: subscriptions.id,
+        subscriptionName: subscriptions.name,
+        subscriptionIsActive: subscriptions.isActive,
+
+        // Feature flag: hasCustomFiltering (using subquery to avoid duplicate rows)
+        hasCustomFiltering: sql<boolean>`
+          COALESCE(
+            (SELECT sf_custom.is_enabled
+             FROM ${subscriptionFeatures} sf_custom
+             WHERE sf_custom.subscription_id = ${subscriptions.id}
+             AND sf_custom.feature_key = 'custom_user_filtering'
+             AND sf_custom.is_enabled = true
+            ), false
+          )
+        `,
+
+        // User fields
+        userId: users.telegramId,
+        userTelegramId: sql<string>`CAST(${users.telegramId} AS TEXT)`,
+        userFirstName: users.firstName,
+        userLastName: users.lastName,
+        userUsername: users.username,
+
+        // UserSubscription fields
+        userSubscriptionId: userSubscriptions.id,
+        userSubscriptionActivatedAt: userSubscriptions.activatedAt,
+        userSubscriptionExpiresAt: userSubscriptions.expiresAt,
+        userSubscriptionEndDate: userSubscriptions.expiresAt, // Alias for backward compatibility
+        userSubscriptionIsActive: userSubscriptions.isActive,
       })
       .from(subscriptions)
       .innerJoin(
-        subscriptionFeatures,
-        eq(subscriptions.id, subscriptionFeatures.subscriptionId),
+        sfTier,
+        and(
+          eq(sfTier.subscriptionId, subscriptions.id),
+          eq(sfTier.featureKey, 'tier_based_filtering'),
+        ),
       )
+      .innerJoin(
+        userSubscriptions,
+        and(
+          eq(userSubscriptions.subscriptionId, subscriptions.id),
+          eq(userSubscriptions.isActive, true),
+        ),
+      )
+      .innerJoin(users, eq(users.telegramId, userSubscriptions.userId))
       .where(
         and(
+          // Check if sector is in the tier_access config's sectors array
+          sql`${sfTier.config}::jsonb->'sectors' ? ${sector}`,
+          eq(sfTier.isEnabled, true),
           eq(subscriptions.isActive, true),
-          eq(subscriptionFeatures.featureKey, 'tier_based_filtering'),
-          eq(subscriptionFeatures.isEnabled, true),
-          or(
-            // Check if config.sectors contains the specific sector
-            sql`${subscriptionFeatures.config}->>'sectors' @> ${JSON.stringify([sector])}`,
-            // Check if config.sectors contains wildcard '*' (all sectors)
-            sql`${subscriptionFeatures.config}->>'sectors' @> '["*"]'`,
-          ),
+          // Only active user subscriptions that haven't expired
+          sql`${userSubscriptions.expiresAt} > NOW()`,
         ),
       );
+
+    return result as SubscriptionWithFeatures[];
   }
 
   /**

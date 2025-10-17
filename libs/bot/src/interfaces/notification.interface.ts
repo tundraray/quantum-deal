@@ -4,6 +4,7 @@ import { MergedOrder, MessageType } from '@quantumdeal/db/schema';
  * User notification data including subscription and language preferences
  */
 export interface NotificationUser {
+  userId: number; // User ID for feature flag queries
   telegramId: number;
   firstName: string | null;
   lastName: string | null;
@@ -12,6 +13,7 @@ export interface NotificationUser {
   subscriptionId: number;
   subscriptionScope: any; // JSON scope data
   subscriptionExpirationDate: Date | null;
+  hasCustomFiltering: boolean; // Feature flag for custom filtering
 }
 
 /**

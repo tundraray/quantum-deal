@@ -9,3 +9,5 @@ export * from './codes.repository';
 export * from './user-subscriptions.repository';
 export * from './summary.repository';
 export * from './subscription-features.repository';
+export * from './user-subscription-features.repository';
+export * from './instruments.repository';

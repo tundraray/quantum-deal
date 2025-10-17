@@ -16,6 +16,28 @@ ALTER TABLE "user_subscriptions" ALTER COLUMN "created_at" SET DATA TYPE timesta
 ALTER TABLE "user_subscriptions" ALTER COLUMN "created_at" SET DEFAULT now();--> statement-breakpoint
 ALTER TABLE "subscription_features" ADD CONSTRAINT "subscription_features_subscription_id_subscriptions_id_fk" FOREIGN KEY ("subscription_id") REFERENCES "public"."subscriptions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 -- ============================================================================
+-- Performance Indexes for subscription_features
+-- ============================================================================
+-- These indexes optimize the most common feature flag queries:
+-- 1. Load features for a subscription (by subscription_id)
+-- 2. Find subscriptions with specific feature (by feature_key)
+-- 3. Filter only enabled features (partial index)
+-- ============================================================================
+
+-- Index for fast feature lookups by subscription
+CREATE INDEX IF NOT EXISTS "idx_subscription_features_subscription_id"
+  ON "subscription_features"("subscription_id");
+--> statement-breakpoint
+-- Index for finding subscriptions by feature key
+CREATE INDEX IF NOT EXISTS "idx_subscription_features_feature_key"
+  ON "subscription_features"("feature_key");
+--> statement-breakpoint
+-- Partial index for active features only (most common query pattern)
+CREATE INDEX IF NOT EXISTS "idx_subscription_features_enabled"
+  ON "subscription_features"("subscription_id", "feature_key")
+  WHERE "is_enabled" = true;
+--> statement-breakpoint
+-- ============================================================================
 -- Data Migration: Populate subscription_features for existing subscriptions
 -- ============================================================================
 --

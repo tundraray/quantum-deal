@@ -3,8 +3,9 @@ import {
   SubscriptionsRepository,
   MessagesRepository,
   UserSubscriptionsRepository,
+  UserSubscriptionFeaturesRepository,
 } from '@quantumdeal/db';
-import { MessageType, MergedOrder } from '@quantumdeal/db/schema';
+import { MessageType, MergedOrder, FeatureFlag } from '@quantumdeal/db/schema';
 import {
   NotificationUser,
   PreparedMessage,
@@ -25,6 +26,7 @@ export class WebhookProcessorService {
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly messagesRepository: MessagesRepository,
     private readonly notificationService: NotificationService,
+    private readonly userSubscriptionFeaturesRepository: UserSubscriptionFeaturesRepository,
   ) {}
 
   /**
@@ -144,7 +146,110 @@ export class WebhookProcessorService {
   }
 
   /**
+   * Determines if signal should be sent to user based on custom filtering settings
+   */
+  private async shouldSendSignal(
+    user: NotificationUser,
+    symbol: string,
+  ): Promise<boolean> {
+    // If user doesn't have custom filtering feature, send all tier signals
+    if (!user.hasCustomFiltering) {
+      this.logger.debug(
+        `User ${user.telegramId} - no custom filtering, sending signal`,
+        { symbol },
+      );
+      return true;
+    }
+
+    // User has custom filtering - check if they've configured it
+    try {
+      const userFeature =
+        await this.userSubscriptionFeaturesRepository.getUserFeatureSettings(
+          user.userId,
+          FeatureFlag.CUSTOM_USER_FILTERING,
+        );
+
+      // No custom settings configured - send all tier signals (default behavior)
+      if (!userFeature || !userFeature.isActive) {
+        this.logger.debug(
+          `User ${user.telegramId} has custom filtering but not configured, sending signal`,
+          { symbol },
+        );
+        return true;
+      }
+
+      // Check symbol whitelist
+      const settings = userFeature.settings as { symbols?: string[] };
+      const allowedSymbols = settings.symbols || [];
+
+      // Empty whitelist = send all (not configured yet)
+      if (allowedSymbols.length === 0) {
+        return true;
+      }
+
+      // Check if symbol is in user's whitelist
+      const isAllowed = allowedSymbols.includes(symbol);
+
+      this.logger.debug(
+        `User ${user.telegramId} custom filtering: symbol ${symbol} ${isAllowed ? 'ALLOWED' : 'BLOCKED'}`,
+        { allowedSymbols, symbol },
+      );
+
+      return isAllowed;
+    } catch (error) {
+      // On error, fail open (send signal to avoid missing important signals)
+      const err = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Error checking custom filtering for user ${user.telegramId}, defaulting to SEND`,
+        { error: err, symbol },
+      );
+      return true;
+    }
+  }
+
+  /**
+   * Filters users based on custom symbol filtering settings
+   */
+  private async applyCustomFiltering(
+    users: NotificationUser[],
+    symbol: string,
+  ): Promise<NotificationUser[]> {
+    const startTime = Date.now();
+
+    this.logger.log(
+      `Applying custom filtering for ${users.length} users (symbol: ${symbol})`,
+    );
+
+    // Filter users in parallel
+    const filterPromises = users.map(async (user) => {
+      const shouldSend = await this.shouldSendSignal(user, symbol);
+      return shouldSend ? user : null;
+    });
+
+    const results = await Promise.all(filterPromises);
+    const filteredUsers = results.filter(
+      (user): user is NotificationUser => user !== null,
+    );
+
+    const elapsed = Date.now() - startTime;
+    const blocked = users.length - filteredUsers.length;
+
+    this.logger.log(
+      `Custom filtering complete: ${filteredUsers.length}/${users.length} users (${blocked} blocked) [${elapsed}ms]`,
+      {
+        symbol,
+        totalUsers: users.length,
+        sentTo: filteredUsers.length,
+        blocked,
+      },
+    );
+
+    return filteredUsers;
+  }
+
+  /**
    * Get users eligible for notifications based on order sector
+   * Now uses feature flags from findBySector() to enable custom filtering
    */
   private async getEligibleUsers(
     order: MergedOrder,
@@ -155,50 +260,58 @@ export class WebhookProcessorService {
     }
 
     try {
-      // Find subscriptions that match the order's sector
-      const matchingSubscriptions =
+      // Find users with subscriptions matching the order's sector
+      // This now returns SubscriptionWithFeatures[] with hasCustomFiltering flag
+      const subscriptionsWithUsers =
         await this.subscriptionsRepository.findBySector(order.sector);
 
-      if (matchingSubscriptions.length === 0) {
+      this.logger.log(
+        `Found ${subscriptionsWithUsers.length} users with ${order.sector} access`,
+        { sector: order.sector, symbol: order.symbol },
+      );
+
+      if (subscriptionsWithUsers.length === 0) {
         return [];
       }
 
-      const subscriptionIds = matchingSubscriptions.map((sub) => sub.id);
+      // Map to NotificationUser format
+      const users: NotificationUser[] = subscriptionsWithUsers.map((sub) => ({
+        userId: sub.userId,
+        telegramId: Number(sub.userTelegramId),
+        firstName: sub.userFirstName,
+        lastName: sub.userLastName,
+        username: sub.userUsername,
+        lang: 'en', // TODO: Get from user preferences
+        subscriptionId: sub.subscriptionId,
+        subscriptionScope: null, // Deprecated, using feature flags now
+        subscriptionExpirationDate: sub.userSubscriptionEndDate,
+        hasCustomFiltering: sub.hasCustomFiltering,
+      }));
 
-      // Find users with active subscriptions
-      const eligibleUsers: NotificationUser[] = [];
-
-      for (const subscriptionId of subscriptionIds) {
-        const usersWithSubscription =
-          await this.userSubscriptionsRepository.findActiveUsersWithActiveWithSubscriptionId(
-            subscriptionId,
-          );
-
-        for (const { user, subscription } of usersWithSubscription) {
-          // Check if subscription is still active
-
-          if (user) {
-            eligibleUsers.push({
-              telegramId: user.telegramId,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              username: user.username,
-              lang: user.lang || 'en', // Default to English
-              subscriptionId: subscription.id,
-              subscriptionScope: subscription.scope,
-              subscriptionExpirationDate: user.subscribeExpirationDate,
-            });
-          }
-        }
-      }
-
-      return eligibleUsers;
-    } catch (error) {
-      const err = error as Error;
-      this.logger.error(
-        `Error fetching eligible users: ${err.message}`,
-        err.stack,
+      // Apply custom filtering based on symbol
+      const filteredUsers = await this.applyCustomFiltering(
+        users,
+        order.symbol,
       );
+
+      this.logger.log(
+        `Signal will be sent to ${filteredUsers.length} users after custom filtering`,
+        {
+          sector: order.sector,
+          symbol: order.symbol,
+          totalUsers: users.length,
+          filteredUsers: filteredUsers.length,
+          blocked: users.length - filteredUsers.length,
+        },
+      );
+
+      return filteredUsers;
+    } catch (error) {
+      const err = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error finding eligible users', {
+        error: err,
+        sector: order.sector,
+      });
       return [];
     }
   }

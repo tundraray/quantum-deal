@@ -8,9 +8,11 @@ import {
   MessagesRepository,
   SubscriptionsRepository,
   SubscriptionFeaturesRepository,
+  UserSubscriptionFeaturesRepository,
   CodesRepository,
   UserSubscriptionsRepository,
   SummaryRepository,
+  InstrumentsRepository,
 } from './repositories';
 
 @Module({
@@ -47,9 +49,11 @@ export class DrizzleModule {}
     MessagesRepository,
     SubscriptionsRepository,
     SubscriptionFeaturesRepository,
+    UserSubscriptionFeaturesRepository,
     CodesRepository,
     UserSubscriptionsRepository,
     SummaryRepository,
+    InstrumentsRepository,
   ],
   exports: [
     // Export the database client for direct access if needed
@@ -61,9 +65,11 @@ export class DrizzleModule {}
     MessagesRepository,
     SubscriptionsRepository,
     SubscriptionFeaturesRepository,
+    UserSubscriptionFeaturesRepository,
     CodesRepository,
     UserSubscriptionsRepository,
     SummaryRepository,
+    InstrumentsRepository,
   ],
 })
 export class DbModule {}

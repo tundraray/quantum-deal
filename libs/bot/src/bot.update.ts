@@ -20,6 +20,7 @@ import {
 import { BotService } from './bot.service';
 import { langKeyboard } from './lang';
 import type { UserContext } from './interfaces';
+import { FILTER_SCENE_ID } from './constants';
 
 @Update()
 @UseInterceptors(ResponseTimeInterceptor)
@@ -67,6 +68,17 @@ export class BotUpdate {
         ...langKeyboard(2),
       });
     }
+  }
+
+  @Command('filter')
+  async onFilter(@Ctx() ctx: UserContext): Promise<void> {
+    if (!ctx.user) {
+      await ctx.reply('Сначала нужно зарегистрироваться. Используйте /start');
+      return;
+    }
+
+    // Enter filter scene
+    await ctx.scene.enter(FILTER_SCENE_ID);
   }
 
   @On('callback_query')

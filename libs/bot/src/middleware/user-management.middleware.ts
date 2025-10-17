@@ -7,6 +7,7 @@ import {
   UserSubscriptionsRepository,
 } from '@quantumdeal/db';
 import { UserContext, UserWithSubscriptions } from '../interfaces';
+import { FeatureFlagService } from '../services/feature-flag.service';
 
 /**
  * Middleware that handles user authentication and creation for Telegram bot
@@ -14,7 +15,9 @@ import { UserContext, UserWithSubscriptions } from '../interfaces';
  * This middleware:
  * - Checks if a Telegram user exists in the database
  * - Creates the user if they don't exist
- * - Attaches the user to the context for further use
+ * - Loads active subscriptions
+ * - Loads feature flags via FeatureFlagService
+ * - Attaches the enriched user to the context for further use
  */
 @Injectable()
 export class UserManagementMiddleware {
@@ -23,6 +26,7 @@ export class UserManagementMiddleware {
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
+    private readonly featureFlagService: FeatureFlagService,
   ) {
     this.logger.debug('User management middleware constructor');
   }
@@ -95,9 +99,15 @@ export class UserManagementMiddleware {
   }
 
   /**
-   * Loads user with active subscriptions and converts to UserWithSubscriptions DTO
+   * Loads user with active subscriptions and feature flags
+   *
+   * This method:
+   * 1. Loads active subscriptions with subscription details
+   * 2. Loads feature flags via FeatureFlagService
+   * 3. Returns enriched UserWithSubscriptions DTO
+   *
    * @param user - Raw user entity from database
-   * @returns UserWithSubscriptions DTO with active subscriptions
+   * @returns UserWithSubscriptions DTO with active subscriptions and feature flags
    */
   private async loadUserWithSubscriptions(user: {
     telegramId: number;
@@ -114,6 +124,14 @@ export class UserManagementMiddleware {
       await this.userSubscriptionsRepository.findActiveByUserIdWithSubscription(
         user.telegramId,
       );
+
+    // Load feature flags for this user
+    const { enabledFeatures, featureConfigs } =
+      await this.featureFlagService.getUserFeatures(user.telegramId);
+
+    this.logger.debug(
+      `Loaded ${enabledFeatures.size} features for user ${user.telegramId}`,
+    );
 
     // Map to UserWithSubscriptions DTO
     return {
@@ -133,6 +151,8 @@ export class UserManagementMiddleware {
         expiresAt: s.userSubscription.expiresAt,
         isActive: s.userSubscription.isActive,
       })),
+      enabledFeatures,
+      featureConfigs,
     };
   }
 }

@@ -1,3 +1,5 @@
+import { FeatureFlag, FeatureConfig } from '@quantumdeal/db/schema';
+
 /**
  * Active Subscription DTO
  *
@@ -41,13 +43,15 @@ export interface ActiveSubscriptionDto {
 /**
  * User with Subscriptions DTO
  *
- * Enhanced user data transfer object that includes active subscriptions.
+ * Enhanced user data transfer object that includes active subscriptions and feature flags.
  * This replaces the old User type that relied on the deprecated subscribeId field.
  *
  * Migration Note:
  * - Removed: subscribeId (one-to-one relationship field)
  * - Removed: subscribeExpirationDate (replaced by expiresAt in activeSubscriptions)
  * - Added: activeSubscriptions array (supports many-to-many relationship)
+ * - Added: enabledFeatures set (feature flags from subscriptions)
+ * - Added: featureConfigs map (feature-specific configurations)
  */
 export interface UserWithSubscriptions {
   /**
@@ -95,6 +99,18 @@ export interface UserWithSubscriptions {
    * Empty array if user has no active subscriptions
    */
   activeSubscriptions: ActiveSubscriptionDto[];
+
+  /**
+   * Set of enabled feature flags (aggregated from all active subscriptions)
+   * Loaded by UserManagementMiddleware via FeatureFlagService
+   */
+  enabledFeatures: Set<FeatureFlag>;
+
+  /**
+   * Map of feature-specific configurations
+   * Loaded by UserManagementMiddleware via FeatureFlagService
+   */
+  featureConfigs: Map<FeatureFlag, FeatureConfig>;
 }
 
 /**
@@ -142,4 +158,71 @@ export function hasBroadcastSubscription(user: UserWithSubscriptions): boolean {
   return user.activeSubscriptions.some(
     (sub) => sub.type.startsWith('subscription_') && sub.isActive,
   );
+}
+
+/**
+ * Helper function to check if user has a specific feature
+ *
+ * Use this for conditional logic and UI rendering.
+ * For enforcing access control, use @RequireFeature decorator.
+ *
+ * @param user - User with subscriptions and features
+ * @param feature - The feature to check
+ * @returns true if user has the feature enabled
+ */
+export function hasFeature(
+  user: UserWithSubscriptions,
+  feature: FeatureFlag,
+): boolean {
+  return user.enabledFeatures.has(feature);
+}
+
+/**
+ * Helper function to get feature configuration
+ *
+ * Returns the configuration object for a feature if user has it enabled.
+ * Useful for getting feature-specific settings.
+ *
+ * @param user - User with subscriptions and features
+ * @param feature - The feature to get config for
+ * @returns Feature configuration or null if not enabled
+ */
+export function getFeatureConfig<T = FeatureConfig>(
+  user: UserWithSubscriptions,
+  feature: FeatureFlag,
+): T | null {
+  const config = user.featureConfigs.get(feature);
+  return (config as T) || null;
+}
+
+/**
+ * Helper function to check if user has multiple features
+ *
+ * Returns true only if user has ALL specified features.
+ *
+ * @param user - User with subscriptions and features
+ * @param features - Array of features to check
+ * @returns true if user has all features
+ */
+export function hasAllFeatures(
+  user: UserWithSubscriptions,
+  features: FeatureFlag[],
+): boolean {
+  return features.every((feature) => user.enabledFeatures.has(feature));
+}
+
+/**
+ * Helper function to check if user has any of the specified features
+ *
+ * Returns true if user has AT LEAST ONE of the specified features.
+ *
+ * @param user - User with subscriptions and features
+ * @param features - Array of features to check
+ * @returns true if user has at least one feature
+ */
+export function hasAnyFeature(
+  user: UserWithSubscriptions,
+  features: FeatureFlag[],
+): boolean {
+  return features.some((feature) => user.enabledFeatures.has(feature));
 }
