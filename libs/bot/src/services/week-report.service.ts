@@ -6,11 +6,14 @@ import {
   OrdersRepository,
   SubscriptionsRepository,
   UserSubscriptionsRepository,
+  SubscriptionFeaturesRepository,
   MessagesRepository,
   Order,
   MessageType,
 } from '@quantumdeal/db';
+import { FeatureFlag } from '@quantumdeal/db/schema';
 import { NotificationService } from './notification.service';
+import { InstrumentFilterService } from './instrument-filter.service';
 import {
   MessagePriority,
   QueuedMessageType,
@@ -20,6 +23,16 @@ import { SentryService } from '@quantumdeal/framework';
 
 enum ReportType {
   WEEKLY = 'weekly',
+}
+
+interface FilteredInstrumentsStats {
+  readonly totalFilteredOrders: number; // Total orders missed due to instrument filters
+  readonly filteredPercentage: number; // Percentage of missed orders
+  readonly topMissedInstruments: ReadonlyArray<{
+    // Top 3 most missed instruments
+    readonly symbol: string;
+    readonly count: number;
+  }>;
 }
 
 interface TradingActivityStats {
@@ -38,6 +51,9 @@ interface TradingActivityStats {
   readonly vipTotalProfit: number;
   readonly vipTotalLoss: number;
   readonly vipNetResult: number;
+
+  // Instrument filtering statistics (for CUSTOM_USER_FILTERING feature)
+  readonly filteredByInstruments?: FilteredInstrumentsStats;
 }
 
 interface ClientSubscription {
@@ -97,7 +113,9 @@ export class WeekReportService {
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly messagesRepository: MessagesRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
+    private readonly subscriptionFeaturesRepository: SubscriptionFeaturesRepository,
     private readonly notificationService: NotificationService,
+    private readonly instrumentFilterService: InstrumentFilterService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly configService: ConfigService,
     private readonly sentryService: SentryService,
@@ -333,8 +351,9 @@ export class WeekReportService {
     try {
       const { startDate, endDate } = this.calculateWeeklyPeriod();
 
-      // Get sector-filtered trading data for this client
+      // Get sector-filtered trading data for this client (includes instrument filtering stats)
       const tradingActivity = await this.gatherClientTradingActivityData(
+        client.telegramId,
         startDate,
         endDate,
         client.subscriptionScope,
@@ -378,11 +397,14 @@ export class WeekReportService {
   }
 
   private async gatherClientTradingActivityData(
+    userId: number,
     startDate: Date,
     endDate: Date,
     subscriptionScope: unknown,
   ): Promise<TradingActivityStats> {
-    this.logger.debug('Gathering client-specific trading activity data');
+    this.logger.debug(
+      `Gathering client-specific trading activity data for user ${userId}`,
+    );
 
     try {
       // Determine which sectors to include
@@ -398,7 +420,7 @@ export class WeekReportService {
         endDate,
       );
 
-      const allOrders = isAllSectors
+      const allOrdersInSectors = isAllSectors
         ? allTradingActivity
         : await this.ordersRepository.findByEventPeriod(
             startDate,
@@ -406,8 +428,22 @@ export class WeekReportService {
             allowedSectors,
           );
 
+      // Calculate instrument filtering statistics (for CUSTOM_USER_FILTERING feature)
+      const filteredByInstruments =
+        await this.calculateFilteredInstrumentsStats(
+          userId,
+          allOrdersInSectors,
+        );
+
+      // Apply instrument filters to get final orders for this user
+      const userFilteredOrders = filteredByInstruments
+        ? await this.applyInstrumentFilters(userId, allOrdersInSectors)
+        : allOrdersInSectors;
+
       // Calculate all stats based on filtered orders (only closed orders)
-      const closedOrdersOnly = allOrders.filter((order) => !!order.closeTime);
+      const closedOrdersOnly = userFilteredOrders.filter(
+        (order) => !!order.closeTime,
+      );
       const totalOrders = closedOrdersOnly.length;
 
       const profitLossData =
@@ -435,10 +471,152 @@ export class WeekReportService {
         vipTotalProfit: vipProfitLossData.totalProfit,
         vipTotalLoss: vipProfitLossData.totalLoss,
         vipNetResult,
+
+        // Instrument filtering statistics (only for users with CUSTOM_USER_FILTERING)
+        filteredByInstruments,
       };
     } catch (error) {
       this.logger.error('Failed to gather client trading activity data', error);
       throw new Error('Failed to gather client trading activity data');
+    }
+  }
+
+  /**
+   * Calculate statistics for orders filtered by instrument selection
+   * Only applies to users with CUSTOM_USER_FILTERING feature
+   *
+   * @param userId - User's telegram ID
+   * @param allOrdersInSectors - All orders in user's allowed sectors
+   * @returns FilteredInstrumentsStats or undefined if feature not enabled or no filters
+   */
+  private async calculateFilteredInstrumentsStats(
+    userId: number,
+    allOrdersInSectors: Order[],
+  ): Promise<FilteredInstrumentsStats | undefined> {
+    try {
+      // Check if user has CUSTOM_USER_FILTERING feature enabled
+      const hasFeature = await this.subscriptionFeaturesRepository.hasFeature(
+        userId,
+        FeatureFlag.CUSTOM_USER_FILTERING,
+      );
+
+      if (!hasFeature) {
+        this.logger.debug(
+          `User ${userId} does not have CUSTOM_USER_FILTERING feature`,
+        );
+        return undefined;
+      }
+
+      // Get user's instrument filters
+      const userSymbols =
+        await this.instrumentFilterService.getUserFilterSymbols(userId);
+
+      // Empty array means all instruments selected (no filtering)
+      if (userSymbols.length === 0) {
+        this.logger.debug(
+          `User ${userId} has no instrument filters (all selected)`,
+        );
+        return undefined;
+      }
+
+      this.logger.debug(
+        `User ${userId} has ${userSymbols.length} instrument filters`,
+      );
+
+      // Create a set of user's selected symbols for fast lookup
+      const selectedSymbolsSet = new Set(userSymbols);
+
+      // Filter out orders that don't match user's selected instruments
+      const closedOrdersInSectors = allOrdersInSectors.filter(
+        (order) => !!order.closeTime,
+      );
+      const missedOrders = closedOrdersInSectors.filter(
+        (order) => !selectedSymbolsSet.has(order.symbol),
+      );
+
+      const totalFilteredOrders = missedOrders.length;
+
+      // If no orders were filtered out, no need to show statistics
+      if (totalFilteredOrders === 0) {
+        this.logger.debug(
+          `User ${userId} has no filtered orders (all available orders match filters)`,
+        );
+        return undefined;
+      }
+
+      // Calculate percentage
+      const totalAvailableOrders = closedOrdersInSectors.length;
+      const filteredPercentage =
+        totalAvailableOrders > 0
+          ? Math.round((totalFilteredOrders / totalAvailableOrders) * 100)
+          : 0;
+
+      // Calculate top missed instruments
+      const missedBySymbol = new Map<string, number>();
+      missedOrders.forEach((order) => {
+        const count = missedBySymbol.get(order.symbol) || 0;
+        missedBySymbol.set(order.symbol, count + 1);
+      });
+
+      // Sort by count descending and take top 3
+      const topMissedInstruments = Array.from(missedBySymbol.entries())
+        .map(([symbol, count]) => ({ symbol, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+
+      this.logger.debug(
+        `User ${userId}: ${totalFilteredOrders} orders filtered (${filteredPercentage}%), ` +
+          `top missed: ${topMissedInstruments.map((i) => `${i.symbol}:${i.count}`).join(', ')}`,
+      );
+
+      return {
+        totalFilteredOrders,
+        filteredPercentage,
+        topMissedInstruments,
+      };
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to calculate filtered instruments stats for user ${userId}: ${err.message}`,
+        err.stack,
+      );
+      // Return undefined on error to not break report generation
+      return undefined;
+    }
+  }
+
+  /**
+   * Apply user's instrument filters to orders
+   * Returns all orders if no filters are configured
+   *
+   * @param userId - User's telegram ID
+   * @param orders - Orders to filter
+   * @returns Filtered orders
+   */
+  private async applyInstrumentFilters(
+    userId: number,
+    orders: Order[],
+  ): Promise<Order[]> {
+    try {
+      const userSymbols =
+        await this.instrumentFilterService.getUserFilterSymbols(userId);
+
+      // Empty array means all instruments (no filtering)
+      if (userSymbols.length === 0) {
+        return orders;
+      }
+
+      // Filter orders by user's selected symbols
+      const selectedSymbolsSet = new Set(userSymbols);
+      return orders.filter((order) => selectedSymbolsSet.has(order.symbol));
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to apply instrument filters for user ${userId}: ${err.message}`,
+        err.stack,
+      );
+      // Return all orders on error to not break report generation
+      return orders;
     }
   }
 
@@ -574,6 +752,10 @@ export class WeekReportService {
     const vipNetResult = data.tradingActivity.vipNetResult;
     const vipPositiveTrades = data.tradingActivity.vipProfitableOrders;
     const vipNegativeTrades = data.tradingActivity.vipLossingOrders;
+
+    // Instrument filtering statistics (optional)
+    const filteredStats = data.tradingActivity.filteredByInstruments;
+
     const templateName = `weekly_report_${data.client.subscription.id}`;
     try {
       let template = await this.messagesRepository
@@ -592,7 +774,8 @@ export class WeekReportService {
         );
       }
 
-      return template
+      // Replace standard placeholders
+      let formattedTemplate = template
         .replace(/\{profit\}/g, profit.toFixed(2))
         .replace(/\{loss\}/g, Math.abs(loss).toFixed(2))
         .replace(/\{net_result\}/g, netResult.toFixed(2))
@@ -603,6 +786,56 @@ export class WeekReportService {
         .replace(/\{vip_net_result\}/g, vipNetResult.toFixed(2))
         .replace(/\{vip_positive_trades\}/g, vipPositiveTrades.toString())
         .replace(/\{vip_negative_trades\}/g, vipNegativeTrades.toString());
+
+      // Replace instrument filtering placeholders if available
+      if (filteredStats) {
+        formattedTemplate = formattedTemplate
+          .replace(
+            /\{filtered_orders_count\}/g,
+            filteredStats.totalFilteredOrders.toString(),
+          )
+          .replace(
+            /\{filtered_percentage\}/g,
+            filteredStats.filteredPercentage.toString(),
+          )
+          .replace(
+            /\{top_missed_1\}/g,
+            filteredStats.topMissedInstruments[0]?.symbol || '-',
+          )
+          .replace(
+            /\{top_missed_count_1\}/g,
+            filteredStats.topMissedInstruments[0]?.count.toString() || '0',
+          )
+          .replace(
+            /\{top_missed_2\}/g,
+            filteredStats.topMissedInstruments[1]?.symbol || '-',
+          )
+          .replace(
+            /\{top_missed_count_2\}/g,
+            filteredStats.topMissedInstruments[1]?.count.toString() || '0',
+          )
+          .replace(
+            /\{top_missed_3\}/g,
+            filteredStats.topMissedInstruments[2]?.symbol || '-',
+          )
+          .replace(
+            /\{top_missed_count_3\}/g,
+            filteredStats.topMissedInstruments[2]?.count.toString() || '0',
+          );
+      } else {
+        // If no filtered stats, replace placeholders with empty strings or defaults
+        formattedTemplate = formattedTemplate
+          .replace(/\{filtered_orders_count\}/g, '0')
+          .replace(/\{filtered_percentage\}/g, '0')
+          .replace(/\{top_missed_1\}/g, '-')
+          .replace(/\{top_missed_count_1\}/g, '0')
+          .replace(/\{top_missed_2\}/g, '-')
+          .replace(/\{top_missed_count_2\}/g, '0')
+          .replace(/\{top_missed_3\}/g, '-')
+          .replace(/\{top_missed_count_3\}/g, '0');
+      }
+
+      return formattedTemplate;
     } catch (error) {
       const err = error as Error;
       this.sentryService.captureException(err, {
@@ -615,12 +848,33 @@ export class WeekReportService {
         err.stack,
       );
 
-      return `🤝 Weekly summary — ${data.client.subscription.name}:
+      // Fallback template with filtering stats if available
+      let fallbackReport = `🤝 Weekly summary — ${data.client.subscription.name}:
 📈 Profit: ${profit.toFixed(2)} USD
 📉 Loss: ${Math.abs(loss).toFixed(2)} USD
 💹 Result: ${netResult.toFixed(2)} USD
 ✅ Positive trades: ${positiveTrades}
-❌ Negative trades: ${negativeTrades}
+❌ Negative trades: ${negativeTrades}`;
+
+      if (filteredStats) {
+        fallbackReport += `
+
+📊 Filter Statistics:
+Missed due to filters: ${filteredStats.totalFilteredOrders} signals (${filteredStats.filteredPercentage}%)
+
+Top missed instruments:`;
+        if (filteredStats.topMissedInstruments[0]) {
+          fallbackReport += `\n💱 ${filteredStats.topMissedInstruments[0].symbol}: ${filteredStats.topMissedInstruments[0].count} signals`;
+        }
+        if (filteredStats.topMissedInstruments[1]) {
+          fallbackReport += `\n🛢️ ${filteredStats.topMissedInstruments[1].symbol}: ${filteredStats.topMissedInstruments[1].count} signals`;
+        }
+        if (filteredStats.topMissedInstruments[2]) {
+          fallbackReport += `\n💰 ${filteredStats.topMissedInstruments[2].symbol}: ${filteredStats.topMissedInstruments[2].count} signals`;
+        }
+      }
+
+      fallbackReport += `
 
 🟣 VIP reference:
 📈 Profit: ${vipProfit.toFixed(2)} USD
@@ -629,6 +883,8 @@ export class WeekReportService {
 ✅ Positive trades: ${vipPositiveTrades}
 ❌ Negative trades: ${vipNegativeTrades}
 The key is consistency.`;
+
+      return fallbackReport;
     }
   }
 
