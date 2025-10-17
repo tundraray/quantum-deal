@@ -12,6 +12,8 @@ import {
 } from '@quantumdeal/db/schema/subscriptions';
 import { welcome } from './promts/welcome';
 import { UserContext, UserWithSubscriptions } from './interfaces';
+import { BotCommandsService } from './services/bot-commands.service';
+import { FeatureFlagService } from './services/feature-flag.service';
 
 import { MASTERBOT_BOT_NAME } from '@quantumdeal/masterbot/constants';
 import { InjectBot } from 'nestjs-telegraf';
@@ -25,6 +27,8 @@ export class BotService {
     private readonly codesRepository: CodesRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
+    private readonly botCommandsService: BotCommandsService,
+    private readonly featureFlagService: FeatureFlagService,
     @InjectBot(MASTERBOT_BOT_NAME)
     private readonly masterbot: Telegraf<UserContext>,
   ) {}
@@ -40,6 +44,19 @@ export class BotService {
       await this.userSubscriptionsRepository.findActiveByUserIdWithSubscription(
         user.telegramId,
       );
+
+    // If code was activated, refresh commands menu with updated features
+    if (activationResult.activatedSubscription) {
+      const { enabledFeatures } = await this.featureFlagService.getUserFeatures(
+        user.telegramId,
+      );
+
+      await this.botCommandsService.setUserCommands(
+        user.telegramId,
+        enabledFeatures,
+        user.lang ?? 'en',
+      );
+    }
 
     // Build prompt data
     const promptData = {

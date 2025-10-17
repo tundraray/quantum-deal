@@ -16,6 +16,7 @@ import { FilterSessionService } from './services/filter-session.service';
 import { FilterKeyboardBuilder } from './helpers/filter-keyboard.builder';
 import { FilterI18nHelper } from './scenes/filter/filter.i18n.helper';
 import { FeatureGuard } from './guards/feature.guard';
+import { BotCommandsService } from './services/bot-commands.service';
 import { DbModule } from '@quantumdeal/db';
 import { FrameworkModule } from '@quantumdeal/framework';
 
@@ -37,6 +38,8 @@ import { FrameworkModule } from '@quantumdeal/framework';
     UserSettingsService,
     InstrumentFilterService,
     FilterSessionService,
+    // Bot commands
+    BotCommandsService,
     // Helpers
     FilterKeyboardBuilder,
     FilterI18nHelper,
@@ -59,6 +62,8 @@ import { FrameworkModule } from '@quantumdeal/framework';
     UserSettingsService,
     InstrumentFilterService,
     FilterSessionService,
+    // Bot commands
+    BotCommandsService,
     // Helpers
     FilterKeyboardBuilder,
     FilterI18nHelper,

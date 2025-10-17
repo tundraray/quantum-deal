@@ -18,6 +18,7 @@ import {
   SplitCommandPipe,
 } from '@quantumdeal/framework';
 import { BotService } from './bot.service';
+import { BotCommandsService } from './services/bot-commands.service';
 import { langKeyboard } from './lang';
 import type { UserContext } from './interfaces';
 import { FILTER_SCENE_ID } from './constants';
@@ -31,6 +32,7 @@ export class BotUpdate {
     @InjectBot('QuantumDealBot')
     private readonly bot: Telegraf<UserContext>,
     private readonly botService: BotService,
+    private readonly botCommandsService: BotCommandsService,
   ) {}
 
   @Start()
@@ -48,6 +50,19 @@ export class BotUpdate {
       const [, code] = args ?? [];
 
       const welcomeMessage = await this.botService.onStart(user, code);
+
+      // Set personalized commands menu based on user's features and language
+      // NOTE: This must be called AFTER onStart because onStart may activate
+      // a subscription code and update the user's feature flags
+      if (!code) {
+        // Only set commands here if no code was provided
+        // If code was provided, onStart will handle command menu update
+        await this.botCommandsService.setUserCommands(
+          user.telegramId,
+          user.enabledFeatures,
+          user.lang ?? 'en',
+        );
+      }
 
       await ctx.reply(welcomeMessage, {
         parse_mode: 'Markdown',
@@ -94,6 +109,15 @@ export class BotUpdate {
       switch (command) {
         case '/lang':
           await this.botService.onLang(ctx, code);
+
+          // Refresh commands menu with new language
+          if (code) {
+            await this.botCommandsService.setUserCommands(
+              ctx.user.telegramId,
+              ctx.user.enabledFeatures,
+              code,
+            );
+          }
           break;
       }
     }
