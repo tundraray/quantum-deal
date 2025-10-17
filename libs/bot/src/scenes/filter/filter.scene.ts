@@ -142,6 +142,10 @@ export class FilterScene {
     const callbackData = userCtx.callbackQuery?.['data'] as unknown;
     if (typeof callbackData !== 'string') return;
 
+    // Only handle JSON callback data (filter actions)
+    // Ignore non-JSON callbacks like "/lang fr" from other parts of the bot
+    if (!callbackData.startsWith('{')) return;
+
     try {
       const data = JSON.parse(callbackData) as CallbackData;
 
