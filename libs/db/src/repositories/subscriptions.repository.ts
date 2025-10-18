@@ -119,7 +119,12 @@ export class SubscriptionsRepository extends BaseRepository<
       .where(
         and(
           // Check if sector is in the tier_access config's sectors array
-          sql`${sfTier.config}::jsonb->'sectors' ? ${sector}`,
+          // Supports wildcard '*' for all sectors
+          sql`(
+            ${sfTier.config}::jsonb->'sectors' ? ${sector}
+            OR
+            ${sfTier.config}::jsonb->'sectors' ? '*'
+          )`,
           eq(sfTier.isEnabled, true),
           eq(subscriptions.isActive, true),
           // Only active user subscriptions that haven't expired
