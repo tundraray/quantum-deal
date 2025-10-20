@@ -31,6 +31,7 @@ export interface SubscriptionWithFeatures {
   userFirstName: string;
   userLastName: string | null;
   userUsername: string | null;
+  userLang: string | null;
 
   // UserSubscription fields
   userSubscriptionId: number;
@@ -92,6 +93,7 @@ export class SubscriptionsRepository extends BaseRepository<
         userFirstName: users.firstName,
         userLastName: users.lastName,
         userUsername: users.username,
+        userLang: users.lang,
 
         // UserSubscription fields
         userSubscriptionId: userSubscriptions.id,

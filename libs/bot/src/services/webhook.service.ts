@@ -281,7 +281,7 @@ export class WebhookProcessorService {
         firstName: sub.userFirstName,
         lastName: sub.userLastName,
         username: sub.userUsername,
-        lang: 'en', // TODO: Get from user preferences
+        lang: sub.userLang,
         subscriptionId: sub.subscriptionId,
         subscriptionScope: null, // Deprecated, using feature flags now
         subscriptionExpirationDate: sub.userSubscriptionEndDate,
