@@ -25,6 +25,7 @@ import {
   EXPIRATION_NOTIFICATION_SYSTEM_PROMPT,
   createExpirationPrompt,
 } from './subscription-expiration.prompts';
+import { getRenewalMessage } from '../scenes/renewal/renewal.i18n';
 
 /**
  * Result of processing expiration notifications
@@ -436,10 +437,22 @@ export class SubscriptionExpirationService {
         );
       }
 
-      // Send notification
+      // Create renewal button for expiration notifications (multi-language)
+      const renewalButton = [
+        [
+          {
+            text: getRenewalMessage(userLang, 'renewButton'),
+            callback_data: 'open_renewal_scene',
+          },
+        ],
+      ];
+
+      // Send notification with renewal button
+      // Note: NotificationService needs to support buttons parameter
       this.notificationService.addMessage(user.telegramId, message, {
         messageType: QueuedMessageType.MARKDOWN,
         priority: MessagePriority.HIGH,
+        buttons: renewalButton,
       });
 
       this.logger.debug(

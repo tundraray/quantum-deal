@@ -1,0 +1,1 @@
+ALTER TABLE "renewal_tariffs" ADD COLUMN "discount_percent" integer;

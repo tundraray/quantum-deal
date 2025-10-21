@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { BaseRepository } from './base.repository';
 import { DRIZZLE_CLIENT, type DrizzleClient } from '../database.provider';
 import {
@@ -29,6 +29,7 @@ export class UserSubscriptionsRepository extends BaseRepository<
 > {
   protected table = userSubscriptions;
   protected idColumn = userSubscriptions.id;
+  private readonly logger = new Logger(UserSubscriptionsRepository.name);
 
   constructor(@Inject(DRIZZLE_CLIENT) db: DrizzleClient) {
     super(db);
@@ -52,6 +53,25 @@ export class UserSubscriptionsRepository extends BaseRepository<
     return this.findBy(
       and(eq(this.table.userId, userId), eq(this.table.isActive, true)),
     );
+  }
+
+  /**
+   * Find user subscription by user ID and subscription ID
+   * @param userId - The user's Telegram ID
+   * @param subscriptionId - The subscription ID
+   * @returns User subscription or null if not found
+   */
+  async findByUserAndSubscription(
+    userId: number,
+    subscriptionId: number,
+  ): Promise<UserSubscription | null> {
+    const result = await this.findBy(
+      and(
+        eq(this.table.userId, userId),
+        eq(this.table.subscriptionId, subscriptionId),
+      ),
+    );
+    return result[0] || null;
   }
 
   /**
@@ -410,5 +430,41 @@ export class UserSubscriptionsRepository extends BaseRepository<
       );
 
     return result;
+  }
+
+  /**
+   * Extend subscription expiry date by adding days
+   * Used for subscription renewal via payment
+   *
+   * If subscription is already expired, extends from current date
+   * If subscription is active, extends from current expiry date
+   * Automatically reactivates expired subscriptions
+   *
+   * @param userSubscriptionId - User subscription ID
+   * @param additionalDays - Number of days to add
+   * @param transactionId - Optional payment transaction ID for audit trail
+   * @returns Updated subscription or null if not found
+   */
+  async extendSubscription(
+    userSubscriptionId: number,
+    additionalDays: number,
+    transactionId?: number,
+  ): Promise<UserSubscription | null> {
+    const result = await this.db
+      .update(this.table)
+      .set({
+        expiresAt: sql`
+          CASE 
+            WHEN ${this.table.expiresAt} > NOW() 
+            THEN ${this.table.expiresAt} + INTERVAL '${sql.raw(additionalDays.toString())} days'
+            ELSE NOW() + INTERVAL '${sql.raw(additionalDays.toString())} days'
+          END
+        `,
+        isActive: true, // Reactivate if expired
+      })
+      .where(eq(this.table.id, userSubscriptionId))
+      .returning();
+
+    return result[0] || null;
   }
 }

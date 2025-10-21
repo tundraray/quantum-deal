@@ -19,9 +19,14 @@ import {
 } from '@quantumdeal/framework';
 import { BotService } from './bot.service';
 import { BotCommandsService } from './services/bot-commands.service';
+import {
+  PaymentService,
+  RenewalInvoicePayload,
+} from './services/payment.service';
 import { langKeyboard } from './lang';
 import type { UserContext } from './interfaces';
-import { FILTER_SCENE_ID } from './constants';
+import { FILTER_SCENE_ID, RENEWAL_SCENE_ID } from './constants';
+import { getRenewalMessage } from './scenes/renewal/renewal.i18n';
 
 @Update()
 @UseInterceptors(ResponseTimeInterceptor)
@@ -33,6 +38,7 @@ export class BotUpdate {
     private readonly bot: Telegraf<UserContext>,
     private readonly botService: BotService,
     private readonly botCommandsService: BotCommandsService,
+    private readonly paymentService: PaymentService,
   ) {}
 
   @Start()
@@ -96,6 +102,21 @@ export class BotUpdate {
     await ctx.scene.enter(FILTER_SCENE_ID);
   }
 
+  /**
+   * Handle /renew command
+   * Opens subscription renewal scene
+   */
+  @Command('renew')
+  async onRenew(@Ctx() ctx: UserContext): Promise<void> {
+    if (!ctx.user) {
+      await ctx.reply('Сначала нужно зарегистрироваться. Используйте /start');
+      return;
+    }
+
+    // Enter renewal scene
+    await ctx.scene.enter(RENEWAL_SCENE_ID);
+  }
+
   @On('callback_query')
   async onLangAction(
     @Ctx() ctx: UserContext,
@@ -119,7 +140,104 @@ export class BotUpdate {
             );
           }
           break;
+
+        case 'open_renewal_scene':
+          // Handle renewal button click from expiration notification
+          await ctx.scene.enter(RENEWAL_SCENE_ID);
+          break;
       }
+    }
+  }
+
+  /**
+   * Handle pre-checkout query for payment validation
+   * Called before Stars are deducted from user's account
+   */
+  @On('pre_checkout_query')
+  async onPreCheckoutQuery(@Ctx() ctx: UserContext): Promise<void> {
+    const query = ctx.preCheckoutQuery;
+
+    if (!query) {
+      return;
+    }
+
+    try {
+      // Parse invoice payload
+      const payload = JSON.parse(
+        query.invoice_payload,
+      ) as RenewalInvoicePayload;
+
+      // Validate payment
+      const isValid = await this.paymentService.validatePreCheckout(
+        payload,
+        query.total_amount,
+        ctx.from!.id,
+      );
+
+      if (isValid) {
+        // Allow payment to proceed
+        await ctx.answerPreCheckoutQuery(true);
+        this.logger.log(
+          `Pre-checkout approved for transaction ${payload.transactionId}`,
+        );
+      } else {
+        // Reject payment
+        await ctx.answerPreCheckoutQuery(
+          false,
+          'Payment validation failed. Please try again or contact support.',
+        );
+        this.logger.warn(`Pre-checkout rejected for user ${ctx.from!.id}`);
+      }
+    } catch (error) {
+      this.logger.error('Pre-checkout query error:', error);
+      await ctx.answerPreCheckoutQuery(
+        false,
+        'An error occurred. Please try again or contact support.',
+      );
+    }
+  }
+
+  /**
+   * Handle successful payment
+   * Called after payment is confirmed by Telegram
+   */
+  @On('successful_payment')
+  async onSuccessfulPayment(@Ctx() ctx: UserContext): Promise<void> {
+    const payment = (ctx.message as any)?.successful_payment;
+
+    if (!payment) {
+      return;
+    }
+
+    try {
+      // Parse payload
+      const payload = JSON.parse(
+        payment.invoice_payload,
+      ) as RenewalInvoicePayload;
+
+      this.logger.log(
+        `Processing successful payment for user ${ctx.from!.id}, transaction ${payload.transactionId}`,
+      );
+
+      // Process payment via service
+      await this.paymentService.handleSuccessfulPayment(
+        payload,
+        payment.telegram_payment_charge_id,
+        payment.provider_payment_charge_id,
+      );
+
+      // Send confirmation to user
+      const lang = ctx.user?.lang || 'en';
+      await ctx.reply(getRenewalMessage(lang, 'paymentSuccess'));
+
+      this.logger.log(
+        `Payment ${payload.transactionId} completed successfully for user ${ctx.from!.id}`,
+      );
+    } catch (error) {
+      this.logger.error('Payment processing error:', error);
+
+      const lang = ctx.user?.lang || 'en';
+      await ctx.reply(getRenewalMessage(lang, 'paymentError'));
     }
   }
 }

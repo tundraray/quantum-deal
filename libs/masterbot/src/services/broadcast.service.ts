@@ -181,7 +181,7 @@ export class BroadcastService {
             userId: sub.user.telegramId,
             message: translatedMessage,
             options: {
-              priority: MessagePriority.NORMAL,
+              priority: MessagePriority.CRITICAL,
               // Use MARKDOWN if we converted entities, otherwise use TEXT
               messageType: hasFormatting
                 ? QueuedMessageType.MARKDOWN

@@ -11,3 +11,5 @@ export * from './summary.repository';
 export * from './subscription-features.repository';
 export * from './user-subscription-features.repository';
 export * from './instruments.repository';
+export * from './renewal-tariffs.repository';
+export * from './payment-transactions.repository';

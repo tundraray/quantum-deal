@@ -1,0 +1,1 @@
+ALTER TABLE "renewal_tariffs" DROP COLUMN "description";

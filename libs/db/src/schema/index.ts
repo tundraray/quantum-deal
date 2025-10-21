@@ -11,6 +11,8 @@ export * from './codes';
 export * from './user-subscriptions';
 export * from './summary';
 export * from './instruments';
+export * from './renewal-tariffs';
+export * from './payment-transactions';
 
 // Export all tables for use with drizzle queries
 export { users } from './users';
@@ -24,3 +26,5 @@ export { codes } from './codes';
 export { userSubscriptions } from './user-subscriptions';
 export { summary } from './summary';
 export { instruments } from './instruments';
+export { renewalTariffs } from './renewal-tariffs';
+export { paymentTransactions } from './payment-transactions';
