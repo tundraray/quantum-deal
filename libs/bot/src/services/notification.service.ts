@@ -434,7 +434,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       parseMode = 'MarkdownV2';
       // Use telegramify-markdown to properly escape text for Telegram
       // This library handles all edge cases including hashtags, mentions, etc.
-      messageText = telegramifyMarkdown(messageText, 'escape');
+      messageText = telegramifyMarkdown(messageText, 'remove');
     }
 
     await this.bot.telegram.sendMessage(message.userId, messageText, {
