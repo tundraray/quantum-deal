@@ -144,12 +144,7 @@ export class SubscriptionsRepository extends BaseRepository<
    * @returns Array of active broadcast subscriptions
    */
   async findActiveBroadcastSubscriptions(): Promise<Subscription[]> {
-    return this.findBy(
-      and(
-        like(this.table.type, 'subscription_%'),
-        eq(this.table.isActive, true),
-      ),
-    );
+    return this.findBy(and(eq(this.table.isActive, true)));
   }
 
   /**

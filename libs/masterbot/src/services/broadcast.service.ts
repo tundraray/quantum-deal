@@ -60,10 +60,6 @@ export class BroadcastService {
       throw new Error('Subscription not found');
     }
 
-    if (!isBroadcastSubscription(subscription.type)) {
-      throw new Error('Cannot count subscribers for signals subscription');
-    }
-
     // Count active subscribers
     const subscribers =
       await this.userSubscriptionsRepository.findActiveBySubscriptionId(
@@ -129,10 +125,6 @@ export class BroadcastService {
 
     if (!subscription) {
       throw new Error('Subscription not found');
-    }
-
-    if (!isBroadcastSubscription(subscription.type)) {
-      throw new Error('Cannot broadcast to signals subscription');
     }
 
     // Validate message
@@ -225,36 +217,6 @@ export class BroadcastService {
       this.logger.error('Failed to queue broadcast messages:', err);
       throw new Error('Failed to queue broadcast messages');
     }
-  }
-
-  /**
-   * Get list of subscribers for a subscription
-   * Useful for preview before broadcasting
-   *
-   * @param subscriptionId - The subscription ID
-   * @returns Array of subscriber user IDs
-   * @throws Error if subscription not found or is not broadcast type
-   */
-  async getSubscriberList(subscriptionId: number): Promise<number[]> {
-    // Validate subscription type
-    const subscription =
-      await this.subscriptionsRepository.findById(subscriptionId);
-
-    if (!subscription) {
-      throw new Error('Subscription not found');
-    }
-
-    if (!isBroadcastSubscription(subscription.type)) {
-      throw new Error('Cannot get subscribers for signals subscription');
-    }
-
-    // Get all active subscribers
-    const subscribers =
-      await this.userSubscriptionsRepository.findSubscribersWithUserDetails(
-        subscriptionId,
-      );
-
-    return subscribers.map((s) => s.user.telegramId);
   }
 
   /**
