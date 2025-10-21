@@ -3,7 +3,6 @@ import {
   UserSubscriptionsRepository,
   SubscriptionsRepository,
 } from '@quantumdeal/db';
-import { isBroadcastSubscription } from '@quantumdeal/db/schema/subscriptions';
 import { BroadcastResultDto, MessageValidationResult } from '../dto';
 import { NotificationService } from '@quantumdeal/bot';
 import {

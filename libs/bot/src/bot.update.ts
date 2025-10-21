@@ -203,6 +203,7 @@ export class BotUpdate {
    */
   @On('successful_payment')
   async onSuccessfulPayment(@Ctx() ctx: UserContext): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const payment = (ctx.message as any)?.successful_payment;
 
     if (!payment) {
@@ -212,6 +213,7 @@ export class BotUpdate {
     try {
       // Parse payload
       const payload = JSON.parse(
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         payment.invoice_payload,
       ) as RenewalInvoicePayload;
 
@@ -222,7 +224,9 @@ export class BotUpdate {
       // Process payment via service
       await this.paymentService.handleSuccessfulPayment(
         payload,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         payment.telegram_payment_charge_id,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         payment.provider_payment_charge_id,
       );
 

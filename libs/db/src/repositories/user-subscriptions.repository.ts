@@ -442,13 +442,11 @@ export class UserSubscriptionsRepository extends BaseRepository<
    *
    * @param userSubscriptionId - User subscription ID
    * @param additionalDays - Number of days to add
-   * @param transactionId - Optional payment transaction ID for audit trail
    * @returns Updated subscription or null if not found
    */
   async extendSubscription(
     userSubscriptionId: number,
     additionalDays: number,
-    transactionId?: number,
   ): Promise<UserSubscription | null> {
     const result = await this.db
       .update(this.table)

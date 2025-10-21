@@ -6,7 +6,7 @@ import {
   NewPaymentTransaction,
   PaymentState,
 } from '../schema/payment-transactions';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, sql, desc } from 'drizzle-orm';
 
 @Injectable()
 export class PaymentTransactionsRepository {

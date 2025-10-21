@@ -53,7 +53,9 @@ export enum PaymentState {
 export const paymentTransactions = pgTable(
   'payment_transactions',
   {
-    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    id: bigint('id', { mode: 'number' })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
 
     /**
      * User making the payment
@@ -204,4 +206,3 @@ export const paymentTransactions = pgTable(
 
 export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
 export type NewPaymentTransaction = typeof paymentTransactions.$inferInsert;
-

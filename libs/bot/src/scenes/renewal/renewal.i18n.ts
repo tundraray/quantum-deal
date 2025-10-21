@@ -429,11 +429,12 @@ export function getRenewalMessage(
   ...args: unknown[]
 ): string {
   const messages = renewalMessages[lang as RenewalLang] || renewalMessages.en;
-  const message = messages[key] as any;
+  const message = messages[key];
 
   if (typeof message === 'function') {
-    return message(...args);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, prefer-spread
+    return message.apply(null, args as any[]);
   }
 
-  return message as string;
+  return message;
 }

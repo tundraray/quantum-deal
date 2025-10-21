@@ -212,7 +212,7 @@ export class PaymentService {
       }
 
       // Verify state is PENDING
-      if (transaction.state !== PaymentState.PENDING) {
+      if (transaction.state !== (PaymentState.PENDING as string)) {
         this.logger.warn(
           `Transaction ${transaction.id} is not pending (state: ${transaction.state})`,
         );
@@ -302,7 +302,6 @@ export class PaymentService {
       await this.userSubscriptionsRepo.extendSubscription(
         userSubscriptionId,
         transaction.periodDays,
-        transactionId,
       );
 
       // 4. Update payment state to COMPLETED

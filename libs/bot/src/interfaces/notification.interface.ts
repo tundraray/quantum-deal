@@ -115,7 +115,9 @@ export interface MessageOptions {
   maxRetries?: number;
   scheduledAt?: Date;
   metadata?: Record<string, any>;
-  buttons?: Array<Array<{ text: string; callback_data?: string; url?: string }>>;
+  buttons?: Array<
+    Array<{ text: string; callback_data?: string; url?: string }>
+  >;
 }
 
 /**
