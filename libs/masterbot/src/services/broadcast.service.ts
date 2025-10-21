@@ -65,7 +65,7 @@ export class BroadcastService {
       await this.userSubscriptionsRepository.findActiveBySubscriptionId(
         subscriptionId,
       );
-    return subscribers.length;
+    return subscribers.map((s) => s.userSubscription).length;
   }
 
   /**

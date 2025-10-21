@@ -94,15 +94,8 @@ export class UserSubscriptionsRepository extends BaseRepository<
    * @param subscriptionId - The subscription ID
    * @returns Array of active user subscriptions
    */
-  async findActiveBySubscriptionId(
-    subscriptionId: number,
-  ): Promise<UserSubscription[]> {
-    return this.findBy(
-      and(
-        eq(this.table.subscriptionId, subscriptionId),
-        eq(this.table.isActive, true),
-      ),
-    );
+  async findActiveBySubscriptionId(subscriptionId: number) {
+    return this.findSubscribersWithUserDetails(subscriptionId);
   }
 
   /**
