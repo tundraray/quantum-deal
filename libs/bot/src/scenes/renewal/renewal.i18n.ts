@@ -444,7 +444,7 @@ export function getRenewalMessage(
  */
 export function formatDays(lang: string, days: number): string {
   const langKey = lang as RenewalLang;
-  
+
   switch (langKey) {
     case 'ru':
     case 'uk':
