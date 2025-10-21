@@ -438,3 +438,46 @@ export function getRenewalMessage(
 
   return message;
 }
+
+/**
+ * Format days with correct plural form for each language
+ */
+export function formatDays(lang: string, days: number): string {
+  const langKey = lang as RenewalLang;
+  
+  switch (langKey) {
+    case 'ru':
+    case 'uk':
+      // Russian/Ukrainian: 1 день, 2-4 дня, 5-20 дней, 21 день, 22-24 дня, 25-30 дней
+      if (days % 10 === 1 && days % 100 !== 11) {
+        return `${days} день`;
+      } else if (
+        days % 10 >= 2 &&
+        days % 10 <= 4 &&
+        (days % 100 < 10 || days % 100 >= 20)
+      ) {
+        return `${days} дня`;
+      } else {
+        return `${days} дней`;
+      }
+
+    case 'kk':
+      return `${days} күн`; // Kazakh doesn't have plural forms
+
+    case 'uz':
+      return `${days} kun`; // Uzbek doesn't have plural forms
+
+    case 'tg':
+      return `${days} рӯз`; // Tajik doesn't have plural forms
+
+    case 'hi':
+      return `${days} दिन`; // Hindi: same for all
+
+    case 'fr':
+      return days === 1 ? `${days} jour` : `${days} jours`;
+
+    case 'en':
+    default:
+      return days === 1 ? `${days} day` : `${days} days`;
+  }
+}

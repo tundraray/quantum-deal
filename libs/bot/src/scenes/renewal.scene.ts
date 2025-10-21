@@ -8,7 +8,7 @@ import {
   UserSubscriptionsRepository,
   SubscriptionsRepository,
 } from '@quantumdeal/db';
-import { getRenewalMessage } from './renewal/renewal.i18n';
+import { getRenewalMessage, formatDays } from './renewal/renewal.i18n';
 
 export const RENEWAL_SCENE_ID = 'renewal';
 
@@ -135,7 +135,8 @@ export class RenewalScene {
           priceText = `${tariff.priceStars}⭐`;
         }
 
-        const buttonText = `${subscription.name} • ${tariff.displayName} • ${priceText}`;
+        const periodText = formatDays(lang, tariff.periodDays);
+        const buttonText = `${subscription.name} • ${periodText} • ${priceText}`;
 
         buttons.push([
           Markup.button.callback(
