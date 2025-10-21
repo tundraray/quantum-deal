@@ -433,12 +433,50 @@ export class UserSubscriptionsRepository extends BaseRepository<
   }
 
   /**
+   * Deactivate all other subscriptions of the same type for a user
+   * Used when switching to a new subscription or renewing current one
+   *
+   * Only deactivates subscriptions of the same type (signals vs broadcast)
+   * This allows users to have one active signals subscription AND one broadcast subscription
+   *
+   * @param userId - User ID
+   * @param keepActiveUserSubscriptionId - User subscription ID to keep active
+   * @param subscriptionType - Type of subscription ('signals' or 'subscription_{uid}')
+   */
+  async deactivateOtherSubscriptionsOfSameType(
+    userId: number,
+    keepActiveUserSubscriptionId: number,
+    subscriptionType: string,
+  ): Promise<void> {
+    // Determine if this is a signals or broadcast subscription
+    const isSignals = subscriptionType === 'signals';
+    const typeCondition = isSignals
+      ? sql`${subscriptions.type} = 'signals'`
+      : sql`${subscriptions.type} LIKE 'subscription_%'`;
+
+    // Deactivate other subscriptions of the same type using JOIN
+    await this.db.execute(sql`
+      UPDATE ${this.table} AS us
+      SET is_active = false
+      FROM ${subscriptions} AS s
+      WHERE us.subscription_id = s.id
+        AND us.user_id = ${userId}
+        AND us.id != ${keepActiveUserSubscriptionId}
+        AND ${typeCondition}
+    `);
+
+    this.logger.log(
+      `Deactivated other ${isSignals ? 'signals' : 'broadcast'} subscriptions for user ${userId}, keeping user_subscription ${keepActiveUserSubscriptionId} active`,
+    );
+  }
+
+  /**
    * Extend subscription expiry date by adding days
    * Used for subscription renewal via payment
    *
    * If subscription is already expired, extends from current date
    * If subscription is active, extends from current expiry date
-   * Automatically reactivates expired subscriptions
+   * Automatically reactivates expired subscriptions and deactivates other user subscriptions of the same type
    *
    * @param userSubscriptionId - User subscription ID
    * @param additionalDays - Number of days to add
@@ -448,6 +486,36 @@ export class UserSubscriptionsRepository extends BaseRepository<
     userSubscriptionId: number,
     additionalDays: number,
   ): Promise<UserSubscription | null> {
+    // First, get the user subscription with subscription details
+    const currentSubData = await this.db
+      .select({
+        userSub: this.table,
+        subscription: subscriptions,
+      })
+      .from(this.table)
+      .leftJoin(subscriptions, eq(this.table.subscriptionId, subscriptions.id))
+      .where(eq(this.table.id, userSubscriptionId))
+      .limit(1);
+
+    if (
+      !currentSubData ||
+      currentSubData.length === 0 ||
+      !currentSubData[0].subscription
+    ) {
+      this.logger.warn(`Subscription ${userSubscriptionId} not found`);
+      return null;
+    }
+
+    const { userSub, subscription } = currentSubData[0];
+
+    // Deactivate all other subscriptions of the same type for this user
+    await this.deactivateOtherSubscriptionsOfSameType(
+      userSub.userId,
+      userSubscriptionId,
+      subscription.type,
+    );
+
+    // Now extend and activate this subscription
     const result = await this.db
       .update(this.table)
       .set({
