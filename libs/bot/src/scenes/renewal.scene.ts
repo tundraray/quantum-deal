@@ -162,52 +162,6 @@ export class RenewalScene {
   }
 
   /**
-   * Show subscription selection menu (when user has multiple subscriptions)
-   */
-  private async showSubscriptionSelection(
-    ctx: UserContext,
-    subscriptions: any[],
-  ): Promise<void> {
-    const lang = ctx.user?.lang || 'en';
-
-    const buttons = subscriptions.map((sub) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      const expiresAt = sub.expiresAt ? new Date(sub.expiresAt) : new Date();
-      const daysRemaining = Math.ceil(
-        (expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-      );
-
-      return [
-        Markup.button.callback(
-          getRenewalMessage(
-            lang,
-            'subscriptionLabel',
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            sub.subscriptionId,
-            daysRemaining,
-          ),
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          `renew_select_sub:${sub.id}`,
-        ),
-      ];
-    });
-
-    buttons.push([
-      Markup.button.callback(getRenewalMessage(lang, 'cancel'), 'renew_cancel'),
-    ]);
-
-    const messageText = getRenewalMessage(lang, 'selectSubscription');
-    const keyboard = Markup.inlineKeyboard(buttons);
-
-    if (ctx.callbackQuery) {
-      await ctx.editMessageText(messageText, keyboard);
-      await ctx.answerCbQuery();
-    } else {
-      await ctx.reply(messageText, keyboard);
-    }
-  }
-
-  /**
    * Show tariff selection menu for a specific subscription
    */
   private async showTariffSelection(
