@@ -3,7 +3,7 @@ import { Markup } from 'telegraf';
 import { InlineKeyboardButton } from 'telegraf/types';
 import { Instrument } from '@quantumdeal/db';
 import { GroupCount } from '../services/instrument-filter.service';
-import { FilterI18nHelper } from '../scenes/filter/filter.i18n.helper';
+import { FilterI18nHelper } from '../commands/filter/filter.i18n.helper';
 
 export interface CallbackData {
   action: string;

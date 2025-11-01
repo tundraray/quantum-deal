@@ -9,7 +9,7 @@ import {
   UsersRepository,
 } from '@quantumdeal/db';
 import { PaymentState } from '@quantumdeal/db/schema';
-import { getRenewalMessage } from '../scenes/renewal/renewal.i18n';
+import { getRenewalMessage } from '../commands/renew/renewal.i18n';
 
 /**
  * Renewal invoice payload structure

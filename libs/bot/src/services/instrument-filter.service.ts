@@ -5,7 +5,7 @@ import {
   Instrument,
 } from '@quantumdeal/db';
 import { FeatureFlag } from '@quantumdeal/db/schema';
-import { FilterI18nHelper } from '../scenes/filter/filter.i18n.helper';
+import { FilterI18nHelper } from '../commands/filter/filter.i18n.helper';
 
 export interface GroupCount {
   selected: number;

@@ -1,14 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Scene, SceneEnter, Action, Ctx } from 'nestjs-telegraf';
 import { Markup, Context } from 'telegraf';
-import type { UserContext } from '../interfaces';
-import { PaymentService } from '../services/payment.service';
+import type { UserContext } from '../../interfaces';
+import { PaymentService } from '../../services/payment.service';
 import {
   RenewalTariffsRepository,
   UserSubscriptionsRepository,
   SubscriptionsRepository,
 } from '@quantumdeal/db';
-import { getRenewalMessage, formatDays } from './renewal/renewal.i18n';
+import { getRenewalMessage, formatDays } from './renewal.i18n';
 
 export const RENEWAL_SCENE_ID = 'renewal';
 

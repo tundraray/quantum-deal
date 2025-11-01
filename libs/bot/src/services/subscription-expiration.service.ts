@@ -25,7 +25,7 @@ import {
   EXPIRATION_NOTIFICATION_SYSTEM_PROMPT,
   createExpirationPrompt,
 } from './subscription-expiration.prompts';
-import { getRenewalMessage } from '../scenes/renewal/renewal.i18n';
+import { getRenewalMessage } from '../commands/renew/renewal.i18n';
 
 /**
  * Result of processing expiration notifications
