@@ -1,5 +1,5 @@
 import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
-import { Command, Update, Ctx, On } from 'nestjs-telegraf';
+import { Command, Update, Ctx, Action } from 'nestjs-telegraf';
 import { deunionize } from 'telegraf';
 import {
   ResponseTimeInterceptor,
@@ -45,6 +45,26 @@ export class LangUpdate {
    */
   @Command('lang')
   async onLang(@Ctx() ctx: UserContext): Promise<void> {
+    await this.showLanguageSelection(ctx);
+  }
+
+  /**
+   * Handle "Change Language" button from /start command
+   * Callback data format: 'change_lang'
+   */
+  @Action('change_lang')
+  async onChangeLang(@Ctx() ctx: UserContext): Promise<void> {
+    await ctx.answerCbQuery();
+    await this.showLanguageSelection(ctx);
+  }
+
+  /**
+   * Show language selection keyboard
+   * Shared logic for /lang command and change_lang action
+   *
+   * @param ctx - Telegram context
+   */
+  private async showLanguageSelection(@Ctx() ctx: UserContext): Promise<void> {
     if (!ctx.user) {
       this.logger.debug('User not found in context');
       return;
@@ -60,7 +80,7 @@ export class LangUpdate {
         ...langKeyboard(2),
       });
     } catch (error) {
-      this.logger.error('Error in /lang command', error);
+      this.logger.error('Error in showing language selection', error);
       await ctx.reply('An error occurred. Please try again later.');
     }
   }
@@ -71,20 +91,23 @@ export class LangUpdate {
    * Triggered when user clicks on a language button.
    * Callback format: "/lang <code>"
    *
+   * NOTE: Changed from @On('callback_query') to @Action() to avoid conflicts
+   * with other callback handlers (e.g., RenewalAction, TrialAction)
+   *
    * @param ctx - Telegram context
    * @param args - Callback arguments [command, languageCode, extraArgs]
    */
-  @On('callback_query')
+  @Action(/^\/lang/)
   async onLanguageCallback(
     @Ctx() ctx: UserContext,
     @CallbackQueryData(new SplitCommandPipe())
     args: [string, string | undefined, string[] | undefined],
   ): Promise<void> {
     const cbq = deunionize(ctx.callbackQuery);
-    const [command, languageCode] = args ?? [];
+    const [, languageCode] = args ?? [];
 
-    // Only handle /lang callbacks
-    if (command !== '/lang' || !languageCode) {
+    // Parse language code from callback
+    if (!languageCode) {
       return;
     }
 

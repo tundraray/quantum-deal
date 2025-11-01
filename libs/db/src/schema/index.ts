@@ -13,6 +13,7 @@ export * from './summary';
 export * from './instruments';
 export * from './renewal-tariffs';
 export * from './payment-transactions';
+export * from './statistics';
 
 // Export all tables for use with drizzle queries
 export { users } from './users';
@@ -28,3 +29,4 @@ export { summary } from './summary';
 export { instruments } from './instruments';
 export { renewalTariffs } from './renewal-tariffs';
 export { paymentTransactions } from './payment-transactions';
+export { monthlyBotStatistics } from './statistics';

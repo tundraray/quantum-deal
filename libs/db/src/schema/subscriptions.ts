@@ -59,6 +59,7 @@ export const subscriptions = pgTable('subscriptions', {
     .notNull()
     .default(SubscriptionType.SIGNALS),
   isActive: boolean('is_active').notNull().default(true),
+  isHidden: boolean('is_hidden').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

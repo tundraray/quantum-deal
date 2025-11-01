@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { DbModule } from '@quantumdeal/db';
 import { FrameworkModule } from '@quantumdeal/framework';
 
@@ -28,6 +29,9 @@ import { InstrumentFilterService } from './services/instrument-filter.service';
 import { FilterSessionService } from './services/filter-session.service';
 import { PaymentService } from './services/payment.service';
 import { BotCommandsService } from './services/bot-commands.service';
+import { TrialService } from './services/trial.service';
+import { StatisticsRefreshService } from './services/statistics-refresh.service';
+import { OnboardingService } from './services/onboarding.service';
 
 // Helpers
 import { FilterKeyboardBuilder } from './helpers/filter-keyboard.builder';
@@ -36,8 +40,16 @@ import { FilterI18nHelper } from './commands/filter/filter.i18n.helper';
 // Guards
 import { FeatureGuard } from './guards/feature.guard';
 
+// Actions
+import { TrialAction } from './actions/trial/trial.action';
+import { RenewalAction } from './actions/renewal/renewal.action';
+
 @Module({
-  imports: [DbModule, FrameworkModule],
+  imports: [
+    DbModule,
+    FrameworkModule,
+    ScheduleModule.forRoot(), // Enable cron jobs for statistics refresh
+  ],
   providers: [
     // Command handlers (Update classes)
     StartUpdate,
@@ -72,12 +84,23 @@ import { FeatureGuard } from './guards/feature.guard';
     // Bot commands
     BotCommandsService,
 
+    // Trial services
+    TrialService,
+
+    // Statistics & Onboarding services (Week 3)
+    StatisticsRefreshService,
+    OnboardingService,
+
     // Helpers
     FilterKeyboardBuilder,
     FilterI18nHelper,
 
     // Guards
     FeatureGuard,
+
+    // Actions
+    TrialAction,
+    RenewalAction,
   ],
   exports: [
     // Command handlers
@@ -113,12 +136,23 @@ import { FeatureGuard } from './guards/feature.guard';
     // Bot commands
     BotCommandsService,
 
+    // Trial services
+    TrialService,
+
+    // Statistics & Onboarding services (Week 3)
+    StatisticsRefreshService,
+    OnboardingService,
+
     // Helpers
     FilterKeyboardBuilder,
     FilterI18nHelper,
 
     // Guards
     FeatureGuard,
+
+    // Actions
+    TrialAction,
+    RenewalAction,
   ],
 })
 export class BotModule {}

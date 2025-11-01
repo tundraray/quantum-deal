@@ -1,6 +1,7 @@
 import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
 import { Start, Update, Ctx, Message, InjectBot } from 'nestjs-telegraf';
 import { Telegraf } from 'telegraf';
+import { ConfigService } from '@nestjs/config';
 import {
   ResponseTimeInterceptor,
   TelegrafExceptionFilter,
@@ -19,8 +20,14 @@ import {
 } from '@quantumdeal/db/schema/subscriptions';
 import type { UserContext, UserWithSubscriptions } from '../../interfaces';
 import { BotCommandsService } from '../../services/bot-commands.service';
+import { TrialService } from '../../services/trial.service';
+import {
+  OnboardingService,
+  type MonthlyStats,
+} from '../../services/onboarding.service';
 import { langKeyboard } from '../../lang';
 import { welcome } from './welcome';
+import { getStartMessage } from './start.i18n';
 import { MASTERBOT_BOT_NAME } from '@quantumdeal/masterbot/constants';
 import telegramifyMarkdown from 'telegramify-markdown';
 
@@ -52,6 +59,9 @@ export class StartUpdate {
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly botCommandsService: BotCommandsService,
+    private readonly trialService: TrialService,
+    private readonly onboardingService: OnboardingService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -83,11 +93,12 @@ export class StartUpdate {
       // Extract activation code from args
       const [, code] = args ?? [];
 
+      // Fetch monthly statistics for onboarding (NEW - Week 3)
+      const statistics = await this.onboardingService.getMonthlyStatistics();
+
       // Process start command
-      const { welcomeMessage, codeActivated } = await this.handleStart(
-        user,
-        code,
-      );
+      const { welcomeMessage, codeActivated, trialEligible } =
+        await this.handleStart(user, code, statistics);
 
       // Set personalized commands menu based on user's features and language
       // NOTE: This must be called AFTER handleStart because handleStart may activate
@@ -101,16 +112,66 @@ export class StartUpdate {
         );
       }
 
+      // Format statistics for display (NEW - Week 3)
+      const statsText = this.onboardingService.formatStatistics(
+        statistics,
+        user.lang ?? 'en',
+      );
+
+      // Build message with statistics (if available)
+      const fullMessage = statsText
+        ? `${welcomeMessage}\n\n${statsText}`
+        : welcomeMessage;
+
+      // Build inline keyboard
+      const keyboard: { text: string; callback_data: string }[][] = [];
+
+      // Add trial button if eligible
+      if (trialEligible) {
+        // Get trial duration from config for button label
+        const trialDuration = this.configService.get<number>(
+          'TRIAL_DURATION_DAYS',
+          7,
+        );
+
+        keyboard.push([
+          {
+            text: getStartMessage(
+              user.lang ?? 'en',
+              'tryFreeTrialButton',
+              trialDuration,
+            ),
+            callback_data: 'activate_trial',
+          },
+        ]);
+      }
+
+      // Add "View Plans" and "Change Language" buttons (always shown, on same row)
+      keyboard.push([
+        {
+          text: getStartMessage(user.lang ?? 'en', 'viewPlansButton'),
+          callback_data: 'open_renewal_scene',
+        },
+        {
+          text: getStartMessage(user.lang ?? 'en', 'changeLangButton'),
+          callback_data: 'change_lang',
+        },
+      ]);
+
       // Send welcome message with language selection keyboard
-      await ctx.reply(telegramifyMarkdown(welcomeMessage, 'keep'), {
+      await ctx.reply(telegramifyMarkdown(fullMessage, 'keep'), {
         parse_mode: 'MarkdownV2',
         ...langKeyboard(2),
+        reply_markup:
+          keyboard.length > 0
+            ? {
+                inline_keyboard: keyboard,
+              }
+            : undefined,
       });
     } catch (error) {
       this.logger.error('Error in /start command', error);
-      await ctx.reply(
-        'An error occurred while processing your request. Please try again later.',
-      );
+      await ctx.reply(getStartMessage(user.lang ?? 'en', 'genericError'));
     }
   }
 
@@ -119,14 +180,17 @@ export class StartUpdate {
    *
    * @param user - User object with subscriptions
    * @param code - Optional activation code from /start command
-   * @returns Welcome message text and activation status
+   * @param statistics - Monthly bot statistics (NEW - Week 3)
+   * @returns Welcome message text, activation status, and trial eligibility
    */
   private async handleStart(
     user: UserWithSubscriptions,
     code?: string,
+    statistics?: MonthlyStats | null,
   ): Promise<{
     welcomeMessage: string;
     codeActivated: boolean;
+    trialEligible?: boolean;
   }> {
     // Activate code if provided
     const activationResult = code
@@ -138,6 +202,15 @@ export class StartUpdate {
       await this.userSubscriptionsRepository.findActiveByUserIdWithSubscription(
         user.telegramId,
       );
+
+    // Check trial eligibility
+    const trialEligible = await this.trialService.isEligible(user.telegramId);
+
+    // Get trial duration from config for LLM prompt
+    const trialDuration = this.configService.get<number>(
+      'TRIAL_DURATION_DAYS',
+      7,
+    );
 
     // Build prompt data
     const promptData = {
@@ -161,6 +234,9 @@ export class StartUpdate {
             expiresAt: activationResult.activatedSubscription.expiresAt,
           }
         : undefined,
+      trialEligible,
+      trialDuration, // Pass dynamic trial duration to LLM prompt
+      statistics, // NEW - Week 3: Pass statistics to LLM prompt
     };
 
     try {
@@ -173,20 +249,27 @@ export class StartUpdate {
       return {
         welcomeMessage,
         codeActivated: !!activationResult.activatedSubscription,
+        trialEligible,
       };
     } catch (error) {
       this.logger.error('Error generating welcome message with LLM', error);
 
       // Fallback message if LLM fails
+      const lang = user.lang ?? 'en';
       const fallbackMessage = activationResult.activatedSubscription
-        ? `Welcome! Your subscription has been activated successfully.`
+        ? getStartMessage(lang, 'welcomeWithActivation')
         : userSubscriptions.length > 0
-          ? `Welcome back! You have ${userSubscriptions.length} active subscription(s).`
-          : `Welcome! To start receiving trading signals, please activate a subscription code.`;
+          ? getStartMessage(
+              lang,
+              'welcomeWithSubscriptions',
+              userSubscriptions.length,
+            )
+          : getStartMessage(lang, 'welcomeNew');
 
       return {
         welcomeMessage: fallbackMessage,
         codeActivated: !!activationResult.activatedSubscription,
+        trialEligible,
       };
     }
   }

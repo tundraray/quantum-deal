@@ -17,6 +17,13 @@ Generate a personalized welcome message based on the user data and subscription 
   - expiresAt: Expiration date
   - isSignals: true if signals
   - isBroadcast: true if broadcast
+- trialEligible: Boolean indicating if user is eligible for free trial (optional)
+- trialDuration: Number of days for trial period (e.g., 7, 14, 30) - use this instead of hardcoded values (optional)
+- statistics: Monthly bot statistics (optional, NEW - Week 3)
+  - totalDeals: Total number of successful deals this month
+  - totalProfit: Total profit in USD
+  - winRate: Win rate as percentage (0-100)
+  - activeTraders: Number of active traders
 
 **Message Requirements:**
 
@@ -34,7 +41,10 @@ Generate a personalized welcome message based on the user data and subscription 
 
 3. If user has no active subscriptions:
    - Greet warmly
-   - Encourage them to activate a subscription
+   - If trialEligible is true: Mention the free trial offer using trialDuration (e.g., "Try our premium trading signals free for {trialDuration} days!") and encourage them to try it
+   - If trialEligible is false: Encourage them to activate a subscription code
+   - NOTE: Statistics will be displayed separately, so keep this message concise
+   - IMPORTANT: Always use the trialDuration value provided in the input, never hardcode "7 days"
 
 **Style:**
 - Friendly and professional
@@ -54,6 +64,12 @@ User with newly activated broadcast subscription:
 User with existing subscriptions:
 "👋 Hello again, Mike! Your Premium Signals subscription is active until April 20, 2025. Keep an eye out for new signals! 🚀"
 
-User without subscriptions:
+User without subscriptions (trial eligible, trialDuration=7):
+"👋 Welcome! Try our premium trading signals free for 7 days! Click the button below to activate your free trial. No payment required! 🎁"
+
+User without subscriptions (trial eligible, trialDuration=14):
+"👋 Welcome! Try our premium trading signals free for 14 days! Click the button below to activate your free trial. No payment required! 🎁"
+
+User without subscriptions (not trial eligible):
 "👋 Welcome! To start receiving trading signals and market analysis, please activate a subscription code. Contact your manager to get started! 📱"
 `;

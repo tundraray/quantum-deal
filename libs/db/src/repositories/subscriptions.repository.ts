@@ -236,4 +236,75 @@ export class SubscriptionsRepository extends BaseRepository<
   async findActiveSubscriptions(): Promise<Subscription[]> {
     return this.findBy(eq(this.table.isActive, true));
   }
+
+  /**
+   * Find subscription by name
+   *
+   * @param name - The subscription name
+   * @returns The subscription or null if not found
+   */
+  async findByName(name: string): Promise<Subscription | null> {
+    return this.findOneBy(eq(this.table.name, name));
+  }
+
+  /**
+   * Find the trial subscription using feature flag
+   * Searches for subscription with is_trial=true feature flag
+   *
+   * @returns The trial subscription or null if not found
+   */
+  async findTrialSubscription(): Promise<Subscription | null> {
+    const result = await this.db
+      .select({
+        id: subscriptions.id,
+        name: subscriptions.name,
+        scope: subscriptions.scope,
+        type: subscriptions.type,
+        isActive: subscriptions.isActive,
+        isHidden: subscriptions.isHidden,
+        createdAt: subscriptions.createdAt,
+        updatedAt: subscriptions.updatedAt,
+        closedAt: subscriptions.closedAt,
+        closedBy: subscriptions.closedBy,
+      })
+      .from(subscriptions)
+      .innerJoin(
+        subscriptionFeatures,
+        eq(subscriptionFeatures.subscriptionId, subscriptions.id),
+      )
+      .where(
+        and(
+          eq(subscriptionFeatures.featureKey, 'is_trial'),
+          eq(subscriptionFeatures.isEnabled, true),
+        ),
+      )
+      .limit(1);
+
+    return result.length > 0 ? (result[0] as Subscription) : null;
+  }
+
+  /**
+   * Check if a subscription is a trial subscription
+   * Checks if the subscription has is_trial feature flag enabled
+   *
+   * @param subscriptionId - The subscription ID to check
+   * @returns true if the subscription is a trial subscription
+   */
+  async isTrialSubscription(subscriptionId: number): Promise<boolean> {
+    const result = await this.db
+      .select({
+        isEnabled: subscriptionFeatures.isEnabled,
+      })
+      .from(subscriptionFeatures)
+      .where(
+        and(
+          eq(subscriptionFeatures.subscriptionId, subscriptionId),
+          eq(subscriptionFeatures.featureKey, 'is_trial'),
+          eq(subscriptionFeatures.isEnabled, true),
+        ),
+      )
+      .limit(1);
+
+    return result.length > 0 && result[0].isEnabled === true;
+  }
 }

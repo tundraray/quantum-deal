@@ -451,8 +451,8 @@ export class UserSubscriptionsRepository extends BaseRepository<
     // Determine if this is a signals or broadcast subscription
     const isSignals = subscriptionType === 'signals';
     const typeCondition = isSignals
-      ? sql`${subscriptions.type} = 'signals'`
-      : sql`${subscriptions.type} LIKE 'subscription_%'`;
+      ? sql`s.type = 'signals'`
+      : sql`s.type LIKE 'subscription_%'`;
 
     // Deactivate other subscriptions of the same type using JOIN
     await this.db.execute(sql`

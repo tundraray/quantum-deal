@@ -21,9 +21,10 @@ export class RenewalTariffsRepository {
 
   /**
    * Find all active tariffs with subscription information
-   * Returns tariffs joined with subscription data
+   * Returns tariffs joined with subscription data, excluding hidden subscriptions
+   * (e.g., trial subscriptions marked with is_hidden = true)
    *
-   * @returns Array of tariffs with subscription info
+   * @returns Array of tariffs with subscription info (only visible subscriptions)
    */
   async findAllWithSubscriptions(): Promise<TariffWithSubscription[]> {
     const result = await this.db
@@ -48,7 +49,12 @@ export class RenewalTariffsRepository {
         subscriptions,
         eq(renewalTariffs.subscriptionId, subscriptions.id),
       )
-      .where(eq(renewalTariffs.isActive, true))
+      .where(
+        and(
+          eq(renewalTariffs.isActive, true),
+          eq(subscriptions.isHidden, false),
+        ),
+      )
       .orderBy(renewalTariffs.sortOrder, renewalTariffs.periodDays);
 
     return result as TariffWithSubscription[];

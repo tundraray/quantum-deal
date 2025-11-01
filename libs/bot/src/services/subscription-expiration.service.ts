@@ -4,6 +4,7 @@ import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import {
   UserSubscriptionsRepository,
+  SubscriptionsRepository,
   User,
   Subscription,
   UserSubscription,
@@ -52,6 +53,7 @@ export class SubscriptionExpirationService {
 
   constructor(
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
+    private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly llmService: LLMService,
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService,
@@ -271,10 +273,27 @@ export class SubscriptionExpirationService {
         languages,
       );
 
+      // Create a map for fast lookup of userSubscriptionId and subscriptionId by userId
+      const userSubscriptionMap = new Map(
+        expiringSubscriptions.map((item) => [
+          item.user.telegramId,
+          {
+            userSubscriptionId: item.userSubscription.id,
+            subscriptionId: item.subscription.id,
+          },
+        ]),
+      );
+
       // Send notifications to each user
       const results = await Promise.allSettled(
         users.map((user) =>
-          this.sendNotificationToUser(user, daysFromNow, messages),
+          this.sendNotificationToUser(
+            user,
+            daysFromNow,
+            messages,
+            userSubscriptionMap.get(user.telegramId)?.userSubscriptionId,
+            userSubscriptionMap.get(user.telegramId)?.subscriptionId,
+          ),
         ),
       );
 
@@ -418,11 +437,13 @@ export class SubscriptionExpirationService {
    * Send notification to a single user
    * Uses user's language if available, otherwise defaults to English
    */
-  private sendNotificationToUser(
+  private async sendNotificationToUser(
     user: User,
     daysFromNow: number,
     messages: ExpirationMessages,
-  ): boolean {
+    userSubscriptionId?: number,
+    subscriptionId?: number,
+  ): Promise<boolean> {
     try {
       // Get message in user's language (fallback to English)
       const userLang = user.lang || 'en';
@@ -437,12 +458,33 @@ export class SubscriptionExpirationService {
         );
       }
 
+      // Determine if this is a trial subscription
+      let isTrial = false;
+      if (subscriptionId) {
+        isTrial =
+          await this.subscriptionsRepository.isTrialSubscription(
+            subscriptionId,
+          );
+      }
+
       // Create renewal button for expiration notifications (multi-language)
+      // For trial subscriptions: Use 'open_renewal_scene' to show all plans
+      // For regular subscriptions: Use 'renew_now' callback for one-click renewal
+      let callbackData = 'open_renewal_scene'; // Default for trial or missing IDs
+      let buttonTextKey: 'choosePlanButton' | 'renewButton' =
+        'choosePlanButton'; // Default for trial
+
+      if (userSubscriptionId && subscriptionId && !isTrial) {
+        // Regular (non-trial) subscription with valid IDs - use one-click renewal
+        callbackData = `renew_now:${userSubscriptionId}:${subscriptionId}`;
+        buttonTextKey = 'renewButton';
+      }
+
       const renewalButton = [
         [
           {
-            text: getRenewalMessage(userLang, 'renewButton'),
-            callback_data: 'open_renewal_scene',
+            text: getRenewalMessage(userLang, buttonTextKey),
+            callback_data: callbackData,
           },
         ],
       ];
@@ -456,7 +498,7 @@ export class SubscriptionExpirationService {
       });
 
       this.logger.debug(
-        `Sent ${daysFromNow}-day expiration notification to user ${user.telegramId}`,
+        `Sent ${daysFromNow}-day expiration notification to user ${user.telegramId} (trial: ${isTrial}, button: ${buttonTextKey})`,
       );
 
       return true;

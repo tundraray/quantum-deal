@@ -6,6 +6,26 @@
 
 export const renewalMessages = {
   ru: {
+    // Commands and Actions
+    registrationRequired:
+      'Сначала нужно зарегистрироваться. Используйте /start',
+    commandError:
+      'Произошла ошибка при открытии опций продления. Пожалуйста, попробуйте позже.',
+    actionError:
+      'Произошла ошибка. Пожалуйста, попробуйте команду /renew или свяжитесь с поддержкой.',
+
+    // Action-specific errors
+    invalidRequest: 'Неверный запрос на продление',
+    subscriptionNotBelongsToYou: 'Эта подписка не принадлежит вам',
+    subscriptionPlanNotFound: 'План подписки не найден',
+    noRenewalOptions: 'Для этой подписки нет доступных вариантов продления',
+
+    // Pre-checkout validation
+    preCheckoutValidationFailed:
+      'Проверка платежа не удалась. Пожалуйста, попробуйте снова или свяжитесь с поддержкой.',
+    preCheckoutError:
+      'Произошла ошибка. Пожалуйста, попробуйте снова или свяжитесь с поддержкой.',
+
     // Scene entry
     noActiveSubscriptions:
       '❌ У вас нет активных подписок для продления.\n\nИспользуйте /start для активации новой подписки.',
@@ -38,6 +58,7 @@ export const renewalMessages = {
     // Actions
     cancel: '❌ Отмена',
     renewButton: '🔄 Продлить подписку',
+    choosePlanButton: '📋 Выбрать план',
 
     // Payment processing
     creatingInvoice: '⏳ Создаем счет на оплату...',
@@ -64,6 +85,24 @@ export const renewalMessages = {
   },
 
   en: {
+    // Commands and Actions
+    registrationRequired: 'Please register first. Use /start',
+    commandError:
+      'An error occurred while opening renewal options. Please try again later.',
+    actionError:
+      'An error occurred. Please try /renew command or contact support.',
+
+    // Action-specific errors
+    invalidRequest: 'Invalid renewal request',
+    subscriptionNotBelongsToYou: 'This subscription does not belong to you',
+    subscriptionPlanNotFound: 'Subscription plan not found',
+    noRenewalOptions: 'No renewal options available for this subscription',
+
+    // Pre-checkout validation
+    preCheckoutValidationFailed:
+      'Payment validation failed. Please try again or contact support.',
+    preCheckoutError: 'An error occurred. Please try again or contact support.',
+
     noActiveSubscriptions:
       '❌ You have no active subscriptions to renew.\n\nUse /start to activate a new subscription.',
     selectSubscription: '🎯 Select subscription to renew:',
@@ -92,6 +131,7 @@ export const renewalMessages = {
 
     cancel: '❌ Cancel',
     renewButton: '🔄 Renew Subscription',
+    choosePlanButton: '📋 Choose Plan',
 
     creatingInvoice: '⏳ Creating invoice...',
     invoiceTitle: (subscriptionName: string) =>
@@ -116,6 +156,26 @@ export const renewalMessages = {
   },
 
   uk: {
+    // Commands and Actions
+    registrationRequired:
+      'Спочатку потрібно зареєструватися. Використовуйте /start',
+    commandError:
+      'Сталася помилка при відкритті опцій продовження. Будь ласка, спробуйте пізніше.',
+    actionError:
+      'Сталася помилка. Будь ласка, спробуйте команду /renew або зверніться до підтримки.',
+
+    // Action-specific errors
+    invalidRequest: 'Невірний запит на продовження',
+    subscriptionNotBelongsToYou: 'Ця підписка не належить вам',
+    subscriptionPlanNotFound: 'План підписки не знайдено',
+    noRenewalOptions: 'Для цієї підписки немає доступних варіантів продовження',
+
+    // Pre-checkout validation
+    preCheckoutValidationFailed:
+      'Перевірка платежу не вдалася. Будь ласка, спробуйте знову або зверніться до підтримки.',
+    preCheckoutError:
+      'Сталася помилка. Будь ласка, спробуйте знову або зверніться до підтримки.',
+
     noActiveSubscriptions:
       '❌ У вас немає активних підписок для продовження.\n\nВикористовуйте /start для активації нової підписки.',
     selectSubscription: '🎯 Виберіть підписку для продовження:',
@@ -143,6 +203,7 @@ export const renewalMessages = {
 
     cancel: '❌ Скасувати',
     renewButton: '🔄 Продовжити підписку',
+    choosePlanButton: '📋 Вибрати план',
 
     creatingInvoice: '⏳ Створюємо рахунок на оплату...',
     invoiceTitle: (subscriptionName: string) => `Підписка ${subscriptionName}`,
@@ -166,6 +227,25 @@ export const renewalMessages = {
   },
 
   hi: {
+    // Commands and Actions
+    registrationRequired: 'कृपया पहले पंजीकरण करें। /start का उपयोग करें',
+    commandError:
+      'नवीनीकरण विकल्प खोलते समय त्रुटि हुई। कृपया बाद में पुनः प्रयास करें।',
+    actionError:
+      'त्रुटि हुई। कृपया /renew कमांड का प्रयास करें या सहायता से संपर्क करें।',
+
+    // Action-specific errors
+    invalidRequest: 'अमान्य नवीनीकरण अनुरोध',
+    subscriptionNotBelongsToYou: 'यह सदस्यता आपकी नहीं है',
+    subscriptionPlanNotFound: 'सदस्यता योजना नहीं मिली',
+    noRenewalOptions: 'इस सदस्यता के लिए कोई नवीनीकरण विकल्प उपलब्ध नहीं',
+
+    // Pre-checkout validation
+    preCheckoutValidationFailed:
+      'भुगतान सत्यापन विफल। कृपया पुनः प्रयास करें या सहायता से संपर्क करें।',
+    preCheckoutError:
+      'त्रुटि हुई। कृपया पुनः प्रयास करें या सहायता से संपर्क करें।',
+
     noActiveSubscriptions:
       '❌ नवीनीकरण के लिए आपके पास कोई सक्रिय सदस्यता नहीं है।\n\nनई सदस्यता सक्रिय करने के लिए /start का उपयोग करें।',
     selectSubscription: '🎯 नवीनीकरण के लिए सदस्यता चुनें:',
@@ -193,6 +273,7 @@ export const renewalMessages = {
 
     cancel: '❌ रद्द करें',
     renewButton: '🔄 सदस्यता नवीनीकरण',
+    choosePlanButton: '📋 प्लान चुनें',
 
     creatingInvoice: '⏳ चालान बना रहे हैं...',
     invoiceTitle: (subscriptionName: string) => `सदस्यता ${subscriptionName}`,
@@ -216,6 +297,26 @@ export const renewalMessages = {
   },
 
   fr: {
+    // Commands and Actions
+    registrationRequired: "Veuillez d'abord vous inscrire. Utilisez /start",
+    commandError:
+      "Une erreur s'est produite lors de l'ouverture des options de renouvellement. Veuillez réessayer plus tard.",
+    actionError:
+      "Une erreur s'est produite. Veuillez essayer la commande /renew ou contacter le support.",
+
+    // Action-specific errors
+    invalidRequest: 'Demande de renouvellement invalide',
+    subscriptionNotBelongsToYou: 'Cet abonnement ne vous appartient pas',
+    subscriptionPlanNotFound: "Plan d'abonnement non trouvé",
+    noRenewalOptions:
+      'Aucune option de renouvellement disponible pour cet abonnement',
+
+    // Pre-checkout validation
+    preCheckoutValidationFailed:
+      'Échec de la validation du paiement. Veuillez réessayer ou contacter le support.',
+    preCheckoutError:
+      "Une erreur s'est produite. Veuillez réessayer ou contacter le support.",
+
     noActiveSubscriptions:
       "❌ Vous n'avez aucun abonnement actif à renouveler.\n\nUtilisez /start pour activer un nouvel abonnement.",
     selectSubscription: '🎯 Sélectionnez un abonnement à renouveler:',
@@ -244,6 +345,7 @@ export const renewalMessages = {
 
     cancel: '❌ Annuler',
     renewButton: '🔄 Renouveler',
+    choosePlanButton: '📋 Choisir un plan',
 
     creatingInvoice: '⏳ Création de la facture...',
     invoiceTitle: (subscriptionName: string) =>
@@ -268,6 +370,25 @@ export const renewalMessages = {
   },
 
   kk: {
+    // Commands and Actions
+    registrationRequired: 'Алдымен тіркелу қажет. /start пайдаланыңыз',
+    commandError:
+      'Жаңарту опцияларын ашу кезінде қате орын алды. Кейінірек қайталап көріңіз.',
+    actionError:
+      'Қате орын алды. /renew командасын пайдаланыңыз немесе қолдау қызметіне хабарласыңыз.',
+
+    // Action-specific errors
+    invalidRequest: 'Жарамсыз жаңарту сұранысы',
+    subscriptionNotBelongsToYou: 'Бұл жазылым сізге тиесілі емес',
+    subscriptionPlanNotFound: 'Жазылым жоспары табылмады',
+    noRenewalOptions: 'Бұл жазылым үшін жаңарту опциялары жоқ',
+
+    // Pre-checkout validation
+    preCheckoutValidationFailed:
+      'Төлемді тексеру сәтсіз аяқталды. Қайталап көріңіз немесе қолдау қызметіне хабарласыңыз.',
+    preCheckoutError:
+      'Қате орын алды. Қайталап көріңіз немесе қолдау қызметіне хабарласыңыз.',
+
     noActiveSubscriptions:
       '❌ Жаңартуға белсенді жазылымдарыңыз жоқ.\n\nЖаңа жазылымды белсендіру үшін /start пайдаланыңыз.',
     selectSubscription: '🎯 Жаңарту үшін жазылымды таңдаңыз:',
@@ -295,6 +416,7 @@ export const renewalMessages = {
 
     cancel: '❌ Болдырмау',
     renewButton: '🔄 Жазылымды жаңарту',
+    choosePlanButton: '📋 Жоспарды таңдау',
 
     creatingInvoice: '⏳ Шот жасалуда...',
     invoiceTitle: (subscriptionName: string) => `Жазылым ${subscriptionName}`,
@@ -318,6 +440,26 @@ export const renewalMessages = {
   },
 
   uz: {
+    // Commands and Actions
+    registrationRequired:
+      "Iltimos, avval ro'yxatdan o'ting. /start dan foydalaning",
+    commandError:
+      "Yangilash variantlarini ochishda xatolik yuz berdi. Keyinroq qayta urinib ko'ring.",
+    actionError:
+      "Xatolik yuz berdi. /renew buyrug'ini sinab ko'ring yoki qo'llab-quvvatlash bilan bog'laning.",
+
+    // Action-specific errors
+    invalidRequest: "Noto'g'ri yangilash so'rovi",
+    subscriptionNotBelongsToYou: 'Bu obuna sizga tegishli emas',
+    subscriptionPlanNotFound: 'Obuna rejasi topilmadi',
+    noRenewalOptions: 'Bu obuna uchun yangilash variantlari mavjud emas',
+
+    // Pre-checkout validation
+    preCheckoutValidationFailed:
+      "To'lovni tekshirish muvaffaqiyatsiz. Qayta urinib ko'ring yoki qo'llab-quvvatlash bilan bog'laning.",
+    preCheckoutError:
+      "Xatolik yuz berdi. Qayta urinib ko'ring yoki qo'llab-quvvatlash bilan bog'laning.",
+
     noActiveSubscriptions:
       "❌ Yangilash uchun faol obunalaringiz yo'q.\n\nYangi obunani faollashtirish uchun /start dan foydalaning.",
     selectSubscription: '🎯 Yangilash uchun obunani tanlang:',
@@ -345,6 +487,7 @@ export const renewalMessages = {
 
     cancel: '❌ Bekor qilish',
     renewButton: '🔄 Obunani yangilash',
+    choosePlanButton: '📋 Reja tanlash',
 
     creatingInvoice: '⏳ Hisob yaratilmoqda...',
     invoiceTitle: (subscriptionName: string) => `Obuna ${subscriptionName}`,
@@ -368,6 +511,25 @@ export const renewalMessages = {
   },
 
   tg: {
+    // Commands and Actions
+    registrationRequired: 'Лутфан аввал сабти ном кунед. /start истифода баред',
+    commandError:
+      'Ҳангоми кушодани имконоти нав кардан хато ба амал омад. Лутфан баъдтар кӯшиш кунед.',
+    actionError:
+      'Хато ба амал омад. Лутфан фармони /renew -ро санҷед ё бо дастгирӣ тамос гиред.',
+
+    // Action-specific errors
+    invalidRequest: 'Дархости номаълуми нав кардан',
+    subscriptionNotBelongsToYou: 'Ин обуна ба шумо тааллуқ надорад',
+    subscriptionPlanNotFound: 'Накшаи обуна ёфт нашуд',
+    noRenewalOptions: 'Барои ин обуна имконоти нав кардан мавҷуд нест',
+
+    // Pre-checkout validation
+    preCheckoutValidationFailed:
+      'Санҷиши пардохт ноком шуд. Лутфан дубора кӯшиш кунед ё бо дастгирӣ тамос гиред.',
+    preCheckoutError:
+      'Хато ба амал омад. Лутфан дубора кӯшиш кунед ё бо дастгирӣ тамос гиред.',
+
     noActiveSubscriptions:
       '❌ Шумо обунаҳои фаъол барои нав кардан надоред.\n\nБарои фаъол кардани обунаи нав /start истифода баред.',
     selectSubscription: '🎯 Обунаро барои нав кардан интихоб кунед:',
@@ -395,6 +557,7 @@ export const renewalMessages = {
 
     cancel: '❌ Бекор кардан',
     renewButton: '🔄 Нав кардани обуна',
+    choosePlanButton: '📋 Интихоби нақша',
 
     creatingInvoice: '⏳ Ҳисоб сохта мешавад...',
     invoiceTitle: (subscriptionName: string) => `Обуна ${subscriptionName}`,

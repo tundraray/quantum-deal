@@ -90,6 +90,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
         createdAt: new Date(),
         scheduledAt: options.scheduledAt,
         metadata: options.metadata,
+        buttons: options.buttons,
       };
 
       // Schedule message directly with Bottleneck (non-blocking)
@@ -439,6 +440,13 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
 
     await this.bot.telegram.sendMessage(message.userId, messageText, {
       parse_mode: parseMode,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      reply_markup:
+        message.buttons && message.buttons.length > 0
+          ? ({
+              inline_keyboard: message.buttons,
+            } as any)
+          : undefined,
     });
   }
 }
