@@ -20,6 +20,7 @@ import {
 } from '../interfaces/notification.interface';
 import { ConfigService } from '@nestjs/config';
 import { SentryService } from '@quantumdeal/framework';
+import { createUpgradeToVipButton } from '../helpers/upgrade-button.helper';
 
 enum ReportType {
   WEEKLY = 'weekly',
@@ -64,7 +65,7 @@ interface ClientSubscription {
   readonly lang?: string | null;
   readonly subscriptionId: number;
   readonly subscriptionName: string;
-  readonly subscriptionScope: unknown;
+  readonly subscriptionScope: null | string[];
   readonly subscriptionExpirationDate: Date;
 }
 
@@ -79,7 +80,7 @@ interface ClientWeeklyReportData {
     readonly subscription: {
       readonly id: number;
       readonly name: string;
-      readonly scope: unknown;
+      readonly scope: null | string[];
       readonly expirationDate: Date;
     };
   };
@@ -713,17 +714,27 @@ export class WeekReportService {
     try {
       const reportMessage = await this.formatClientWeeklyReport(clientReport);
 
+      // Check if user has VIP subscription
+      const isVipSubscription =
+        clientReport.client.subscription.scope?.includes('*');
+
+      // Create upgrade button for non-VIP users
+      const buttons = isVipSubscription
+        ? undefined
+        : createUpgradeToVipButton(clientReport.client.lang || 'en');
+
       this.notificationService.addMessage(
         clientReport.client.telegramId,
         reportMessage,
         {
           messageType: QueuedMessageType.HTML,
           priority: MessagePriority.NORMAL,
+          buttons,
         },
       );
 
       this.logger.debug(
-        `Successfully saved and sent weekly report to client ${clientReport.client.telegramId}`,
+        `Successfully saved and sent weekly report to client ${clientReport.client.telegramId} (VIP: ${isVipSubscription}, buttons: ${buttons ? 'yes' : 'no'})`,
       );
     } catch (error) {
       const err = error as Error;
@@ -759,7 +770,7 @@ export class WeekReportService {
     // Determine template name based on subscription and filter status
     // VIP users with active filters get special template with filter stats
     const hasActiveFilters = filteredStats !== undefined;
-    const isVipSubscription = data.client.subscription.id === 3;
+    const isVipSubscription = data.client.subscription.scope?.includes('*');
 
     let templateName: string;
     if (hasActiveFilters && isVipSubscription) {
