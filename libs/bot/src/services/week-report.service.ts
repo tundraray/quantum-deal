@@ -454,7 +454,7 @@ export class WeekReportService {
       const vipProfitLossData =
         this.calculateProfitLossFromOrders(allTradingActivity);
       const vipNetResult =
-        vipProfitLossData.totalProfit + vipProfitLossData.totalLoss;
+        vipProfitLossData.totalProfit - vipProfitLossData.totalLoss;
 
       return {
         totalOrders,
@@ -742,7 +742,7 @@ export class WeekReportService {
     const clientLang = data.client.lang || 'en';
     const profit = data.tradingActivity.totalProfit;
     const loss = data.tradingActivity.totalLoss;
-    const netResult = profit + loss; // loss is already negative
+    const netResult = profit - loss; // loss is already negative
     const positiveTrades = data.tradingActivity.profitableOrders;
     const negativeTrades = data.tradingActivity.lossingOrders;
 
