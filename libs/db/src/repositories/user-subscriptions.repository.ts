@@ -51,7 +51,12 @@ export class UserSubscriptionsRepository extends BaseRepository<
    */
   async findActiveByUserId(userId: number): Promise<UserSubscription[]> {
     return this.findBy(
-      and(eq(this.table.userId, userId), eq(this.table.isActive, true)),
+      and(
+        eq(this.table.userId, userId),
+        eq(this.table.isActive, true),
+        sql`${this.table.expiresAt} IS NOT NULL`,
+        sql`${this.table.expiresAt} >= ${new Date()}`,
+      ),
     );
   }
 
