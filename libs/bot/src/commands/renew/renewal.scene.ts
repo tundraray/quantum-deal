@@ -50,7 +50,7 @@ export class RenewalScene {
     } catch (error) {
       this.logger.error('Error entering renewal scene:', error);
       const lang = ctx.user?.lang || 'en';
-      await ctx.reply(getRenewalMessage(lang, 'genericError'));
+      await ctx.replyWithHTML(getRenewalMessage(lang, 'genericError'));
       await ctx.scene.leave();
     }
   }
@@ -154,7 +154,7 @@ export class RenewalScene {
     const keyboard = Markup.inlineKeyboard(buttons);
 
     if (ctx.callbackQuery) {
-      await ctx.editMessageText(messageText, keyboard);
+      await ctx.reply(messageText, keyboard);
       await ctx.answerCbQuery();
     } else {
       await ctx.reply(messageText, keyboard);
