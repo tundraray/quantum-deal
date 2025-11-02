@@ -1,5 +1,5 @@
 -- Migration: Create monthly_bot_statistics materialized view
--- Description: Caches monthly statistics for onboarding (closed deals only)
+-- Description: Caches statistics for the last 30 days for onboarding (closed deals only)
 -- Author: System
 -- Date: 2025-11-01
 
@@ -7,8 +7,11 @@
 -- UP MIGRATION
 -- ==========================================
 
--- Create materialized view for monthly statistics
-CREATE MATERIALIZED VIEW IF NOT EXISTS monthly_bot_statistics AS
+-- Drop existing view to ensure it's recreated with updated logic
+DROP MATERIALIZED VIEW IF EXISTS monthly_bot_statistics;
+
+-- Create materialized view for last 30 days statistics
+CREATE MATERIALIZED VIEW monthly_bot_statistics AS
 SELECT
   COUNT(*)::int as total_deals,
   COALESCE(SUM(profit), 0)::numeric as total_profit,
@@ -17,10 +20,10 @@ SELECT
     0
   ) as win_rate,
   COUNT(DISTINCT account)::int as active_traders,
-  date_trunc('month', CURRENT_DATE) as period_start,
+  CURRENT_DATE - INTERVAL '30 days' as period_start,
   NOW() as last_updated
 FROM orders
-WHERE created_at >= date_trunc('month', CURRENT_DATE)
+WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
   AND close_time IS NOT NULL  -- Only closed orders
 ;
 
@@ -36,7 +39,7 @@ REFRESH MATERIALIZED VIEW monthly_bot_statistics;
 
 -- Add comment for documentation
 COMMENT ON MATERIALIZED VIEW monthly_bot_statistics IS
-  'Cached monthly statistics for bot onboarding. Refreshed every 15 minutes via cron job. Only includes closed orders (close_time IS NOT NULL).';
+  'Cached statistics for the last 30 days for bot onboarding. Refreshed every 15 minutes via cron job. Only includes closed orders (close_time IS NOT NULL).';
 
 -- ==========================================
 -- DOWN MIGRATION
