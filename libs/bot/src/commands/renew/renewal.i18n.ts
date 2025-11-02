@@ -59,6 +59,7 @@ export const renewalMessages = {
     cancel: '❌ Отмена',
     renewButton: '🔄 Продлить подписку',
     choosePlanButton: '📋 Выбрать план',
+    changePlanButton: '🔄 Сменить тариф',
 
     // Payment processing
     creatingInvoice: '⏳ Создаем счет на оплату...',
@@ -132,6 +133,7 @@ export const renewalMessages = {
     cancel: '❌ Cancel',
     renewButton: '🔄 Renew Subscription',
     choosePlanButton: '📋 Choose Plan',
+    changePlanButton: '🔄 Change Plan',
 
     creatingInvoice: '⏳ Creating invoice...',
     invoiceTitle: (subscriptionName: string) =>
@@ -204,6 +206,7 @@ export const renewalMessages = {
     cancel: '❌ Скасувати',
     renewButton: '🔄 Продовжити підписку',
     choosePlanButton: '📋 Вибрати план',
+    changePlanButton: '🔄 Змінити тариф',
 
     creatingInvoice: '⏳ Створюємо рахунок на оплату...',
     invoiceTitle: (subscriptionName: string) => `Підписка ${subscriptionName}`,
@@ -272,6 +275,7 @@ export const renewalMessages = {
       `📅 ${displayName} - ${stars} ⭐`,
 
     cancel: '❌ रद्द करें',
+    changePlanButton: '🔄 प्लान बदलें',
     renewButton: '🔄 सदस्यता नवीनीकरण',
     choosePlanButton: '📋 प्लान चुनें',
 
@@ -344,6 +348,7 @@ export const renewalMessages = {
       `📅 ${displayName} - ${stars} ⭐`,
 
     cancel: '❌ Annuler',
+    changePlanButton: '🔄 Changer de plan',
     renewButton: '🔄 Renouveler',
     choosePlanButton: '📋 Choisir un plan',
 
@@ -415,6 +420,7 @@ export const renewalMessages = {
       `📅 ${displayName} - ${stars} ⭐`,
 
     cancel: '❌ Болдырмау',
+    changePlanButton: '🔄 Жоспарды өзгерту',
     renewButton: '🔄 Жазылымды жаңарту',
     choosePlanButton: '📋 Жоспарды таңдау',
 
@@ -486,6 +492,7 @@ export const renewalMessages = {
       `📅 ${displayName} - ${stars} ⭐`,
 
     cancel: '❌ Bekor qilish',
+    changePlanButton: "🔄 Rejani o'zgartirish",
     renewButton: '🔄 Obunani yangilash',
     choosePlanButton: '📋 Reja tanlash',
 
@@ -557,6 +564,7 @@ export const renewalMessages = {
 
     cancel: '❌ Бекор кардан',
     renewButton: '🔄 Нав кардани обуна',
+    changePlanButton: '🔄 Иваз кардани нақша',
     choosePlanButton: '📋 Интихоби нақша',
 
     creatingInvoice: '⏳ Ҳисоб сохта мешавад...',

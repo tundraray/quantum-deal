@@ -10,7 +10,6 @@ import { FilterUpdate } from './commands/filter/filter.update';
 import { RenewUpdate } from './commands/renew/renew.update';
 
 // Scenes
-import { RandomNumberScene } from './scenes/random-number.scene';
 import { FilterScene } from './commands/filter/filter.scene';
 import { RenewalScene } from './commands/renew/renewal.scene';
 
@@ -58,7 +57,6 @@ import { RenewalAction } from './actions/renewal/renewal.action';
     RenewUpdate,
 
     // Scenes
-    RandomNumberScene,
     FilterScene,
     RenewalScene,
 
@@ -110,7 +108,6 @@ import { RenewalAction } from './actions/renewal/renewal.action';
     RenewUpdate,
 
     // Scenes
-    RandomNumberScene,
     FilterScene,
     RenewalScene,
 

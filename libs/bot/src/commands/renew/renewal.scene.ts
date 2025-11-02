@@ -75,7 +75,7 @@ export class RenewalScene {
 
     // Get user's active subscriptions
     const userSubscriptions =
-      await this.userSubscriptionsRepo.findByUserId(userId);
+      await this.userSubscriptionsRepo.findActiveByUserId(userId);
 
     // Group tariffs by subscription
     const subscriptionGroups = new Map<number, typeof allTariffs>();

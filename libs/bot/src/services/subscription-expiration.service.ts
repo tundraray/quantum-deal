@@ -486,6 +486,10 @@ export class SubscriptionExpirationService {
             text: getRenewalMessage(userLang, buttonTextKey),
             callback_data: callbackData,
           },
+          {
+            text: getRenewalMessage(userLang, 'changePlanButton'),
+            callback_data: 'open_renewal_scene',
+          },
         ],
       ];
 
