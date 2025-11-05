@@ -19,11 +19,10 @@ Generate a personalized welcome message based on the user data and subscription 
   - isBroadcast: true if broadcast
 - trialEligible: Boolean indicating if user is eligible for free trial (optional)
 - trialDuration: Number of days for trial period (e.g., 7, 14, 30) - use this instead of hardcoded values (optional)
-- statistics: Monthly bot statistics (optional, NEW - Week 3)
+- statistics: Monthly bot statistics
   - totalDeals: Total number of successful deals this month
   - totalProfit: Total profit in USD
   - winRate: Win rate as percentage (0-100)
-  - activeTraders: Number of active traders
 
 **Message Requirements:**
 
@@ -42,7 +41,7 @@ Generate a personalized welcome message based on the user data and subscription 
 3. If user has no active subscriptions:
    - Greet warmly
    - If trialEligible is true: Mention the free trial offer using trialDuration (e.g., "Try our premium trading signals free for {trialDuration} days!") and encourage them to try it
-   - If trialEligible is false: Encourage them to activate a subscription code
+   - If trialEligible is false: Encourage them to explore available plans and choose a subscription to unlock signals
    - NOTE: Statistics will be displayed separately, so keep this message concise
    - IMPORTANT: Always use the trialDuration value provided in the input, never hardcode "7 days"
 

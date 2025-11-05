@@ -226,12 +226,20 @@ export class StartUpdate {
         type: us.subscription.type,
         activatedAt: us.userSubscription.activatedAt,
         expiresAt: us.userSubscription.expiresAt,
+        isSignals: us.subscription.type === 'signals',
+        isBroadcast: isBroadcastSubscription(us.subscription.type),
       })),
       justActivated: activationResult.activatedSubscription
         ? {
             name: activationResult.activatedSubscription.subscription.name,
             type: activationResult.activatedSubscription.subscription.type,
             expiresAt: activationResult.activatedSubscription.expiresAt,
+            isSignals:
+              activationResult.activatedSubscription.subscription.type ===
+              'signals',
+            isBroadcast: isBroadcastSubscription(
+              activationResult.activatedSubscription.subscription.type,
+            ),
           }
         : undefined,
       trialEligible,
