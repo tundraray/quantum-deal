@@ -11,8 +11,7 @@ import { sql } from 'drizzle-orm';
 export interface MonthlyStats {
   totalDeals: number;
   totalProfit: number;
-  winRate: number; // as percentage (0-100)
-  activeTraders: number;
+  winRate: number;
 }
 
 /**
@@ -66,13 +65,11 @@ export class OnboardingService {
         total_deals: number;
         total_profit: string;
         win_rate: number;
-        active_traders: number;
       }>(sql`
         SELECT
           total_deals,
           total_profit,
           win_rate,
-          active_traders
         FROM monthly_bot_statistics
         LIMIT 1
       `);
@@ -95,7 +92,6 @@ export class OnboardingService {
         totalDeals: Number(stats.total_deals),
         totalProfit: Number(stats.total_profit),
         winRate: Number(stats.win_rate) * 100, // Convert to percentage (0-100)
-        activeTraders: Number(stats.active_traders),
       };
     } catch (error: unknown) {
       this.logger.error(
@@ -129,14 +125,14 @@ export class OnboardingService {
 
     // Multi-language templates
     const templates: Record<string, string> = {
-      en: `📊 Our Community This Month:\n💰 Total Profit: ${formatMoney(stats.totalProfit)}\n📈 Successful Deals: ${formatNumber(stats.totalDeals)}\n🎯 Win Rate: ${formatPercent(stats.winRate)}\n👥 Active Traders: ${formatNumber(stats.activeTraders)}`,
-      ru: `📊 Наше сообщество за месяц:\n💰 Общая прибыль: ${formatMoney(stats.totalProfit)}\n📈 Успешных сделок: ${formatNumber(stats.totalDeals)}\n🎯 Винрейт: ${formatPercent(stats.winRate)}\n👥 Активных трейдеров: ${formatNumber(stats.activeTraders)}`,
-      uk: `📊 Наша спільнота за місяць:\n💰 Загальний прибуток: ${formatMoney(stats.totalProfit)}\n📈 Успішних угод: ${formatNumber(stats.totalDeals)}\n🎯 Вінрейт: ${formatPercent(stats.winRate)}\n👥 Активних трейдерів: ${formatNumber(stats.activeTraders)}`,
-      hi: `📊 इस महीने हमारा समुदाय:\n💰 कुल लाभ: ${formatMoney(stats.totalProfit)}\n📈 सफल सौदे: ${formatNumber(stats.totalDeals)}\n🎯 जीत दर: ${formatPercent(stats.winRate)}\n👥 सक्रिय व्यापारी: ${formatNumber(stats.activeTraders)}`,
-      fr: `📊 Notre communauté ce mois:\n💰 Profit total: ${formatMoney(stats.totalProfit)}\n📈 Transactions réussies: ${formatNumber(stats.totalDeals)}\n🎯 Taux de réussite: ${formatPercent(stats.winRate)}\n👥 Traders actifs: ${formatNumber(stats.activeTraders)}`,
-      kk: `📊 Біздің қауымдастық осы айда:\n💰 Жалпы пайда: ${formatMoney(stats.totalProfit)}\n📈 Сәтті мәмілелер: ${formatNumber(stats.totalDeals)}\n🎯 Жеңіс деңгейі: ${formatPercent(stats.winRate)}\n👥 Белсенді трейдерлер: ${formatNumber(stats.activeTraders)}`,
-      uz: `📊 Bizning jamiyat bu oyda:\n💰 Umumiy foyda: ${formatMoney(stats.totalProfit)}\n📈 Muvaffaqiyatli bitimlar: ${formatNumber(stats.totalDeals)}\n🎯 G'alabalar nisbati: ${formatPercent(stats.winRate)}\n👥 Faol treyderlar: ${formatNumber(stats.activeTraders)}`,
-      tg: `📊 Ҷомеаи мо дар ин моҳ:\n💰 Фоидаи умумӣ: ${formatMoney(stats.totalProfit)}\n📈 Созишҳои муваффақ: ${formatNumber(stats.totalDeals)}\n🎯 Нисбати ғалаба: ${formatPercent(stats.winRate)}\n👥 Тредерҳои фаъол: ${formatNumber(stats.activeTraders)}`,
+      en: `📊 Our Community This Month:\n💰 Total Profit: ${formatMoney(stats.totalProfit)}\n📈 Successful Deals: ${formatNumber(stats.totalDeals)}\n🎯 Win Rate: ${formatPercent(stats.winRate)}`,
+      ru: `📊 Наше сообщество за месяц:\n💰 Общая прибыль: ${formatMoney(stats.totalProfit)}\n📈 Успешных сделок: ${formatNumber(stats.totalDeals)}\n🎯 Винрейт: ${formatPercent(stats.winRate)}`,
+      uk: `📊 Наша спільнота за місяць:\n💰 Загальний прибуток: ${formatMoney(stats.totalProfit)}\n📈 Успішних угод: ${formatNumber(stats.totalDeals)}\n🎯 Вінрейт: ${formatPercent(stats.winRate)}`,
+      hi: `📊 इस महीने हमारा समुदाय:\n💰 कुल लाभ: ${formatMoney(stats.totalProfit)}\n📈 सफल सौदे: ${formatNumber(stats.totalDeals)}\n🎯 जीत दर: ${formatPercent(stats.winRate)}`,
+      fr: `📊 Notre communauté ce mois:\n💰 Profit total: ${formatMoney(stats.totalProfit)}\n📈 Transactions réussies: ${formatNumber(stats.totalDeals)}\n🎯 Taux de réussite: ${formatPercent(stats.winRate)}`,
+      kk: `📊 Біздің қауымдастық осы айда:\n💰 Жалпы пайда: ${formatMoney(stats.totalProfit)}\n📈 Сәтті мәмілелер: ${formatNumber(stats.totalDeals)}\n🎯 Жеңіс деңгейі: ${formatPercent(stats.winRate)}`,
+      uz: `📊 Bizning jamiyat bu oyda:\n💰 Umumiy foyda: ${formatMoney(stats.totalProfit)}\n📈 Muvaffaqiyatli bitimlar: ${formatNumber(stats.totalDeals)}\n🎯 G'alabalar nisbati: ${formatPercent(stats.winRate)}`,
+      tg: `📊 Ҷомеаи мо дар ин моҳ:\n💰 Фоидаи умумӣ: ${formatMoney(stats.totalProfit)}\n📈 Созишҳои муваффақ: ${formatNumber(stats.totalDeals)}\n🎯 Нисбати ғалаба: ${formatPercent(stats.winRate)}`,
     };
 
     return templates[language] || templates['en'];

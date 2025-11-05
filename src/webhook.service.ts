@@ -232,6 +232,42 @@ export class WebhookService implements OnModuleDestroy {
   }
 
   /**
+   * Normalize SL/TP value for comparison
+   * null/undefined means "no value", treat both as null
+   * 0 is a valid value (especially for SL), so we compare it strictly
+   */
+  private normalizeSLTPValue(
+    value: number | null | undefined,
+  ): number | null {
+    return value == null ? null : value;
+  }
+
+  /**
+   * Check if SL/TP values have changed
+   * @param oldSL - Old stop loss value
+   * @param oldTP - Old take profit value
+   * @param newSL - New stop loss value
+   * @param newTP - New take profit value
+   * @returns true if values changed, false if unchanged
+   */
+  private hasSLTPValuesChanged(
+    oldSL: number | null | undefined,
+    oldTP: number | null | undefined,
+    newSL: number | null | undefined,
+    newTP: number | null | undefined,
+  ): boolean {
+    const normalizedOldSL = this.normalizeSLTPValue(oldSL);
+    const normalizedOldTP = this.normalizeSLTPValue(oldTP);
+    const normalizedNewSL = this.normalizeSLTPValue(newSL);
+    const normalizedNewTP = this.normalizeSLTPValue(newTP);
+
+    const slChanged = normalizedOldSL !== normalizedNewSL;
+    const tpChanged = normalizedOldTP !== normalizedNewTP;
+
+    return slChanged || tpChanged;
+  }
+
+  /**
    * Handle order creation or update based on event type
    */
   private async handleOrderEvent(
@@ -243,14 +279,26 @@ export class WebhookService implements OnModuleDestroy {
 
     if (existingOrder && !existingOrder.closePrice) {
       // Update existing order
-      if (
-        !(
-          validatedEvent.event === MT5EventType.POSITION_SLTP_UPDATE &&
-          validatedEvent.sl == existingOrder.stopLoss &&
-          validatedEvent.tp == existingOrder.takeProfit
-        )
-      )
-        return this.updateExistingOrder(existingOrder, validatedEvent);
+      // Skip update if SL/TP values haven't changed for SLTP update events
+      const isSLTPUpdateEvent =
+        validatedEvent.event === MT5EventType.POSITION_SLTP_UPDATE ||
+        validatedEvent.event === MT5EventType.ORDER_SLTP_UPDATE;
+      
+      if (isSLTPUpdateEvent) {
+        const valuesChanged = this.hasSLTPValuesChanged(
+          existingOrder.stopLoss,
+          existingOrder.takeProfit,
+          validatedEvent.sl,
+          validatedEvent.tp,
+        );
+
+        if (!valuesChanged) {
+          // Values unchanged, skip update and notification
+          return undefined;
+        }
+      }
+
+      return this.updateExistingOrder(existingOrder, validatedEvent);
     } else {
       // Create new order
       return this.createNewOrder(validatedEvent);
@@ -504,6 +552,25 @@ export class WebhookService implements OnModuleDestroy {
     this.logger.log(
       `SLTP update event received: ticket=${order.ticketId}, symbol=${order.symbol}, account=${order.account}, broker=${order.broker}`,
     );
+
+    // Check if SL/TP values actually changed
+    // This is a safety check in case the order was updated through another path
+    // Only skip if both old values are set (not null) and neither value changed
+    // If old values are null (not set), we can't determine if they changed, so send notification to be safe
+    const normalizedOldSL = this.normalizeSLTPValue(order.oldStopLoss);
+    const normalizedOldTP = this.normalizeSLTPValue(order.oldTakeProfit);
+    const normalizedNewSL = this.normalizeSLTPValue(order.stopLoss);
+    const normalizedNewTP = this.normalizeSLTPValue(order.takeProfit);
+
+    if (
+      normalizedOldSL !== null &&
+      normalizedOldTP !== null &&
+      normalizedOldSL === normalizedNewSL &&
+      normalizedOldTP === normalizedNewTP
+    ) {
+      // Values unchanged, skip notification
+      return;
+    }
 
     // Send notifications for SL/TP update
     try {
