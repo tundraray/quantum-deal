@@ -920,12 +920,14 @@ if (!$code) {
 ### Issue 1: Duplicate Code Generation Logic
 
 **Description:** Code generation logic exists in two places:
-1. `CodeGenerationService.generateUniqueCode()` - Service pattern
-2. `MasterbotUpdate.onSubscriptionSelected()` - Inline implementation
+1. `CodeGenerationService.generateUniqueCode()` - Service pattern (uses `findOneBy(eq(codes.code, code))`)
+2. `MasterbotUpdate.onSubscriptionSelected()` - Inline implementation (uses `findByCode(code)`)
 
-**Impact:** Code duplication, potential inconsistency
+**Impact:** Code duplication and potential bug. The inline implementation uses `findByCode()` which only checks for unused codes (`userId IS NULL`). This means if a code was previously activated, the inline implementation could generate a new code with the same string, creating duplicate code values in the database.
 
-**Recommendation:** Consolidate to use only `CodeGenerationService`
+**Severity:** Low - The collision probability is extremely low (36^15 combinations), but the bug exists.
+
+**Recommendation:** Consolidate to use only `CodeGenerationService` which correctly checks for ANY existing code regardless of activation status.
 
 ### Issue 2: expirationDate Field Unused
 
@@ -937,13 +939,20 @@ if (!$code) {
 
 **Recommendation:** Remove field in future migration or implement code expiration if needed
 
-### Issue 3: findByCode Collision Check Difference
+### Issue 3: findByCode Query Design
 
-**Description:** Collision check during generation uses different query than `findByCode`:
-- Generation: `eq(codes.code, code)` - finds ANY code with matching string
-- Activation: `and(eq(codes.code, code), isNull(codes.userId))` - finds only UNUSED codes
+**Description:** The `findByCode` repository method serves two distinct purposes with different query requirements:
 
-**Impact:** None - both behaviors are correct for their contexts
+1. **Code Activation** (in `StartUpdate.activateCode()`):
+   - Query: `and(eq(codes.code, code), isNull(codes.userId))`
+   - Purpose: Find only UNUSED codes for activation
+   - Behavior: Correct - returns null for already-activated codes (silent failure)
+
+2. **Code Generation Collision Check**:
+   - `CodeGenerationService`: Uses `findOneBy(eq(codes.code, code))` - finds ANY code (correct)
+   - `MasterbotUpdate` inline: Uses `findByCode(code)` - finds only UNUSED codes (incorrect, see Issue 1)
+
+**Impact:** The inline implementation in `MasterbotUpdate` has a potential bug (documented in Issue 1). The `CodeGenerationService` implementation is correct.
 
 ---
 
@@ -989,3 +998,4 @@ Based on PRD functional requirements:
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2025-11-25 | AI Assistant | Initial reverse-engineered documentation |
+| 1.0.1 | 2025-11-25 | AI Assistant | Audit: Updated Issue 1 and Issue 3 to document potential bug in inline code generation using incorrect collision check query |

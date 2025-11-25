@@ -747,7 +747,9 @@ async findActiveBroadcastSubscriptions(): Promise<Subscription[]> {
 
 **Expected Behavior:** Should filter by `type LIKE 'subscription_%'`
 
-**Impact:** Low - method name is misleading but not causing functional issues
+**Impact:** Low - method name and JSDoc comment are misleading but not causing functional issues
+
+**Note:** The JSDoc comment in the repository incorrectly states "CRITICAL: Filters by type LIKE 'subscription_%'" but the implementation does not include this filter. The `findAllBroadcastSubscriptions()` method correctly filters by type.
 
 ### Issue 2: Timestamp Inconsistency
 **Description:** Mixed `WITH TIME ZONE` and `WITHOUT TIME ZONE` across tables
@@ -764,10 +766,12 @@ async findActiveBroadcastSubscriptions(): Promise<Subscription[]> {
 **Description:** Old subscription model fields still exist in `users` table
 
 **Fields:**
-- `users.subscribeId`
+- `users.subscribeId` (integer type, while `subscriptions.id` is bigint)
 - `users.subscribeExpirationDate`
 
 **Status:** Deprecated but maintained for backward compatibility
+
+**Note:** The `subscribeId` field is defined as `integer` while `subscriptions.id` is `bigint`. This type mismatch is acceptable since the field is deprecated and the new `user_subscriptions` table uses proper `bigint` references.
 
 ---
 
@@ -776,6 +780,7 @@ async findActiveBroadcastSubscriptions(): Promise<Subscription[]> {
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2025-11-25 | AI Assistant | Initial reverse-engineered documentation |
+| 1.0.1 | 2025-11-25 | AI Assistant | Audit: Enhanced Known Issues with JSDoc mismatch note; Added type mismatch note for legacy subscribeId field |
 
 ---
 
