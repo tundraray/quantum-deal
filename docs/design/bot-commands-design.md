@@ -219,6 +219,7 @@ sequenceDiagram
 |-------------------|----------|-------------------|-------------------|------------------|
 | Start command | StartUpdate.onStart() | N/A (new feature) | Calls setUserCommands after processing | Direct injection |
 | Language change | LangUpdate.onLanguageCallback() | N/A (new feature) | Calls setUserCommands after DB update | Direct injection |
+| Subscription activation | StartUpdate.onStart(code) | N/A (new feature) | Calls setUserCommands after code activation | Direct injection |
 | Module registration | BotModule | N/A | BotCommandsService in providers/exports | DI registration |
 
 ### Main Components
@@ -537,15 +538,13 @@ Not required for this non-critical feature. Command menu updates are fire-and-fo
 ## References
 
 - PRD: `docs/prd/bot-commands-prd.md`
-- Source Documentation: `docs/bot-commands/menu.md`
-- Flow Diagrams: `docs/bot-commands/flow.md`
-- Usage Examples: `docs/bot-commands/examples.md`
-- Implementation Summary: `docs/bot-commands/summary.md`
 - Telegram Bot API: https://core.telegram.org/bots/api#setmycommands
 - nestjs-telegraf: https://github.com/bukhalo/nestjs-telegraf
+- Implementation: `libs/bot/src/services/bot-commands.service.ts`
 
 ## Update History
 
 | Date | Version | Changes | Author |
 |------|---------|---------|--------|
+| 2025-11-25 | 1.1 | Verified against implementation - Updated references section, removed non-existent doc files | AI Assistant |
 | 2025-11-25 | 1.0 | Initial version - Design Doc for existing implementation | AI Assistant |

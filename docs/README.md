@@ -4,15 +4,42 @@
 
 This directory contains all project documentation organized by type.
 
+## Bot Features Documentation
+
+### Bot Commands Menu System
+
+Personalized bot command menu that displays available commands based on subscription level and language.
+
+| Type | Document | Description |
+|------|----------|-------------|
+| PRD | [bot-commands-prd.md](prd/bot-commands-prd.md) | Requirements for personalized command menus |
+| Design | [bot-commands-design.md](design/bot-commands-design.md) | Service implementation, Telegram API integration |
+
+### Feature Flags System
+
+Fine-grained control over filtering capabilities based on subscription tiers.
+
+| Type | Document | Description |
+|------|----------|-------------|
+| PRD | [feature-flags-prd.md](prd/feature-flags-prd.md) | TIER_BASED_FILTERING and CUSTOM_USER_FILTERING features |
+| Design | [feature-flags-design.md](design/feature-flags-design.md) | Database design, service layer, Telegram UI |
+
+**Related ADRs:**
+- [ADR-001: Feature Flag Database Design](adr/ADR-001-feature-flag-database-design.md)
+- [ADR-002: Subscription Scope to Sectors Migration](adr/ADR-002-subscription-scope-to-sectors-migration.md)
+- [ADR-003: User Settings JSONB Storage](adr/ADR-003-user-settings-jsonb-storage.md)
+
+---
+
 ## Subscription System Documentation
 
-The subscription system is documented across 7 features, each with a PRD (Product Requirements Document) and Design Doc (Technical Design Document).
+The subscription system is documented across 7 features, each with a PRD and Design Doc.
 
 ### Product Requirements Documents (PRD)
 
 | Feature | Document | Description |
 |---------|----------|-------------|
-| Core Infrastructure | [subscription-core-prd.md](prd/subscription-core-prd.md) | Base subscription system, user-subscription relationships, feature flags |
+| Core Infrastructure | [subscription-core-prd.md](prd/subscription-core-prd.md) | Base subscription system, user-subscription relationships |
 | Signals | [subscription-signals-prd.md](prd/subscription-signals-prd.md) | Trading signal delivery, filtering, expiration notifications |
 | Broadcast | [subscription-broadcast-prd.md](prd/subscription-broadcast-prd.md) | Manager broadcast subscriptions, message delivery |
 | Trial | [subscription-trial-prd.md](prd/subscription-trial-prd.md) | 7-day free trial system |
@@ -32,20 +59,41 @@ The subscription system is documented across 7 features, each with a PRD (Produc
 | Renewal | [subscription-renewal-design.md](design/subscription-renewal-design.md) | Payment flow, state machine, Telegraf scenes |
 | Codes | [subscription-codes-design.md](design/subscription-codes-design.md) | Code generation algorithm, deep links |
 
+---
+
+## Architecture Decision Records (ADR)
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| [ADR-001](adr/ADR-001-feature-flag-database-design.md) | Feature Flag Database Design | Accepted |
+| [ADR-002](adr/ADR-002-subscription-scope-to-sectors-migration.md) | Subscription Scope to Sectors Migration | Accepted |
+| [ADR-003](adr/ADR-003-user-settings-jsonb-storage.md) | User Settings JSONB Storage | Accepted |
+
 ## Directory Structure
 
 ```
 docs/
-├── README.md                    # This file
+├── README.md                    # This file (navigation index)
 ├── prd/                         # Product Requirements Documents
+│   ├── bot-commands-prd.md
+│   ├── feature-flags-prd.md
 │   └── subscription-*.md
 ├── design/                      # Technical Design Documents
+│   ├── bot-commands-design.md
+│   ├── feature-flags-design.md
 │   └── subscription-*.md
+├── adr/                         # Architecture Decision Records
+│   ├── ADR-001-feature-flag-database-design.md
+│   ├── ADR-002-subscription-scope-to-sectors-migration.md
+│   ├── ADR-003-user-settings-jsonb-storage.md
+│   └── template.md
 ├── plans/                       # Work Plans
 │   └── *.md
 ├── guides/                      # Development Guides
 │   └── sub-agents.md
 ├── archive/                     # Archived Documentation
+│   ├── bot-commands/            # Original bot-commands docs (archived 2025-11-25)
+│   ├── feature-flags/           # Original feature-flags docs (archived 2025-11-25)
 │   ├── subscribtion/            # Original broadcast docs (archived)
 │   └── subscription-v2/         # V2 docs (archived)
 └── rules/                       # Project Rules
@@ -56,6 +104,7 @@ docs/
 
 - **For Business Requirements**: Start with PRD documents in `docs/prd/`
 - **For Technical Implementation**: See Design documents in `docs/design/`
+- **For Architecture Decisions**: See ADRs in `docs/adr/`
 - **For Historical Context**: Check `docs/archive/`
 
 ## Document Status

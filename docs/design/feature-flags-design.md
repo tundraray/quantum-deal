@@ -8,8 +8,9 @@ The Feature Flags System provides fine-grained control over filtering capabiliti
 
 ### Prerequisite ADRs
 
-- No common ADRs exist yet in this project
-- Feature flags architecture decisions are documented in `docs/feature-flags/README.md`
+- **ADR-001: Feature Flag Database Design** - Documents the chosen two-table design (subscription_features and user_subscription_features) with JSONB configuration for flexibility
+- **ADR-002: Migration from subscriptions.scope to subscription_features.config.sectors** - Documents migration strategy from deprecated subscriptions.scope field
+- **ADR-003: User Settings JSONB Storage Approach** - Documents the JSONB storage approach for user feature settings with soft deletion support
 
 ### Agreement Checklist
 
@@ -164,7 +165,9 @@ Differentiate subscription tiers by controlling which filtering capabilities are
 | Existing | `libs/bot/src/guards/feature.guard.ts` | Feature access guard |
 | Existing | `libs/bot/src/helpers/feature-access.helper.ts` | Helper functions for Telegraf handlers |
 | Existing | `libs/bot/src/interfaces/user.dto.ts` | User type with feature flags |
-| Planned | `libs/bot/src/scenes/filter-settings.scene.ts` | Telegram filter configuration UI |
+| Existing | `libs/bot/src/commands/filter/filter.scene.ts` | Telegram filter configuration UI |
+| Existing | `libs/bot/src/services/instrument-filter.service.ts` | Instrument filtering and selection service |
+| Existing | `libs/bot/src/services/filter-session.service.ts` | Filter session state management |
 
 ### Integration Points
 
@@ -588,32 +591,51 @@ logger.log(`User ${userId} denied access to feature ${requiredFeature}`);
    - Prerequisites: User DTO with features
    - File: `feature-access.helper.ts`
 
-#### Phase 4: Integration (Pending)
-1. **UserManagementMiddleware Update**
+#### Phase 4: Integration (Completed)
+1. **UserManagementMiddleware Update** ✅
    - Technical Reason: Load features with user context
-   - Prerequisites: FeatureFlagService
+   - Implementation: `loadUserWithSubscriptions()` method calls `featureFlagService.getUserFeatures()` and attaches enabledFeatures and featureConfigs to user context
+   - Verification: Features are properly loaded and available in UserContext
 
-2. **Webhook Processor Integration**
+2. **Webhook Processor Integration** ✅
    - Technical Reason: Apply filtering to signals
-   - Prerequisites: All services, findBySector query
+   - Implementation: `getEligibleUsers()` queries subscriptions by sector, `applyCustomFiltering()` checks user's CUSTOM_USER_FILTERING settings
+   - Verification: Signals are filtered based on sector and user's symbol whitelist
 
-3. **Filter Settings Scene**
+3. **Filter Settings Scene** ✅
    - Technical Reason: User-facing configuration UI
-   - Prerequisites: UserSettingsService, instruments table
+   - Implementation: `FilterScene` checks feature access on entry, handles instrument selection, calls `UserSettingsService.saveUserSettings()` on save
+   - Verification: Settings persist to database and affect signal delivery
 
 ### Integration Points
 
-**Integration Point 1: Feature Loading**
+**Integration Point 1: Feature Loading** ✅ IMPLEMENTED
+- Location: `libs/bot/src/middleware/user-management.middleware.ts` (lines 102-157)
 - Components: UserManagementMiddleware -> FeatureFlagService
-- Verification: Features appear in user context after middleware runs
+- Flow: UserManagementMiddleware.loadUserWithSubscriptions() calls FeatureFlagService.getUserFeatures() which queries SubscriptionFeaturesRepository
+- Result: Attaches `enabledFeatures` (Set) and `featureConfigs` (Map) to UserContext
+- Verification: Features appear in user context after middleware runs, enabling downstream handlers to check feature access
 
-**Integration Point 2: Signal Filtering**
-- Components: WebhookProcessor -> SubscriptionsRepository -> UserSubscriptionFeaturesRepository
-- Verification: Signals correctly filtered based on sector and user settings
+**Integration Point 2: Signal Filtering** ✅ IMPLEMENTED
+- Location: `libs/bot/src/services/webhook.service.ts` (lines 254-295 for getEligibleUsers, lines 151-208 for shouldSendSignal)
+- Components: WebhookProcessor.getEligibleUsers() -> SubscriptionsRepository.findBySector() -> UserSubscriptionFeaturesRepository.getUserFeatureSettings()
+- Flow:
+  1. getEligibleUsers() queries subscriptions by sector (TIER_BASED_FILTERING)
+  2. applyCustomFiltering() filters users by symbol if they have CUSTOM_USER_FILTERING
+  3. shouldSendSignal() checks user's configured symbols in settings JSONB
+- Result: Only users whose configured symbols match the signal's symbol receive the notification
+- Verification: Signals correctly filtered based on sector and user's custom symbol whitelist
 
-**Integration Point 3: Filter Configuration**
-- Components: FilterSettingsScene -> UserSettingsService -> Database
-- Verification: Settings persist and affect signal delivery
+**Integration Point 3: Filter Configuration** ✅ IMPLEMENTED
+- Location: `libs/bot/src/commands/filter/filter.scene.ts` (lines 547-578 for handleSave)
+- Components: FilterScene -> InstrumentFilterService -> UserSettingsService -> UserSubscriptionFeaturesRepository
+- Flow:
+  1. FilterScene checks feature access on entry (line 57)
+  2. handleSave() calls InstrumentFilterService.saveUserFilters()
+  3. InstrumentFilterService calls UserSettingsService.saveUserSettings()
+  4. UserSettingsService validates settings and calls userFeaturesRepo.upsertUserSettings()
+- Result: Settings persisted to user_subscription_features table with JSONB configuration
+- Verification: Settings persist and affect signal delivery in WebhookProcessor.shouldSendSignal()
 
 ### Migration Strategy
 
@@ -742,4 +764,5 @@ describe('Filter Settings Flow', () => {
 
 | Date | Version | Changes | Author |
 |------|---------|---------|--------|
+| 2025-11-25 | 1.1 | Updated Prerequisite ADRs section to list ADR-001, ADR-002, ADR-003; corrected implementation file path for filter scene from libs/bot/src/scenes/filter-settings.scene.ts to libs/bot/src/commands/filter/filter.scene.ts; marked Phase 4 Integration as Completed; added detailed implementation information for all three integration points with specific file locations and code line references | Claude |
 | 2025-11-25 | 1.0 | Initial version | Claude |
