@@ -328,27 +328,35 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 **Verification Level**: L2 (Migration applies successfully)
 
 ### Task 2.1: Run drizzle-kit generate
-- [ ] **Implementation**
-  - [ ] Ensure all Phase 1 schema changes are complete
-  - [ ] Run `pnpm drizzle-kit generate` to create migration
-  - [ ] Verify migration file created in `drizzle/migrations/` directory
+- [x] **Implementation**
+  - [x] Ensure all Phase 1 schema changes are complete
+  - [x] Run `pnpm drizzle-kit generate` to create migration
+  - [x] Verify migration file created in `libs/db/migrations/` directory
 
-**Command**: `pnpm drizzle-kit generate`
+**Command**: `pnpm db:generate`
 
-**Expected Output**: New migration file `drizzle/migrations/XXXX_*.sql`
+**Output**: Migration file `libs/db/migrations/20251126190521_young_falcon.sql`
 
 ---
 
 ### Task 2.2: Review generated SQL migration file
-- [ ] **Review Steps**
-  - [ ] Open generated migration file
-  - [ ] Verify CREATE TABLE statements for: bots, bot_settings, bot_users, bot_messages
-  - [ ] Verify ALTER TABLE statements for: user_subscriptions, renewal_tariffs, codes
-  - [ ] Verify all FK constraints are correct
-  - [ ] Verify all indexes are created
-  - [ ] Check unique constraints are properly defined
+- [x] **Review Steps**
+  - [x] Open generated migration file
+  - [x] Verify CREATE TABLE statements for: bots, bot_settings, bot_users, bot_messages
+  - [x] Verify ALTER TABLE statements for: user_subscriptions, renewal_tariffs, codes
+  - [x] Verify all FK constraints are correct
+  - [x] Verify all indexes are created
+  - [x] Check unique constraints are properly defined
 
-**Files**: `drizzle/migrations/XXXX_*.sql`
+**Files**: `libs/db/migrations/20251126190521_young_falcon.sql`
+
+**Review Results**:
+- All 4 CREATE TABLE statements verified correct
+- All 3 ALTER TABLE statements verified correct
+- All 8 FK constraints verified with CASCADE delete
+- All 4+ indexes created (idx_codes_bot, idx_renewal_tariffs_bot, idx_user_subscriptions_bot, idx_user_subscriptions_user_bot)
+- All unique constraints properly defined (bots_name_unique, bot_settings_bot_id_unique, uq_bot_users_user_bot, uq_bot_messages_bot_type_lang, uq_renewal_tariff_subscription_period_bot)
+- Partial unique index for FR-012 CONFIRMED MISSING (expected - must be added in Task 2.3)
 
 ---
 
@@ -403,7 +411,7 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Phase 2 Completion Criteria
-- [ ] Migration file generated
+- [x] Migration file generated
 - [ ] Manual SQL additions made (partial unique index)
 - [ ] Migration applied to database
 - [ ] All new tables exist in database
