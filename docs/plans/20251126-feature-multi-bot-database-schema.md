@@ -229,11 +229,11 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 1.4: Create bot-messages.ts schema
-- [ ] **Implementation**
-  - [ ] Create `libs/db/src/schema/bot-messages.ts`
-  - [ ] Define botMessages pgTable with FK to bots
-  - [ ] Add composite unique constraint on (botId, type, lang)
-  - [ ] Export types: BotMessage, NewBotMessage
+- [x] **Implementation**
+  - [x] Create `libs/db/src/schema/bot-messages.ts`
+  - [x] Define botMessages pgTable with FK to bots
+  - [x] Add composite unique constraint on (botId, type, lang)
+  - [x] Export types: BotMessage, NewBotMessage
 
 **File**: `libs/db/src/schema/bot-messages.ts`
 
@@ -298,10 +298,10 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 1.8: Update schema/index.ts exports
-- [ ] **Implementation**
-  - [ ] Add exports for bots, botSettings, botUsers, botMessages
-  - [ ] Add named table exports for Drizzle queries
-  - [ ] Verify all imports resolve correctly
+- [x] **Implementation**
+  - [x] Add exports for bots, botSettings, botUsers, botMessages
+  - [x] Add named table exports for Drizzle queries
+  - [x] Verify all imports resolve correctly
 
 **File**: `libs/db/src/schema/index.ts`
 
@@ -311,11 +311,11 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Phase 1 Completion Criteria
-- [ ] All 4 new schema files created
-- [ ] All 3 existing schema files modified
-- [ ] TypeScript compilation succeeds (`pnpm build`)
+- [x] All 4 new schema files created
+- [x] All 3 existing schema files modified
+- [x] TypeScript compilation succeeds (`pnpm build`)
 - [ ] No lint errors (`pnpm lint`)
-- [ ] schema/index.ts exports all new tables
+- [x] schema/index.ts exports all new tables
 - [ ] **DO NOT run drizzle-kit yet** - proceed to Phase 2
 
 **Test Resolution Progress**: Phase 1 = Schema foundation only (tests in Phase 3/4)
