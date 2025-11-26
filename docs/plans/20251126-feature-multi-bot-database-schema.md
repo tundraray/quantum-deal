@@ -244,13 +244,13 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 1.5: Modify user-subscriptions.ts - add botId column
-- [ ] **Implementation**
-  - [ ] Add import for bots schema
-  - [ ] Add botId column with nullable FK to bots.id
-  - [ ] Add CASCADE on delete
-  - [ ] Add index idx_user_subscriptions_bot
-  - [ ] Add composite index idx_user_subscriptions_user_bot
-  - [ ] Verify existing UserSubscription type includes new field
+- [x] **Implementation**
+  - [x] Add import for bots schema
+  - [x] Add botId column with nullable FK to bots.id
+  - [x] Add CASCADE on delete
+  - [x] Add index idx_user_subscriptions_bot
+  - [x] Add composite index idx_user_subscriptions_user_bot
+  - [x] Verify existing UserSubscription type includes new field
 
 **File**: `libs/db/src/schema/user-subscriptions.ts`
 
