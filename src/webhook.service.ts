@@ -236,9 +236,7 @@ export class WebhookService implements OnModuleDestroy {
    * null/undefined means "no value", treat both as null
    * 0 is a valid value (especially for SL), so we compare it strictly
    */
-  private normalizeSLTPValue(
-    value: number | null | undefined,
-  ): number | null {
+  private normalizeSLTPValue(value: number | null | undefined): number | null {
     return value == null ? null : value;
   }
 
@@ -283,7 +281,7 @@ export class WebhookService implements OnModuleDestroy {
       const isSLTPUpdateEvent =
         validatedEvent.event === MT5EventType.POSITION_SLTP_UPDATE ||
         validatedEvent.event === MT5EventType.ORDER_SLTP_UPDATE;
-      
+
       if (isSLTPUpdateEvent) {
         const valuesChanged = this.hasSLTPValuesChanged(
           existingOrder.stopLoss,
