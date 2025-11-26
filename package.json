@@ -108,7 +108,8 @@
       "^@quantumdeal/bot(|/.*)$": "<rootDir>/libs/bot/src/$1",
       "^@quantumdeal/db(|/.*)$": "<rootDir>/libs/db/src/$1",
       "^@quantumdeal/framework(|/.*)$": "<rootDir>/libs/framework/src/$1",
-      "^@quantumdeal/masterbot(|/.*)$": "<rootDir>/libs/masterbot/src/$1"
+      "^@quantumdeal/masterbot(|/.*)$": "<rootDir>/libs/masterbot/src/$1",
+      "^@quantumdeal/telegraf(|/.*)$": "<rootDir>/libs/telegraf/src/$1"
     }
   },
   "packageManager": "pnpm@10.0.0"

@@ -6,6 +6,8 @@ Core rules for maximizing AI execution accuracy. All instructions must follow th
 
 Reason: To prevent implementations that differ from user intent and ensure correct direction
 
+**Mandatory: Always use the appropriate agent for executing actions**
+
 ## Mandatory Execution Process
 
 ### Execution Flow (Required Steps)
