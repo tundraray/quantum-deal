@@ -150,26 +150,26 @@ WHERE indexname = 'uq_user_subscriptions_active';
 ```
 
 ## Completion Criteria
-- [ ] All 4 new tables exist
-- [ ] All new columns added to existing tables
-- [ ] All FK constraints properly configured
-- [ ] All indexes created including partial unique index
-- [ ] CASCADE delete configured on all FKs
+- [x] All 4 new tables exist
+- [x] All new columns added to existing tables
+- [x] All FK constraints properly configured
+- [x] All indexes created including partial unique index
+- [x] CASCADE delete configured on all FKs
 
 ## Verification Checklist
 
 | Element | Verified |
 |---------|----------|
-| bots table exists | [ ] |
-| bot_settings table exists | [ ] |
-| bot_users table exists | [ ] |
-| bot_messages table exists | [ ] |
-| user_subscriptions.bot_id exists | [ ] |
-| renewal_tariffs.bot_id exists | [ ] |
-| codes.bot_id exists | [ ] |
-| FK constraints reference bots | [ ] |
-| Indexes created | [ ] |
-| Partial unique index exists | [ ] |
+| bots table exists | [x] |
+| bot_settings table exists | [x] |
+| bot_users table exists | [x] |
+| bot_messages table exists | [x] |
+| user_subscriptions.bot_id exists | [x] |
+| renewal_tariffs.bot_id exists | [x] |
+| codes.bot_id exists | [x] |
+| FK constraints reference bots | [x] |
+| Indexes created | [x] |
+| Partial unique index exists | [x] |
 
 ## Notes
 - Impact scope: Verification only, no changes

@@ -361,63 +361,72 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 2.3: Add manual SQL if needed
-- [ ] **Implementation**
-  - [ ] Add partial unique index for user_subscriptions (FR-012):
+- [x] **Implementation**
+  - [x] Add partial unique index for user_subscriptions (FR-012):
     ```sql
     CREATE UNIQUE INDEX uq_user_subscriptions_active
       ON user_subscriptions(user_id, subscription_id, bot_id)
       WHERE is_active = true;
     ```
-  - [ ] Add any other custom constraints Drizzle could not generate
-  - [ ] Add comments explaining manual additions
+  - [x] Add any other custom constraints Drizzle could not generate
+  - [x] Add comments explaining manual additions
 
 **Note**: Drizzle does not support partial indexes declaratively, so this MUST be added manually.
 
 ---
 
 ### Task 2.4: Run drizzle-kit migrate
-- [ ] **Implementation**
-  - [ ] Ensure database connection is configured
-  - [ ] Run `pnpm drizzle-kit migrate` to apply migration
-  - [ ] Verify migration completes without errors
-  - [ ] Check migration recorded in drizzle migrations table
+- [x] **Implementation**
+  - [x] Ensure database connection is configured
+  - [x] Run `pnpm drizzle-kit migrate` to apply migration
+  - [x] Verify migration completes without errors
+  - [x] Check migration recorded in drizzle migrations table
 
-**Command**: `pnpm drizzle-kit migrate`
+**Command**: `pnpm db:migrate`
+
+**Result**: Migration `20251126190521_young_falcon.sql` applied successfully. Recorded in `_journal.json` at index 20.
 
 ---
 
 ### Task 2.5: Verify database schema in PostgreSQL
-- [ ] **Verification Steps**
-  - [ ] Connect to database with psql or database client
-  - [ ] Verify new tables exist:
+- [x] **Verification Steps**
+  - [x] Connect to database with psql or database client
+  - [x] Verify new tables exist:
     ```sql
     SELECT table_name FROM information_schema.tables
     WHERE table_schema = 'public'
     AND table_name IN ('bots', 'bot_settings', 'bot_users', 'bot_messages');
     ```
-  - [ ] Verify columns added to existing tables:
+  - [x] Verify columns added to existing tables:
     ```sql
     SELECT column_name FROM information_schema.columns
     WHERE table_name = 'user_subscriptions' AND column_name = 'bot_id';
     ```
-  - [ ] Verify FK constraints: `\d+ bot_settings`
-  - [ ] Verify indexes: `\di` in psql
-  - [ ] Verify partial unique index exists:
+  - [x] Verify FK constraints: `\d+ bot_settings`
+  - [x] Verify indexes: `\di` in psql
+  - [x] Verify partial unique index exists:
     ```sql
     SELECT indexname, indexdef FROM pg_indexes
     WHERE indexname = 'uq_user_subscriptions_active';
     ```
 
+**Verification Results** (2025-11-26):
+- All 4 new tables exist: bots, bot_settings, bot_users, bot_messages
+- All 3 modified tables have bot_id column (nullable, bigint)
+- All 6 FK constraints reference bots(id) with CASCADE delete
+- All required indexes created: idx_codes_bot, idx_renewal_tariffs_bot, idx_user_subscriptions_bot, idx_user_subscriptions_user_bot
+- Partial unique index uq_user_subscriptions_active verified with correct WHERE clause
+
 ---
 
 ### Phase 2 Completion Criteria
 - [x] Migration file generated
-- [ ] Manual SQL additions made (partial unique index)
-- [ ] Migration applied to database
-- [ ] All new tables exist in database
-- [ ] All new columns exist in modified tables
-- [ ] All FK constraints properly configured
-- [ ] All indexes created including partial unique index
+- [x] Manual SQL additions made (partial unique index)
+- [x] Migration applied to database
+- [x] All new tables exist in database
+- [x] All new columns exist in modified tables
+- [x] All FK constraints properly configured
+- [x] All indexes created including partial unique index
 
 **Test Resolution Progress**: Phase 2 = Database ready for repository implementation
 
