@@ -469,19 +469,22 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 3.2: Create BotSettingsRepository with integration tests
-- [ ] **Implementation**
-  - [ ] Create `libs/db/src/repositories/bot-settings.repository.ts`
-  - [ ] Extend BaseRepository with proper generics
-  - [ ] Implement findByBotId()
-  - [ ] Implement upsert() for create-or-update
-  - [ ] Implement updateFeatureFlags() for partial JSONB updates
-- [ ] **Integration Test Implementation**
-  - [ ] Implement tests in `libs/db/src/repositories/__tests__/bot-settings.repository.int.spec.ts`
-  - [ ] Test AC-1.1: FK constraint enforcement
-  - [ ] Test AC-1.2: Unique botId constraint (1:1)
-  - [ ] Test AC-3.1: findByBotId() returns correct settings
-  - [ ] Test AC-3.2: upsert() create and update behavior
-  - [ ] Test AC-3.3: updateFeatureFlags() partial merge
+- [x] **Implementation**
+  - [x] Create `libs/db/src/repositories/bot-settings.repository.ts`
+  - [x] Extend BaseRepository with proper generics
+  - [x] Implement findByBotId()
+  - [x] Implement upsert() for create-or-update
+  - [x] Implement updateFeatureFlags() for partial JSONB updates
+- [x] **Integration Test Implementation**
+  - [x] Implement tests in `libs/db/src/repositories/__tests__/bot-settings.repository.int.spec.ts`
+  - [x] Test AC-1.1: FK constraint enforcement
+  - [x] Test AC-1.2: Unique botId constraint (1:1)
+  - [x] Test AC-1.3: CASCADE delete behavior
+  - [x] Test AC-3.1: findByBotId() returns correct settings
+  - [x] Test AC-3.2: upsert() create and update behavior
+  - [x] Test AC-3.3: updateFeatureFlags() partial merge
+  - [x] Test JSONB default settings application
+  - [x] Test JSONB serialization/deserialization
 
 **Files**:
 - `libs/db/src/repositories/bot-settings.repository.ts`
@@ -492,7 +495,7 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 - updateFeatureFlags() merges partial updates
 - All integration tests pass
 
-**Test Case Resolution**: 7/7 tests implemented
+**Test Case Resolution**: 11/11 tests implemented
 
 ---
 
