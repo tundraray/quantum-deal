@@ -4,7 +4,7 @@ import { LISTENERS_METADATA } from '../telegraf.constants';
 import { ListenerMetadata } from '../interfaces';
 
 export function createListenerDecorator<
-  TComposer extends Composer<never>,
+  TComposer extends Composer<any>,
   TMethod extends
     OnlyFunctionPropertyNames<TComposer> = OnlyFunctionPropertyNames<TComposer>,
 >(method: TMethod) {
