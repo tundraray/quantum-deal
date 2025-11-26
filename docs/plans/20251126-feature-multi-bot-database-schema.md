@@ -178,11 +178,11 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 **Verification Level**: L3 (Build success, TypeScript compilation)
 
 ### Task 1.1: Create bots.ts schema
-- [ ] **Implementation**
-  - [ ] Create `libs/db/src/schema/bots.ts`
-  - [ ] Define bots pgTable with all columns per Design Doc Section 1.1
-  - [ ] Export Bot and NewBot types using $inferSelect/$inferInsert
-  - [ ] Verify TypeScript compiles without errors
+- [x] **Implementation**
+  - [x] Create `libs/db/src/schema/bots.ts`
+  - [x] Define bots pgTable with all columns per Design Doc Section 1.1
+  - [x] Export Bot and NewBot types using $inferSelect/$inferInsert
+  - [x] Verify TypeScript compiles without errors
 
 **File**: `libs/db/src/schema/bots.ts`
 
