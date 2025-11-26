@@ -17,3 +17,4 @@ export * from './payment-transactions.repository';
 // Multi-bot repositories
 export * from './bots.repository';
 export * from './bot-settings.repository';
+export * from './bot-users.repository';

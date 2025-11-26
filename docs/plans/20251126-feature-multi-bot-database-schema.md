@@ -500,23 +500,23 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 3.3: Create BotUsersRepository with integration tests
-- [ ] **Implementation**
-  - [ ] Create `libs/db/src/repositories/bot-users.repository.ts`
-  - [ ] Extend BaseRepository with proper generics
-  - [ ] Implement findByUserAndBot()
-  - [ ] Implement findOrCreate() for user onboarding
-  - [ ] Implement findActiveUsersWithDetailsByBotId() with JOIN
-  - [ ] Implement resolveLanguage() with hierarchy fallback
-  - [ ] Implement updateLanguage(), updatePreferences(), updateState()
-  - [ ] Implement activate(), deactivate()
-- [ ] **Integration Test Implementation**
-  - [ ] Implement tests in `libs/db/src/repositories/__tests__/bot-users.repository.int.spec.ts`
-  - [ ] Test AC-1.1: Unique constraint on (userId, botId)
-  - [ ] Test AC-1.2: CASCADE delete behavior
-  - [ ] Test AC-3.1: findByUserAndBot() returns correct record
-  - [ ] Test AC-3.2: findOrCreate() behavior
-  - [ ] Test AC-3.3: findActiveUsersWithDetailsByBotId() JOIN
-  - [ ] Test AC-3.4: resolveLanguage() hierarchy
+- [x] **Implementation**
+  - [x] Create `libs/db/src/repositories/bot-users.repository.ts`
+  - [x] Extend BaseRepository with proper generics
+  - [x] Implement findByUserAndBot()
+  - [x] Implement findOrCreate() for user onboarding
+  - [x] Implement findActiveUsersWithDetailsByBotId() with JOIN
+  - [x] Implement resolveLanguage() with hierarchy fallback
+  - [x] Implement updateLanguage(), updatePreferences(), updateState()
+  - [x] Implement activate(), deactivate()
+- [x] **Integration Test Implementation**
+  - [x] Implement tests in `libs/db/src/repositories/__tests__/bot-users.repository.int.spec.ts`
+  - [x] Test AC-1.1: Unique constraint on (userId, botId)
+  - [x] Test AC-1.2: CASCADE delete behavior
+  - [x] Test AC-3.1: findByUserAndBot() returns correct record
+  - [x] Test AC-3.2: findOrCreate() behavior
+  - [x] Test AC-3.3: findActiveUsersWithDetailsByBotId() JOIN
+  - [x] Test AC-3.4: resolveLanguage() hierarchy
 
 **Files**:
 - `libs/db/src/repositories/bot-users.repository.ts`
@@ -527,7 +527,7 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 - resolveLanguage() returns correct hierarchy result
 - All integration tests pass
 
-**Test Case Resolution**: 9/9 tests implemented
+**Test Case Resolution**: 22/22 tests implemented (including update methods and lifecycle tests)
 
 ---
 
