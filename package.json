@@ -95,6 +95,9 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(.pnpm|nanoid)/)"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],

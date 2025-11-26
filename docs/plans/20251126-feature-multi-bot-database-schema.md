@@ -439,20 +439,20 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 **Prerequisite**: Phase 2 complete (migration applied)
 
 ### Task 3.1: Create BotsRepository with integration tests
-- [ ] **Implementation**
-  - [ ] Create `libs/db/src/repositories/bots.repository.ts`
-  - [ ] Extend BaseRepository with proper generics
-  - [ ] Implement findActiveDynamic() with settings JOIN
-  - [ ] Implement findByIdWithSettings() with LEFT JOIN
-  - [ ] Implement findByName(), findByUsername(), findByWebhookPath()
-  - [ ] Implement activate(), deactivate() methods
-- [ ] **Integration Test Implementation**
-  - [ ] Implement tests in `libs/db/src/repositories/__tests__/bots.repository.int.spec.ts`
-  - [ ] Test AC-1.1: Create bot with all required fields
-  - [ ] Test AC-1.2: Unique constraint violation on duplicate name
-  - [ ] Test AC-3.1: findActiveDynamic() returns correct results
-  - [ ] Test AC-3.2: findByIdWithSettings() JOIN operation
-  - [ ] Test AC-3.4: deactivate() soft delete behavior
+- [x] **Implementation**
+  - [x] Create `libs/db/src/repositories/bots.repository.ts`
+  - [x] Extend BaseRepository with proper generics
+  - [x] Implement findActiveDynamic() with settings JOIN
+  - [x] Implement findByIdWithSettings() with LEFT JOIN
+  - [x] Implement findByName(), findByUsername(), findByWebhookPath()
+  - [x] Implement activate(), deactivate() methods
+- [x] **Integration Test Implementation**
+  - [x] Implement tests in `libs/db/src/repositories/__tests__/bots.repository.int.spec.ts`
+  - [x] Test AC-1.1: Create bot with all required fields
+  - [x] Test AC-1.2: Unique constraint violation on duplicate name
+  - [x] Test AC-3.1: findActiveDynamic() returns correct results
+  - [x] Test AC-3.2: findByIdWithSettings() JOIN operation
+  - [x] Test AC-3.4: deactivate() soft delete behavior
 
 **Files**:
 - `libs/db/src/repositories/bots.repository.ts`
