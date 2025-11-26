@@ -1,5 +1,5 @@
 import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
-import { Command, Update, Ctx, Action } from 'nestjs-telegraf';
+import { Command, Update, Ctx, Action } from '@quantumdeal/telegraf';
 import { deunionize } from 'telegraf';
 import {
   ResponseTimeInterceptor,

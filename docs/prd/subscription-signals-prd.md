@@ -345,7 +345,7 @@ Tariffs are stored in `renewal_tariffs` table with:
 
 - **Core Infrastructure**: `subscription-core-prd.md` (subscriptions, user_subscriptions, features)
 - **Database**: PostgreSQL with Drizzle ORM
-- **Bot Framework**: NestJS-Telegraf
+- **Bot Framework**: @quantumdeal/telegraf
 - **Rate Limiting**: Bottleneck library
 - **LLM Service**: GPT-5-mini for notification generation
 - **Monitoring**: Sentry for error tracking

@@ -1,5 +1,5 @@
 import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
-import { Start, Update, Ctx, Message, InjectBot } from 'nestjs-telegraf';
+import { Start, Update, Ctx, Message, InjectBot } from '@quantumdeal/telegraf';
 import { Telegraf } from 'telegraf';
 import { ConfigService } from '@nestjs/config';
 import {

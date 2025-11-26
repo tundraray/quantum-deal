@@ -1132,7 +1132,7 @@ The nest-telegraf library uses `TelegrafModule.forRootAsync()` with unique `botN
 ```typescript
 // src/app.module.ts - Multi-bot registration
 import { Module } from '@nestjs/common'
-import { TelegrafModule } from 'nestjs-telegraf'
+import { TelegrafModule } from '@quantumdeal/telegraf'
 import { ConfigModule, ConfigService } from '@nestjs/config'
 import { session } from 'telegraf'
 import { BotModule, BotName, UserManagementMiddleware } from '@quantumdeal/bot'
@@ -1220,7 +1220,7 @@ export class AppModule {}
 ```typescript
 // libs/bot/src/commands/start/start.update.ts
 import { Logger, UseFilters, UseInterceptors } from '@nestjs/common'
-import { Start, Update, Ctx, Message, InjectBot } from 'nestjs-telegraf'
+import { Start, Update, Ctx, Message, InjectBot } from '@quantumdeal/telegraf'
 import { Telegraf, Context } from 'telegraf'
 import { ConfigService } from '@nestjs/config'
 import type { UserContext } from '../../interfaces'
@@ -1265,7 +1265,7 @@ export class StartUpdate {
 ```typescript
 // Inject specific bot instance in any service
 import { Injectable } from '@nestjs/common'
-import { InjectBot } from 'nestjs-telegraf'
+import { InjectBot } from '@quantumdeal/telegraf'
 import { Telegraf, Context } from 'telegraf'
 
 @Injectable()
@@ -1604,9 +1604,9 @@ flowchart LR
 
 - [Telegraf.js Documentation](https://telegraf.js.org/)
 - [Telegraf.js GitHub Repository](https://github.com/telegraf/telegraf)
-- [nest-telegraf npm package](https://www.npmjs.com/package/nestjs-telegraf)
-- [nest-telegraf Multiple Bots Documentation](https://nestjs-telegraf.0x467.com/extras/multiple-bots)
-- [nest-telegraf GitHub Repository](https://github.com/bukhalo/nestjs-telegraf)
+- [nest-telegraf npm package](https://www.npmjs.com/package/@quantumdeal/telegraf)
+- [nest-telegraf Multiple Bots Documentation](https://@quantumdeal/telegraf.0x467.com/extras/multiple-bots)
+- [nest-telegraf GitHub Repository](https://github.com/bukhalo/@quantumdeal/telegraf)
 - [NestJS Lifecycle Events](https://docs.nestjs.com/fundamentals/lifecycle-events)
 - [NestJS Dynamic Modules](https://docs.nestjs.com/fundamentals/dynamic-modules)
 - [Telegram Bot API - setWebhook](https://core.telegram.org/bots/api#setwebhook)

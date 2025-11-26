@@ -1,6 +1,6 @@
 # User Management Middleware
 
-This middleware provides automatic user management for the Telegram bot using the NestJS-Telegraf integration.
+This middleware provides automatic user management for the Telegram bot using the @quantumdeal/telegraf integration.
 
 ## Features
 
@@ -17,7 +17,7 @@ This middleware provides automatic user management for the Telegram bot using th
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { Ctx, Start, Update } from 'nestjs-telegraf';
+import { Ctx, Start, Update } from '@quantumdeal/telegraf';
 import { UserContext, UserManagementMiddleware } from '@quantumdeal/bot';
 
 @Update()
@@ -130,7 +130,7 @@ export class BotModule {}
 The middleware depends on:
 
 - `@quantumdeal/db` - For the UsersRepository
-- `nestjs-telegraf` - For Telegraf integration
+- `@quantumdeal/telegraf` - For Telegraf integration
 - NestJS dependency injection system
 
 ## Best Practices

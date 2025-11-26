@@ -1303,7 +1303,7 @@ This phase implements the complete UI flow documented in `telegram-ui-flow.md`.
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { Scene, SceneEnter, Action, Ctx } from 'nestjs-telegraf';
+import { Scene, SceneEnter, Action, Ctx } from '@quantumdeal/telegraf';
 import { Markup } from 'telegraf';
 import { UserContext } from '../interfaces/user-context.interface';
 import { UserSettingsService } from '../services/user-settings.service';
@@ -1782,7 +1782,7 @@ export class BotModule {}
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { Command, Ctx } from 'nestjs-telegraf';
+import { Command, Ctx } from '@quantumdeal/telegraf';
 import { UserContext } from '../interfaces/user-context.interface';
 import { hasFeature } from '../interfaces/user.dto';
 import { FeatureFlag } from '@quantumdeal/db/schema';

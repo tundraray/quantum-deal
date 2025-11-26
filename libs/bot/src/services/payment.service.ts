@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { Telegraf, Context as TelegrafContext } from 'telegraf';
-import { InjectBot } from 'nestjs-telegraf';
+import { InjectBot } from '@quantumdeal/telegraf';
 import {
   PaymentTransactionsRepository,
   RenewalTariffsRepository,

@@ -21,7 +21,7 @@ Agreements with user before design:
 - [x] **Non-scope**: Static bots (QuantumDealBot, MasterBot) remain unchanged using existing `TelegrafModule.forRootAsync()`
 - [x] **Constraints**: Must coexist with existing nest-telegraf static bots in same app
 - [x] **Framework**: Use Telegraf.js (NOT Grammy) per ADR-005 decision
-- [x] **Tech Stack**: NestJS, Telegraf.js, nestjs-telegraf, Drizzle ORM, PostgreSQL
+- [x] **Tech Stack**: NestJS, Telegraf.js, @quantumdeal/telegraf, Drizzle ORM, PostgreSQL
 - [x] **Restart Requirement**: New bots require app restart after DB INSERT (no hot-reload for MVP)
 - [x] **Handler Sharing**: Dynamic bots reuse business logic from existing handlers via composition
 - [x] **Schema Design**: Use separate `bot_settings` table (NOT embedded JSONB in bots table)
@@ -2041,8 +2041,8 @@ interface BotHealthStatus {
 
 ## References
 
-- [Multiple bots | NestJS Telegraf](https://nestjs-telegraf.0x467.com/extras/multiple-bots) - nest-telegraf multi-bot patterns
-- [nestjs-telegraf npm package](https://www.npmjs.com/package/nestjs-telegraf) - Package documentation
+- [Multiple bots | NestJS Telegraf](https://@quantumdeal/telegraf.0x467.com/extras/multiple-bots) - nest-telegraf multi-bot patterns
+- [@quantumdeal/telegraf npm package](https://www.npmjs.com/package/@quantumdeal/telegraf) - Package documentation
 - [Telegraf.js Documentation](https://telegraf.js.org/) - Telegraf API reference
 - [GitHub - telegraf/telegraf](https://github.com/telegraf/telegraf) - Telegraf source, handleUpdate usage
 - [NestJS Lifecycle Events](https://docs.nestjs.com/fundamentals/lifecycle-events) - OnModuleInit, OnApplicationShutdown

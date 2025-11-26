@@ -39,7 +39,7 @@ TelegrafModule.forRootAsync({
 | Component | Package | Version |
 |-----------|---------|---------|
 | Bot Framework | telegraf | ^4.16.3 |
-| NestJS Wrapper | nestjs-telegraf | ^2.9.1 |
+| NestJS Wrapper | @quantumdeal/telegraf | ^2.9.1 |
 | Runtime | NestJS | ^11.0.1 |
 
 ### Technical Requirements
@@ -272,8 +272,8 @@ async function botIdentifierMiddleware(
 
 ### External References
 
-- [nestjs-telegraf npm package](https://www.npmjs.com/package/nestjs-telegraf)
-- [nestjs-telegraf Multiple Bots Documentation](https://nestjs-telegraf.0x467.com/extras/multiple-bots)
+- [@quantumdeal/telegraf npm package](https://www.npmjs.com/package/@quantumdeal/telegraf)
+- [@quantumdeal/telegraf Multiple Bots Documentation](https://@quantumdeal/telegraf.0x467.com/extras/multiple-bots)
 - [Telegraf.js GitHub Repository](https://github.com/telegraf/telegraf)
 - [Telegraf.js Releases](https://github.com/telegraf/telegraf/releases)
 - [Grammy vs Telegraf Comparison](https://grammy.dev/resources/comparison)

@@ -4,7 +4,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
-import { InjectBot } from 'nestjs-telegraf';
+import { InjectBot } from '@quantumdeal/telegraf';
 import { Telegraf } from 'telegraf';
 import Bottleneck from 'bottleneck';
 import { v4 as uuidv4 } from 'uuid';

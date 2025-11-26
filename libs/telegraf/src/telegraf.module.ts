@@ -1,8 +1,27 @@
-import { Module } from '@nestjs/common';
-import { TelegrafService } from './telegraf.service';
+import { Module, DynamicModule } from '@nestjs/common';
+import { TelegrafCoreModule } from './telegraf-core.module';
+import {
+  TelegrafModuleOptions,
+  TelegrafModuleAsyncOptions,
+} from './interfaces';
 
-@Module({
-  providers: [TelegrafService],
-  exports: [TelegrafService],
-})
-export class TelegrafModule {}
+@Module({})
+export class TelegrafModule {
+  public static forRoot(options: TelegrafModuleOptions): DynamicModule {
+    return {
+      module: TelegrafModule,
+      imports: [TelegrafCoreModule.forRoot(options)],
+      exports: [TelegrafCoreModule],
+    };
+  }
+
+  public static forRootAsync(
+    options: TelegrafModuleAsyncOptions,
+  ): DynamicModule {
+    return {
+      module: TelegrafModule,
+      imports: [TelegrafCoreModule.forRootAsync(options)],
+      exports: [TelegrafCoreModule],
+    };
+  }
+}

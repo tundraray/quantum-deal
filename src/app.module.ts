@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { WebhookController } from './webhook.controller';
-import { TelegrafModule } from 'nestjs-telegraf';
+import { TelegrafModule } from '@quantumdeal/telegraf';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BotModule, BotName, UserManagementMiddleware } from '@quantumdeal/bot';

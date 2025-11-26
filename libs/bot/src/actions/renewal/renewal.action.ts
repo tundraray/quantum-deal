@@ -1,5 +1,5 @@
 import { Injectable, Logger, UseFilters } from '@nestjs/common';
-import { Action, Ctx, InjectBot, Update } from 'nestjs-telegraf';
+import { Action, Ctx, InjectBot, Update } from '@quantumdeal/telegraf';
 import { Telegraf } from 'telegraf';
 import type { UserContext } from '../../interfaces';
 import {
