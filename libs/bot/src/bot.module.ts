@@ -28,6 +28,7 @@ import { InstrumentFilterService } from './services/instrument-filter.service';
 import { FilterSessionService } from './services/filter-session.service';
 import { PaymentService } from './services/payment.service';
 import { BotCommandsService } from './services/bot-commands.service';
+import { BotInitService } from './services/bot-init.service';
 import { TrialService } from './services/trial.service';
 import { StatisticsRefreshService } from './services/statistics-refresh.service';
 import { OnboardingService } from './services/onboarding.service';
@@ -79,8 +80,9 @@ import { RenewalAction } from './actions/renewal/renewal.action';
     // Payment services
     PaymentService,
 
-    // Bot commands
+    // Bot commands & init
     BotCommandsService,
+    BotInitService,
 
     // Trial services
     TrialService,
@@ -130,8 +132,9 @@ import { RenewalAction } from './actions/renewal/renewal.action';
     // Payment services
     PaymentService,
 
-    // Bot commands
+    // Bot commands & init
     BotCommandsService,
+    BotInitService,
 
     // Trial services
     TrialService,
