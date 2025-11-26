@@ -264,12 +264,12 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 1.6: Modify renewal-tariffs.ts - add botId column
-- [ ] **Implementation**
-  - [ ] Add import for bots schema
-  - [ ] Add botId column with nullable FK to bots.id
-  - [ ] Update unique constraint to include botId: (subscriptionId, periodDays, botId)
-  - [ ] Add index idx_renewal_tariffs_bot
-  - [ ] Verify existing RenewalTariff type includes new field
+- [x] **Implementation**
+  - [x] Add import for bots schema
+  - [x] Add botId column with nullable FK to bots.id
+  - [x] Update unique constraint to include botId: (subscriptionId, periodDays, botId)
+  - [x] Add index idx_renewal_tariffs_bot
+  - [x] Verify existing RenewalTariff type includes new field
 
 **File**: `libs/db/src/schema/renewal-tariffs.ts`
 

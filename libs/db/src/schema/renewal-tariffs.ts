@@ -6,8 +6,10 @@ import {
   boolean,
   timestamp,
   unique,
+  index,
 } from 'drizzle-orm/pg-core';
 import { subscriptions } from './subscriptions';
+import { bots } from './bots';
 
 /**
  * Renewal Tariffs Table
@@ -30,6 +32,15 @@ export const renewalTariffs = pgTable(
     subscriptionId: bigint('subscription_id', { mode: 'number' })
       .notNull()
       .references(() => subscriptions.id, { onDelete: 'cascade' }),
+
+    /**
+     * Bot ID reference (nullable for global tariffs)
+     * NULL means global tariff (applies to all bots without specific tariff)
+     * Set value means bot-specific tariff (higher priority than global)
+     */
+    botId: bigint('bot_id', { mode: 'number' }).references(() => bots.id, {
+      onDelete: 'cascade',
+    }),
 
     /**
      * Renewal period in days (flexible - any positive integer)
@@ -78,13 +89,19 @@ export const renewalTariffs = pgTable(
   },
   (table) => [
     /**
-     * Unique constraint: one tariff per (subscription, period) combination
-     * Prevents duplicate tariffs for the same subscription and period
+     * Unique constraint: one tariff per (subscription, period, bot) combination
+     * Prevents duplicate tariffs for the same subscription, period, and bot
+     * NULL botId represents global tariffs (apply to all bots)
      */
-    unique('uq_renewal_tariff_subscription_period').on(
+    unique('uq_renewal_tariff_subscription_period_bot').on(
       table.subscriptionId,
       table.periodDays,
+      table.botId,
     ),
+    /**
+     * Index for efficient bot-specific tariff lookup
+     */
+    index('idx_renewal_tariffs_bot').on(table.botId),
   ],
 );
 
