@@ -212,12 +212,12 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 1.3: Create bot-users.ts schema
-- [ ] **Implementation**
-  - [ ] Create `libs/db/src/schema/bot-users.ts`
-  - [ ] Define BotUserPreferences and BotUserState interfaces
-  - [ ] Define botUsers pgTable with FKs to users and bots
-  - [ ] Add composite unique constraint on (userId, botId)
-  - [ ] Export types: BotUser, NewBotUser
+- [x] **Implementation**
+  - [x] Create `libs/db/src/schema/bot-users.ts`
+  - [x] Define BotUserPreferences and BotUserState interfaces
+  - [x] Define botUsers pgTable with FKs to users and bots
+  - [x] Add composite unique constraint on (userId, botId)
+  - [x] Export types: BotUser, NewBotUser
 
 **File**: `libs/db/src/schema/bot-users.ts`
 
