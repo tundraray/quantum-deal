@@ -23,7 +23,10 @@ export class BaseExplorerService {
 
   flatMap<T>(
     modules: Module[],
-    callback: (instance: InstanceWrapper, moduleRef: Module) => T | T[],
+    callback: (
+      instance: InstanceWrapper,
+      moduleRef: Module,
+    ) => T | T[] | undefined,
   ): T[] {
     const visitedModules = new Set<Module>();
 
@@ -38,10 +41,13 @@ export class BaseExplorerService {
       const providers = [...moduleRef.providers.values()];
       const defined = providers.map((wrapper) => callback(wrapper, moduleRef));
 
-      const imported: (T | T[])[] = moduleRef.imports?.size
-        ? [...moduleRef.imports.values()].reduce((prev, cur) => {
-            return [...prev, ...unwrap(cur)];
-          }, [])
+      const imported: (T | T[] | undefined)[] = moduleRef.imports?.size
+        ? [...moduleRef.imports.values()].reduce<(T | T[] | undefined)[]>(
+            (prev, cur) => {
+              return [...prev, ...unwrap(cur)];
+            },
+            [],
+          )
         : [];
 
       return [...defined, ...imported];
