@@ -281,12 +281,12 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 1.7: Modify codes.ts - add botId column
-- [ ] **Implementation**
-  - [ ] Add import for bots schema
-  - [ ] Add botId column with nullable FK to bots.id
-  - [ ] Add CASCADE on delete
-  - [ ] Add index idx_codes_bot
-  - [ ] Verify existing Code type includes new field
+- [x] **Implementation**
+  - [x] Add import for bots schema
+  - [x] Add botId column with nullable FK to bots.id
+  - [x] Add CASCADE on delete
+  - [x] Add index idx_codes_bot
+  - [x] Verify existing Code type includes new field
 
 **File**: `libs/db/src/schema/codes.ts`
 
