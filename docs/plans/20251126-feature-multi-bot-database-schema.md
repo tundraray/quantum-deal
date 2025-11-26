@@ -194,12 +194,12 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 1.2: Create bot-settings.ts schema
-- [ ] **Implementation**
-  - [ ] Create `libs/db/src/schema/bot-settings.ts`
-  - [ ] Define BotSettings and PaymentSettings interfaces
-  - [ ] Define DEFAULT_BOT_SETTINGS constant
-  - [ ] Define botSettings pgTable with FK to bots
-  - [ ] Export types: BotSettingsRecord, NewBotSettingsRecord
+- [x] **Implementation**
+  - [x] Create `libs/db/src/schema/bot-settings.ts`
+  - [x] Define BotSettings and PaymentSettings interfaces
+  - [x] Define DEFAULT_BOT_SETTINGS constant
+  - [x] Define botSettings pgTable with FK to bots
+  - [x] Export types: BotSettingsRecord, NewBotSettingsRecord
 
 **File**: `libs/db/src/schema/bot-settings.ts`
 

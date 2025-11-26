@@ -1,6 +1,7 @@
 // Export all schema tables and types
 export * from './enums';
 export * from './bots';
+export * from './bot-settings';
 export * from './users';
 export * from './managers';
 export * from './orders';
@@ -18,6 +19,7 @@ export * from './statistics';
 
 // Export all tables for use with drizzle queries
 export { bots } from './bots';
+export { botSettings } from './bot-settings';
 export { users } from './users';
 export { managers } from './managers';
 export { orders } from './orders';

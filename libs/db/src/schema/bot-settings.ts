@@ -1,0 +1,94 @@
+import { pgTable, bigint, jsonb, timestamp } from 'drizzle-orm/pg-core';
+import { bots } from './bots';
+
+/**
+ * Bot Settings Interface
+ *
+ * Defines the JSONB structure for per-bot feature configuration.
+ * Enables flexible feature flags without schema migrations.
+ */
+export interface BotSettings {
+  features: {
+    trialEnabled: boolean;
+    paymentsEnabled: boolean;
+    signalsEnabled: boolean;
+    broadcastEnabled: boolean;
+  };
+  defaults: {
+    subscriptionDays: number;
+    trialDays: number;
+    language: string;
+  };
+  ui?: {
+    welcomeImage?: string;
+    brandColor?: string;
+  };
+}
+
+/**
+ * Payment Settings Interface
+ *
+ * Defines the JSONB structure for per-bot payment configuration.
+ */
+export interface PaymentSettings {
+  starsEnabled: boolean;
+  minAmount: number;
+  maxAmount: number;
+  refundWindowHours: number;
+}
+
+/**
+ * Default Bot Settings
+ *
+ * Applied when creating new bot_settings records.
+ */
+export const DEFAULT_BOT_SETTINGS: BotSettings = {
+  features: {
+    trialEnabled: true,
+    paymentsEnabled: true,
+    signalsEnabled: true,
+    broadcastEnabled: false,
+  },
+  defaults: {
+    subscriptionDays: 30,
+    trialDays: 7,
+    language: 'en',
+  },
+};
+
+/**
+ * Bot Settings Table
+ *
+ * Stores JSONB settings for each bot with 1:1 relationship.
+ * Enables per-bot configuration without schema changes.
+ *
+ * Business Rules:
+ * - One settings record per bot (UNIQUE constraint on botId)
+ * - Cascades on bot deletion
+ * - settings column has default values for new bots
+ * - paymentSettings is optional (nullable)
+ */
+export const botSettings = pgTable('bot_settings', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  botId: bigint('bot_id', { mode: 'number' })
+    .notNull()
+    .unique()
+    .references(() => bots.id, { onDelete: 'cascade' }),
+  settings: jsonb('settings')
+    .$type<BotSettings>()
+    .notNull()
+    .default(DEFAULT_BOT_SETTINGS),
+  paymentSettings: jsonb('payment_settings').$type<PaymentSettings>(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+/**
+ * TypeScript Types
+ */
+export type BotSettingsRecord = typeof botSettings.$inferSelect;
+export type NewBotSettingsRecord = typeof botSettings.$inferInsert;
