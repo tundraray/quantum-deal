@@ -592,12 +592,14 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 **Verification Level**: L1 (Functional operation) + L2 (All tests pass)
 
 ### Task 4.1: Create default bot seed data
-- [ ] **Implementation**
-  - [ ] Create seed script or migration for default bot
-  - [ ] Insert default bot with name 'QuantumDealBot'
-  - [ ] Create default bot_settings with DEFAULT_BOT_SETTINGS
-  - [ ] Create bot_users entries for existing users
-  - [ ] Update existing records with default botId
+- [x] **Implementation**
+  - [x] Create seed script or migration for default bot
+  - [x] Insert default bot with name 'QuantumDealBot'
+  - [x] Create default bot_settings with DEFAULT_BOT_SETTINGS
+  - [x] Create bot_users entries for existing users
+  - [x] Update existing records with default botId
+
+**File**: `libs/db/migrations/20251126200000_seed_default_bot.sql`
 
 **Acceptance Criteria** (from Design Doc AC-4):
 - Default bot created with correct settings
