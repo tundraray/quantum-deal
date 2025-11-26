@@ -13,7 +13,7 @@ export async function createBotFactory(
   );
 
   if (options.launchOptions !== false) {
-    bot.launch(options.launchOptions);
+    bot.launch(options.launchOptions ?? {});
   }
 
   return bot;

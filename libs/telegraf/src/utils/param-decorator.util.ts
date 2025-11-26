@@ -9,6 +9,7 @@ export const createTelegrafParamDecorator =
   (paramtype: TelegrafParamtype) =>
   (data?: ParamData): ParameterDecorator =>
   (target, key, index) => {
+    if (key === undefined) return;
     const args =
       Reflect.getMetadata(PARAM_ARGS_METADATA, target.constructor, key) || {};
     Reflect.defineMetadata(
@@ -26,6 +27,7 @@ export const createTelegrafPipesParamDecorator =
     ...pipes: (Type<PipeTransform> | PipeTransform)[]
   ): ParameterDecorator =>
   (target, key, index) => {
+    if (key === undefined) return;
     addPipesMetadata(paramtype, data, pipes, target, key, index);
   };
 
@@ -40,7 +42,7 @@ export const addPipesMetadata = (
   const args =
     Reflect.getMetadata(PARAM_ARGS_METADATA, target.constructor, key) || {};
   const hasParamData = isNil(data) || isString(data);
-  const paramData = hasParamData ? data : undefined;
+  const paramData = hasParamData ? (data ?? undefined) : undefined;
   const paramPipes = hasParamData ? pipes : [data, ...pipes];
 
   Reflect.defineMetadata(
