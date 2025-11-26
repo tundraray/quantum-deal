@@ -608,25 +608,25 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 4.2: Run all integration tests
-- [ ] **Implementation**
-  - [ ] Implement tests in `libs/db/src/repositories/__tests__/multi-bot-schema-modifications.int.spec.ts`
-  - [ ] Test AC-2.1: user_subscriptions with botId FK
-  - [ ] Test AC-2.2: Nullable botId for backward compatibility
-  - [ ] Test AC-2.3: Bot-scoped subscription queries
-  - [ ] Test AC-2.4: Bot-specific and global tariffs
-  - [ ] Test AC-2.5: Updated unique constraint
-  - [ ] Test AC-2.6: Tariff resolution priority
-  - [ ] Test AC-2.7: Codes with botId FK
-  - [ ] Test AC-2.8: Bot-scoped code activation
-  - [ ] Test AC-5.1: Backward compatibility for UserSubscriptionsRepository
-  - [ ] Test AC-5.2: Existing code activation flow
-  - [ ] Test AC-5.3: Unfiltered subscription queries
-  - [ ] Test AC-4.1: CASCADE delete behavior
-  - [ ] Test AC-4.2: Index usage verification
+- [x] **Implementation**
+  - [x] Implement tests in `libs/db/src/repositories/__tests__/multi-bot-schema-modifications.int.spec.ts`
+  - [x] Test AC-2.1: user_subscriptions with botId FK
+  - [x] Test AC-2.2: Nullable botId for backward compatibility
+  - [x] Test AC-2.3: Bot-scoped subscription queries
+  - [x] Test AC-2.4: Bot-specific and global tariffs
+  - [x] Test AC-2.5: Updated unique constraint
+  - [x] Test AC-2.6: Tariff resolution priority
+  - [x] Test AC-2.7: Codes with botId FK
+  - [x] Test AC-2.8: Bot-scoped code activation
+  - [x] Test AC-5.1: Backward compatibility for UserSubscriptionsRepository
+  - [x] Test AC-5.2: Existing code activation flow
+  - [x] Test AC-5.3: Unfiltered subscription queries
+  - [x] Test AC-4.1: CASCADE delete behavior
+  - [x] Test AC-4.2: Index usage verification
 
 **File**: `libs/db/src/repositories/__tests__/multi-bot-schema-modifications.int.spec.ts`
 
-**Test Case Resolution**: 13/13 tests implemented
+**Test Case Resolution**: 13/13 tests implemented and passing
 
 ---
 
