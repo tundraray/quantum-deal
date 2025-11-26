@@ -532,24 +532,24 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Task 3.4: Create BotMessagesRepository with integration tests
-- [ ] **Implementation**
-  - [ ] Create `libs/db/src/repositories/bot-messages.repository.ts`
-  - [ ] Extend BaseRepository with proper generics
-  - [ ] Implement findByBotTypeAndLang()
-  - [ ] Implement findAllByBotId(), findAllByType()
-  - [ ] Implement resolveMessage() with full hierarchy (bot override -> global -> English -> hardcoded)
-  - [ ] Implement upsert() for create-or-update
-  - [ ] Implement deleteOverride()
-  - [ ] Implement getHardcodedFallback() private method
-- [ ] **Integration Test Implementation**
-  - [ ] Implement tests in `libs/db/src/repositories/__tests__/bot-messages.repository.int.spec.ts`
-  - [ ] Test AC-1.1: Unique constraint on (botId, type, lang)
-  - [ ] Test AC-1.2: CASCADE delete behavior
-  - [ ] Test AC-3.1: resolveMessage() returns bot override
-  - [ ] Test AC-3.2: resolveMessage() falls back to global
-  - [ ] Test AC-3.3: resolveMessage() English fallback
-  - [ ] Test AC-3.4: resolveMessage() hardcoded fallback
-  - [ ] Test AC-3.5: upsert() behavior
+- [x] **Implementation**
+  - [x] Create `libs/db/src/repositories/bot-messages.repository.ts`
+  - [x] Extend BaseRepository with proper generics
+  - [x] Implement findByBotTypeAndLang()
+  - [x] Implement findAllByBotId(), findAllByType()
+  - [x] Implement resolveMessage() with full hierarchy (bot override -> global -> English -> hardcoded)
+  - [x] Implement upsert() for create-or-update
+  - [x] Implement deleteOverride()
+  - [x] Implement getHardcodedFallback() public method
+- [x] **Integration Test Implementation**
+  - [x] Implement tests in `libs/db/src/repositories/__tests__/bot-messages.repository.int.spec.ts`
+  - [x] Test AC-1.1: Unique constraint on (botId, type, lang)
+  - [x] Test AC-1.2: CASCADE delete behavior
+  - [x] Test AC-3.1: resolveMessage() returns bot override
+  - [x] Test AC-3.2: resolveMessage() falls back to global
+  - [x] Test AC-3.3: resolveMessage() English fallback
+  - [x] Test AC-3.4: resolveMessage() hardcoded fallback
+  - [x] Test AC-3.5: upsert() behavior
 
 **Files**:
 - `libs/db/src/repositories/bot-messages.repository.ts`
@@ -559,14 +559,14 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 - BotMessagesRepository.resolveMessage() follows hierarchy correctly
 - All integration tests pass
 
-**Test Case Resolution**: 9/9 tests implemented
+**Test Case Resolution**: 14/14 tests implemented
 
 ---
 
 ### Task 3.5: Update repositories/index.ts exports
-- [ ] **Implementation**
-  - [ ] Add exports for all new repositories
-  - [ ] Verify all imports resolve correctly
+- [x] **Implementation**
+  - [x] Add exports for all new repositories
+  - [x] Verify all imports resolve correctly
 
 **File**: `libs/db/src/repositories/index.ts`
 
@@ -576,13 +576,13 @@ CREATE UNIQUE INDEX uq_user_subscriptions_active
 ---
 
 ### Phase 3 Completion Criteria
-- [ ] All 4 new repository files created
-- [ ] All 4 integration test files implemented
-- [ ] TypeScript compilation succeeds
-- [ ] All unit tests pass (`pnpm test`)
-- [ ] repositories/index.ts exports all new repositories
+- [x] All 4 new repository files created
+- [x] All 4 integration test files implemented
+- [x] TypeScript compilation succeeds
+- [x] All unit tests pass (`pnpm test`)
+- [x] repositories/index.ts exports all new repositories
 
-**Test Resolution Progress**: 34/34 tests implemented (9+7+9+9)
+**Test Resolution Progress**: 56/56 tests implemented (9+11+22+14)
 
 ---
 

@@ -18,3 +18,4 @@ export * from './payment-transactions.repository';
 export * from './bots.repository';
 export * from './bot-settings.repository';
 export * from './bot-users.repository';
+export * from './bot-messages.repository';
