@@ -2,8 +2,6 @@
 // Design Doc: docs/design/multi-bot-database-schema.md
 // Generated: 2025-11-26 | Budget Used: 3/3 integration tests
 
-import { describe, it } from '@jest/globals'
-
 /**
  * BotsRepository Integration Tests
  *
@@ -28,8 +26,8 @@ describe('BotsRepository Integration Tests', () => {
     // @dependency: Database, Drizzle ORM
     // @complexity: medium
     it.todo(
-      'AC-1.1: Should create bot with all required fields (id, token, name, isDynamic, isActive, timestamps)'
-    )
+      'AC-1.1: Should create bot with all required fields (id, token, name, isDynamic, isActive, timestamps)',
+    );
 
     // AC-1.2: "name column has UNIQUE constraint"
     // ROI: 82 | Business Value: 8 (data integrity) | Frequency: 8 (bot registration)
@@ -37,7 +35,9 @@ describe('BotsRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: Database constraints
     // @complexity: low
-    it.todo('AC-1.2: Should reject duplicate bot names with unique constraint violation')
+    it.todo(
+      'AC-1.2: Should reject duplicate bot names with unique constraint violation',
+    );
 
     // AC-1.3: "webhookPath and username are optional"
     // ROI: 70 | Business Value: 6 | Frequency: 8
@@ -45,8 +45,10 @@ describe('BotsRepository Integration Tests', () => {
     // @category: edge-case
     // @dependency: Database
     // @complexity: low
-    it.todo('AC-1.3: Should create bot without optional webhookPath and username fields')
-  })
+    it.todo(
+      'AC-1.3: Should create bot without optional webhookPath and username fields',
+    );
+  });
 
   // =============================================================================
   // AC-3: Repositories provide required methods
@@ -60,8 +62,8 @@ describe('BotsRepository Integration Tests', () => {
     // @dependency: BotsRepository, BotSettingsRepository, Database
     // @complexity: high
     it.todo(
-      'AC-3.1: findActiveDynamic() returns only active dynamic bots with joined settings'
-    )
+      'AC-3.1: findActiveDynamic() returns only active dynamic bots with joined settings',
+    );
 
     // AC-3.2: "findByIdWithSettings() returns bot with settings via JOIN"
     // ROI: 78 | Business Value: 8 (bot operations) | Frequency: 9
@@ -69,7 +71,9 @@ describe('BotsRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: BotsRepository, Database
     // @complexity: medium
-    it.todo('AC-3.2: findByIdWithSettings() returns bot with settings in single JOIN query')
+    it.todo(
+      'AC-3.2: findByIdWithSettings() returns bot with settings in single JOIN query',
+    );
 
     // AC-3.3: "findByName() returns bot by unique name"
     // ROI: 72 | Business Value: 7 | Frequency: 8
@@ -77,7 +81,7 @@ describe('BotsRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: BotsRepository, Database
     // @complexity: low
-    it.todo('AC-3.3: findByName() returns correct bot by unique name')
+    it.todo('AC-3.3: findByName() returns correct bot by unique name');
 
     // AC-3.4: "deactivate() sets isActive to false (soft delete)"
     // ROI: 75 | Business Value: 8 (admin operations) | Frequency: 5
@@ -85,8 +89,10 @@ describe('BotsRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: BotsRepository, Database
     // @complexity: low
-    it.todo('AC-3.4: deactivate() soft-deletes bot by setting isActive to false')
-  })
+    it.todo(
+      'AC-3.4: deactivate() soft-deletes bot by setting isActive to false',
+    );
+  });
 
   // =============================================================================
   // AC-5: Backward compatibility maintained
@@ -100,7 +106,7 @@ describe('BotsRepository Integration Tests', () => {
     // @dependency: BaseRepository, Database
     // @complexity: medium
     it.todo(
-      'AC-5.1: BaseRepository inherited methods (findById, create, update, delete) work correctly'
-    )
-  })
-})
+      'AC-5.1: BaseRepository inherited methods (findById, create, update, delete) work correctly',
+    );
+  });
+});

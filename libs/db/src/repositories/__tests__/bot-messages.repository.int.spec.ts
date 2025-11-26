@@ -2,8 +2,6 @@
 // Design Doc: docs/design/multi-bot-database-schema.md
 // Generated: 2025-11-26 | Budget Used: 3/3 integration tests
 
-import { describe, it } from '@jest/globals'
-
 /**
  * BotMessagesRepository Integration Tests
  *
@@ -28,8 +26,8 @@ describe('BotMessagesRepository Integration Tests', () => {
     // @dependency: Database, Unique constraints
     // @complexity: medium
     it.todo(
-      'AC-1.1: Should enforce unique constraint on (botId, type, lang) combination'
-    )
+      'AC-1.1: Should enforce unique constraint on (botId, type, lang) combination',
+    );
 
     // AC-1.2: "Foreign key references bots table with CASCADE"
     // ROI: 80 | Business Value: 8 (referential integrity) | Frequency: 5
@@ -37,8 +35,8 @@ describe('BotMessagesRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: Database CASCADE
     // @complexity: low
-    it.todo('AC-1.2: CASCADE deletes bot_messages when parent bot is deleted')
-  })
+    it.todo('AC-1.2: CASCADE deletes bot_messages when parent bot is deleted');
+  });
 
   // =============================================================================
   // AC-3: Repositories provide required methods
@@ -51,9 +49,7 @@ describe('BotMessagesRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: BotMessagesRepository, MessagesRepository, Database
     // @complexity: high
-    it.todo(
-      'AC-3.1: resolveMessage() returns bot override when exists'
-    )
+    it.todo('AC-3.1: resolveMessage() returns bot override when exists');
 
     // AC-3.2: "resolveMessage() falls back to global message when no bot override"
     // ROI: 90 | Business Value: 10 (default behavior) | Frequency: 10
@@ -62,8 +58,8 @@ describe('BotMessagesRepository Integration Tests', () => {
     // @dependency: BotMessagesRepository, MessagesRepository, Database
     // @complexity: medium
     it.todo(
-      'AC-3.2: resolveMessage() falls back to global message when no bot override exists'
-    )
+      'AC-3.2: resolveMessage() falls back to global message when no bot override exists',
+    );
 
     // AC-3.3: "resolveMessage() falls back to English when requested language not found"
     // ROI: 78 | Business Value: 8 (i18n fallback) | Frequency: 7
@@ -72,8 +68,8 @@ describe('BotMessagesRepository Integration Tests', () => {
     // @dependency: BotMessagesRepository, MessagesRepository, Database
     // @complexity: medium
     it.todo(
-      'AC-3.3: resolveMessage() falls back to English when requested language not available'
-    )
+      'AC-3.3: resolveMessage() falls back to English when requested language not available',
+    );
 
     // AC-3.4: "resolveMessage() returns hardcoded fallback when no message found"
     // ROI: 75 | Business Value: 9 (system resilience) | Frequency: 2
@@ -82,8 +78,8 @@ describe('BotMessagesRepository Integration Tests', () => {
     // @dependency: BotMessagesRepository
     // @complexity: low
     it.todo(
-      'AC-3.4: resolveMessage() returns hardcoded fallback when message not found anywhere'
-    )
+      'AC-3.4: resolveMessage() returns hardcoded fallback when message not found anywhere',
+    );
 
     // AC-3.5: "upsert() creates or updates message override"
     // ROI: 76 | Business Value: 7 (admin operations) | Frequency: 5
@@ -91,8 +87,10 @@ describe('BotMessagesRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: BotMessagesRepository, Database
     // @complexity: medium
-    it.todo('AC-3.5: upsert() creates new override if not exists, updates if exists')
-  })
+    it.todo(
+      'AC-3.5: upsert() creates new override if not exists, updates if exists',
+    );
+  });
 
   // =============================================================================
   // Message lookup operations
@@ -105,7 +103,9 @@ describe('BotMessagesRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: BotMessagesRepository, Database
     // @complexity: low
-    it.todo('AC-LOOKUP.1: findByBotTypeAndLang() returns exact message override match')
+    it.todo(
+      'AC-LOOKUP.1: findByBotTypeAndLang() returns exact message override match',
+    );
 
     // AC-LOOKUP.2: "findAllByBotId() returns all overrides for a bot"
     // ROI: 68 | Business Value: 6 (admin listing) | Frequency: 3
@@ -113,6 +113,8 @@ describe('BotMessagesRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: BotMessagesRepository, Database
     // @complexity: low
-    it.todo('AC-LOOKUP.2: findAllByBotId() returns all message overrides for bot')
-  })
-})
+    it.todo(
+      'AC-LOOKUP.2: findAllByBotId() returns all message overrides for bot',
+    );
+  });
+});

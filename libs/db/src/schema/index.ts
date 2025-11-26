@@ -17,6 +17,7 @@ export * from './instruments';
 export * from './renewal-tariffs';
 export * from './payment-transactions';
 export * from './statistics';
+export * from './bot-messages';
 
 // Export all tables for use with drizzle queries
 export { bots } from './bots';
@@ -36,3 +37,4 @@ export { renewalTariffs } from './renewal-tariffs';
 export { paymentTransactions } from './payment-transactions';
 export { monthlyBotStatistics } from './statistics';
 export { botUsers } from './bot-users';
+export { botMessages } from './bot-messages';

@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { sql, eq, and, like, not } from 'drizzle-orm';
+import { sql, eq, and, like } from 'drizzle-orm';
 import { BaseRepository } from './base.repository';
 import { DRIZZLE_CLIENT, type DrizzleClient } from '../database.provider';
 import {
@@ -145,7 +145,10 @@ export class SubscriptionsRepository extends BaseRepository<
    */
   async findActiveBroadcastSubscriptions(): Promise<Subscription[]> {
     return this.findBy(
-      and(eq(this.table.isActive, true), like(this.table.type, 'subscription_%')),
+      and(
+        eq(this.table.isActive, true),
+        like(this.table.type, 'subscription_%'),
+      ),
     );
   }
 

@@ -2,8 +2,6 @@
 // Design Doc: docs/design/multi-bot-database-schema.md
 // Generated: 2025-11-26 | Budget Used: 3/3 integration tests
 
-import { describe, it } from '@jest/globals'
-
 /**
  * BotUsersRepository Integration Tests
  *
@@ -28,8 +26,8 @@ describe('BotUsersRepository Integration Tests', () => {
     // @dependency: Database, Unique constraints
     // @complexity: medium
     it.todo(
-      'AC-1.1: Should enforce unique constraint on (userId, botId) combination'
-    )
+      'AC-1.1: Should enforce unique constraint on (userId, botId) combination',
+    );
 
     // AC-1.2: "Foreign keys reference users and bots tables with CASCADE"
     // ROI: 82 | Business Value: 8 (referential integrity) | Frequency: 8
@@ -37,7 +35,9 @@ describe('BotUsersRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: Database CASCADE
     // @complexity: medium
-    it.todo('AC-1.2: CASCADE deletes bot_users when parent user or bot is deleted')
+    it.todo(
+      'AC-1.2: CASCADE deletes bot_users when parent user or bot is deleted',
+    );
 
     // AC-1.3: "JSONB columns store preferences and state"
     // ROI: 75 | Business Value: 7 (flexibility) | Frequency: 7
@@ -45,8 +45,10 @@ describe('BotUsersRepository Integration Tests', () => {
     // @category: integration
     // @dependency: Database, JSONB
     // @complexity: low
-    it.todo('AC-1.3: JSONB columns correctly store and retrieve preferences and state')
-  })
+    it.todo(
+      'AC-1.3: JSONB columns correctly store and retrieve preferences and state',
+    );
+  });
 
   // =============================================================================
   // AC-3: Repositories provide required methods
@@ -59,7 +61,7 @@ describe('BotUsersRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: BotUsersRepository, Database
     // @complexity: low
-    it.todo('AC-3.1: findByUserAndBot() returns correct bot-user record')
+    it.todo('AC-3.1: findByUserAndBot() returns correct bot-user record');
 
     // AC-3.2: "findOrCreate() creates record if not exists"
     // ROI: 88 | Business Value: 9 (user onboarding) | Frequency: 10
@@ -67,7 +69,9 @@ describe('BotUsersRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: BotUsersRepository, Database
     // @complexity: medium
-    it.todo('AC-3.2: findOrCreate() creates new record if not exists, returns existing if found')
+    it.todo(
+      'AC-3.2: findOrCreate() creates new record if not exists, returns existing if found',
+    );
 
     // AC-3.3: "findActiveUsersWithDetailsByBotId() returns JOINed user data"
     // ROI: 80 | Business Value: 8 (broadcast operations) | Frequency: 7
@@ -76,8 +80,8 @@ describe('BotUsersRepository Integration Tests', () => {
     // @dependency: BotUsersRepository, UsersRepository, Database
     // @complexity: high
     it.todo(
-      'AC-3.3: findActiveUsersWithDetailsByBotId() returns active users with full user details'
-    )
+      'AC-3.3: findActiveUsersWithDetailsByBotId() returns active users with full user details',
+    );
 
     // AC-3.4: "resolveLanguage() follows hierarchy: bot_users.lang > users.lang > default"
     // ROI: 85 | Business Value: 9 (i18n) | Frequency: 10
@@ -86,9 +90,9 @@ describe('BotUsersRepository Integration Tests', () => {
     // @dependency: BotUsersRepository, UsersRepository, Database
     // @complexity: medium
     it.todo(
-      'AC-3.4: resolveLanguage() returns bot-specific lang, falls back to user lang, then default'
-    )
-  })
+      'AC-3.4: resolveLanguage() returns bot-specific lang, falls back to user lang, then default',
+    );
+  });
 
   // =============================================================================
   // User lifecycle operations
@@ -101,7 +105,9 @@ describe('BotUsersRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: BotUsersRepository, Database
     // @complexity: low
-    it.todo('AC-LIFECYCLE.1: deactivate() sets isActive to false for user-bot pair')
+    it.todo(
+      'AC-LIFECYCLE.1: deactivate() sets isActive to false for user-bot pair',
+    );
 
     // AC-LIFECYCLE.2: "activate() marks user active for specific bot"
     // ROI: 72 | Business Value: 7 (user unblocked bot) | Frequency: 3
@@ -109,6 +115,8 @@ describe('BotUsersRepository Integration Tests', () => {
     // @category: core-functionality
     // @dependency: BotUsersRepository, Database
     // @complexity: low
-    it.todo('AC-LIFECYCLE.2: activate() sets isActive to true for user-bot pair')
-  })
-})
+    it.todo(
+      'AC-LIFECYCLE.2: activate() sets isActive to true for user-bot pair',
+    );
+  });
+});

@@ -2,8 +2,6 @@
 // Design Doc: docs/design/multi-bot-database-schema.md
 // Generated: 2025-11-26 | Budget Used: 3/3 integration tests
 
-import { describe, it } from '@jest/globals'
-
 /**
  * Modified Tables Integration Tests
  *
@@ -27,8 +25,8 @@ describe('Modified Tables Integration Tests', () => {
     // @dependency: UserSubscriptionsRepository, BotsRepository, Database
     // @complexity: medium
     it.todo(
-      'AC-2.1: Should create user_subscription with valid botId foreign key'
-    )
+      'AC-2.1: Should create user_subscription with valid botId foreign key',
+    );
 
     // AC-2.2: "botId column is nullable for backward compatibility"
     // ROI: 90 | Business Value: 10 (migration safety) | Frequency: 10
@@ -36,7 +34,7 @@ describe('Modified Tables Integration Tests', () => {
     // @category: core-functionality
     // @dependency: UserSubscriptionsRepository, Database
     // @complexity: low
-    it.todo('AC-2.2: Should allow null botId for backward compatibility')
+    it.todo('AC-2.2: Should allow null botId for backward compatibility');
 
     // AC-2.3: "Bot-scoped subscription queries work correctly"
     // ROI: 85 | Business Value: 9 (multi-bot operations) | Frequency: 9
@@ -44,8 +42,8 @@ describe('Modified Tables Integration Tests', () => {
     // @category: core-functionality
     // @dependency: UserSubscriptionsRepository, Database
     // @complexity: medium
-    it.todo('AC-2.3: Should filter subscriptions by botId in queries')
-  })
+    it.todo('AC-2.3: Should filter subscriptions by botId in queries');
+  });
 
   describe('AC-2: RenewalTariffs with botId', () => {
     // AC-2.4: "renewal_tariffs.bot_id column added (nullable for global tariffs)"
@@ -55,8 +53,8 @@ describe('Modified Tables Integration Tests', () => {
     // @dependency: RenewalTariffsRepository, BotsRepository, Database
     // @complexity: medium
     it.todo(
-      'AC-2.4: Should support both bot-specific (botId set) and global (botId null) tariffs'
-    )
+      'AC-2.4: Should support both bot-specific (botId set) and global (botId null) tariffs',
+    );
 
     // AC-2.5: "Unique constraint updated to (subscriptionId, periodDays, botId)"
     // ROI: 80 | Business Value: 8 (data integrity) | Frequency: 6
@@ -65,8 +63,8 @@ describe('Modified Tables Integration Tests', () => {
     // @dependency: RenewalTariffsRepository, Database constraints
     // @complexity: medium
     it.todo(
-      'AC-2.5: Should enforce unique constraint on (subscriptionId, periodDays, botId)'
-    )
+      'AC-2.5: Should enforce unique constraint on (subscriptionId, periodDays, botId)',
+    );
 
     // AC-2.6: "Tariff resolution: bot-specific > global"
     // ROI: 78 | Business Value: 8 (pricing logic) | Frequency: 7
@@ -74,8 +72,10 @@ describe('Modified Tables Integration Tests', () => {
     // @category: core-functionality
     // @dependency: RenewalTariffsRepository, Database
     // @complexity: medium
-    it.todo('AC-2.6: Should resolve tariffs with bot-specific taking precedence over global')
-  })
+    it.todo(
+      'AC-2.6: Should resolve tariffs with bot-specific taking precedence over global',
+    );
+  });
 
   describe('AC-2: Codes with botId', () => {
     // AC-2.7: "codes.bot_id column added with FK constraint"
@@ -84,7 +84,7 @@ describe('Modified Tables Integration Tests', () => {
     // @category: core-functionality
     // @dependency: CodesRepository, BotsRepository, Database
     // @complexity: medium
-    it.todo('AC-2.7: Should create code with valid botId foreign key')
+    it.todo('AC-2.7: Should create code with valid botId foreign key');
 
     // AC-2.8: "Bot-scoped code activation works correctly"
     // ROI: 82 | Business Value: 9 (code redemption) | Frequency: 8
@@ -92,8 +92,8 @@ describe('Modified Tables Integration Tests', () => {
     // @category: core-functionality
     // @dependency: CodesRepository, UserSubscriptionsRepository, Database
     // @complexity: high
-    it.todo('AC-2.8: Should activate code and create bot-scoped subscription')
-  })
+    it.todo('AC-2.8: Should activate code and create bot-scoped subscription');
+  });
 
   // =============================================================================
   // AC-5: Backward compatibility maintained
@@ -107,8 +107,8 @@ describe('Modified Tables Integration Tests', () => {
     // @dependency: All modified repositories
     // @complexity: medium
     it.todo(
-      'AC-5.1: Existing UserSubscriptionsRepository methods work without botId parameter'
-    )
+      'AC-5.1: Existing UserSubscriptionsRepository methods work without botId parameter',
+    );
 
     // AC-5.2: "Existing code activation flow unchanged"
     // ROI: 90 | Business Value: 10 (business continuity) | Frequency: 9
@@ -116,7 +116,7 @@ describe('Modified Tables Integration Tests', () => {
     // @category: integration
     // @dependency: CodesRepository, UserSubscriptionsRepository
     // @complexity: medium
-    it.todo('AC-5.2: Existing code activation flow works without bot context')
+    it.todo('AC-5.2: Existing code activation flow works without bot context');
 
     // AC-5.3: "Existing subscription queries return all subscriptions when botId not specified"
     // ROI: 88 | Business Value: 9 | Frequency: 9
@@ -125,9 +125,9 @@ describe('Modified Tables Integration Tests', () => {
     // @dependency: UserSubscriptionsRepository
     // @complexity: low
     it.todo(
-      'AC-5.3: Subscription queries without botId filter return all subscriptions'
-    )
-  })
+      'AC-5.3: Subscription queries without botId filter return all subscriptions',
+    );
+  });
 
   // =============================================================================
   // AC-4: Migration execution
@@ -141,8 +141,8 @@ describe('Modified Tables Integration Tests', () => {
     // @dependency: All repositories, Database CASCADE
     // @complexity: high
     it.todo(
-      'AC-4.1: CASCADE delete removes related user_subscriptions and codes when bot deleted'
-    )
+      'AC-4.1: CASCADE delete removes related user_subscriptions and codes when bot deleted',
+    );
 
     // AC-4.2: "Indexes created for bot-scoped queries"
     // ROI: 70 | Business Value: 7 (query performance) | Frequency: 10
@@ -150,6 +150,6 @@ describe('Modified Tables Integration Tests', () => {
     // @category: integration
     // @dependency: Database indexes
     // @complexity: low
-    it.todo('AC-4.2: Bot-scoped queries use indexes for efficient execution')
-  })
-})
+    it.todo('AC-4.2: Bot-scoped queries use indexes for efficient execution');
+  });
+});
