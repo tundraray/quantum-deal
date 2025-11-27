@@ -42,28 +42,15 @@ export class UserManagementMiddleware {
       if (!ctx.from) {
         this.logger.warn('Context does not contain user information');
         await next();
-      }
-
-      const telegramId = ctx.from?.id;
-
-      // Try to find existing user
-      let user = await this.usersRepository.findByTelegramId(telegramId!);
-
-      // Create user if not found
-      if (!user) {
-        user = await this.createNewUser(ctx.from!);
-        this.logger.log(`Created new user with Telegram ID: ${telegramId}`);
-      } else if (!user.isActive) {
-        await this.usersRepository.activateUser(telegramId!);
         return;
       }
 
-      // Attach user to context with subscriptions (user is guaranteed to exist at this point)
-      if (user) {
-        const userWithSubscriptions =
-          await this.loadUserWithSubscriptions(user);
-        (ctx as UserContext).user = userWithSubscriptions;
-      }
+      // Upsert user - creates new or updates existing (race-condition safe)
+      const user = await this.upsertUser(ctx.from);
+
+      // Attach user to context with subscriptions
+      const userWithSubscriptions = await this.loadUserWithSubscriptions(user);
+      (ctx as UserContext).user = userWithSubscriptions;
 
       // Continue to next middleware
       await next();
@@ -80,12 +67,13 @@ export class UserManagementMiddleware {
   }
 
   /**
-   * Creates a new user in the database
+   * Creates or updates user in database (upsert)
+   * Uses ON CONFLICT to handle race conditions safely
    * @param telegramUser - Telegram user object from context
-   * @returns Created user
+   * @returns Created or updated user
    */
-  private async createNewUser(telegramUser: TelegramUser) {
-    const newUser: NewUser = {
+  private async upsertUser(telegramUser: TelegramUser) {
+    const userData: NewUser = {
       telegramId: telegramUser.id,
       username: telegramUser.username || null,
       firstName: telegramUser.first_name || null,
@@ -95,7 +83,7 @@ export class UserManagementMiddleware {
       isPremium: telegramUser.is_premium || false,
     };
 
-    return this.usersRepository.create(newUser);
+    return this.usersRepository.upsert(userData);
   }
 
   /**
