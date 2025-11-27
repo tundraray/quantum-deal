@@ -159,9 +159,7 @@ export class ListenersExplorerService
     const { instance } = wrapper;
     if (!instance) return undefined;
 
-    const isScene = this.metadataAccessor.isScene(
-      wrapper.metatype as Function,
-    );
+    const isScene = this.metadataAccessor.isScene(wrapper.metatype as Function);
     if (!isScene) return undefined;
 
     return wrapper;
@@ -276,9 +274,7 @@ export class ListenersExplorerService
     methodName: string,
   ) {
     const paramsFactory = this.telegrafParamsFactory;
-    const methodRef = prototype[methodName] as (
-      ...args: unknown[]
-    ) => unknown;
+    const methodRef = prototype[methodName] as (...args: unknown[]) => unknown;
     return this.externalContextCreator.create<
       Record<number, ParamMetadata>,
       TelegrafContextType

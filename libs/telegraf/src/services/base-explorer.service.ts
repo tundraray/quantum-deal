@@ -1,13 +1,20 @@
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import { Module } from '@nestjs/core/injector/module';
-import { flattenDeep, identity, isEmpty } from 'lodash';
+
+/** Type for module class references */
+type ModuleClass = new (...args: unknown[]) => unknown;
+
+/** Helper to flatten nested arrays to a specific depth */
+function flattenDeepTyped<T>(arr: unknown[]): T[] {
+  return arr.flat(Infinity) as T[];
+}
 
 export class BaseExplorerService {
   getModules(
     modulesContainer: Map<string, Module>,
-    include: Function[],
+    include: ModuleClass[],
   ): Module[] {
-    if (!include || isEmpty(include)) {
+    if (!include || include.length === 0) {
       return [...modulesContainer.values()];
     }
     return this.includeWhitelisted(modulesContainer, include);
@@ -15,10 +22,12 @@ export class BaseExplorerService {
 
   includeWhitelisted(
     modulesContainer: Map<string, Module>,
-    include: Function[],
+    include: ModuleClass[],
   ): Module[] {
     const modules = [...modulesContainer.values()];
-    return modules.filter(({ metatype }) => include.includes(metatype));
+    return modules.filter(({ metatype }) =>
+      include.includes(metatype as ModuleClass),
+    );
   }
 
   flatMap<T>(
@@ -30,7 +39,7 @@ export class BaseExplorerService {
   ): T[] {
     const visitedModules = new Set<Module>();
 
-    const unwrap = (moduleRef: Module) => {
+    const unwrap = (moduleRef: Module): (T | T[] | undefined)[] => {
       // protection from circular recursion
       if (visitedModules.has(moduleRef)) {
         return [];
@@ -53,6 +62,9 @@ export class BaseExplorerService {
       return [...defined, ...imported];
     };
 
-    return flattenDeep(modules.map(unwrap)).filter(identity);
+    const results = flattenDeepTyped<T | undefined>(modules.map(unwrap));
+    return results.filter(
+      (item): item is T => item !== undefined && item !== null,
+    );
   }
 }

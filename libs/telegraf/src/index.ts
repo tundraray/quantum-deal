@@ -7,3 +7,4 @@ export * from './errors';
 export * from './execution-context';
 export * from './telegraf.constants';
 export * from './telegraf.module';
+export * from './dynamic-telegraf-core.module';

@@ -1,20 +1,20 @@
-import { Telegraf } from 'telegraf';
+import { Context, Telegraf } from 'telegraf';
 import { TelegrafModuleOptions } from '../interfaces';
 import { Logger } from '@nestjs/common';
 
-export async function createBotFactory(
+export function createBotFactory(
   options: TelegrafModuleOptions,
-): Promise<Telegraf<any>> {
-  const bot = new Telegraf<any>(options.token, options.options);
+): Promise<Telegraf<Context>> {
+  const bot = new Telegraf<Context>(options.token, options.options);
 
   bot.use(...(options.middlewares ?? []));
   bot.catch((err, ctx) =>
-    Logger.error(err, `Telegraf: ${ctx.botInfo.username}`),
+    Logger.error(err, `Telegraf: ${ctx.botInfo?.username ?? 'unknown'}`),
   );
 
   if (options.launchOptions !== false) {
     bot.launch(options.launchOptions ?? {});
   }
 
-  return bot;
+  return Promise.resolve(bot);
 }

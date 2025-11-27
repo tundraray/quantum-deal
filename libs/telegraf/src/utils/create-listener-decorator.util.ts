@@ -1,10 +1,10 @@
-import { Composer } from 'telegraf';
+import { Context, Composer } from 'telegraf';
 import { ComposerMethodArgs, OnlyFunctionPropertyNames } from '../types';
 import { LISTENERS_METADATA } from '../telegraf.constants';
 import { ListenerMetadata } from '../interfaces';
 
 export function createListenerDecorator<
-  TComposer extends Composer<any>,
+  TComposer extends Composer<Context>,
   TMethod extends
     OnlyFunctionPropertyNames<TComposer> = OnlyFunctionPropertyNames<TComposer>,
 >(method: TMethod) {
@@ -12,9 +12,9 @@ export function createListenerDecorator<
     return (
       target: object,
       _key?: string | symbol,
-      descriptor?: TypedPropertyDescriptor<any>,
+      descriptor?: TypedPropertyDescriptor<unknown>,
     ) => {
-      const metadata = [
+      const metadata: ListenerMetadata[] = [
         {
           method,
           args,
@@ -22,10 +22,17 @@ export function createListenerDecorator<
       ];
 
       if (descriptor) {
-        const previousValue =
-          Reflect.getMetadata(LISTENERS_METADATA, descriptor.value) || [];
-        const value = [...previousValue, ...metadata];
-        Reflect.defineMetadata(LISTENERS_METADATA, value, descriptor.value);
+        const previousValue: ListenerMetadata[] =
+          (Reflect.getMetadata(
+            LISTENERS_METADATA,
+            descriptor.value as object,
+          ) as ListenerMetadata[] | undefined) ?? [];
+        const value: ListenerMetadata[] = [...previousValue, ...metadata];
+        Reflect.defineMetadata(
+          LISTENERS_METADATA,
+          value,
+          descriptor.value as object,
+        );
         return descriptor;
       }
 

@@ -3,6 +3,9 @@ import { ParamsFactory } from '@nestjs/core/helpers/external-context-creator';
 import { Context } from 'telegraf';
 import { TelegrafParamtype } from '../enums/telegraf-paramtype.enum';
 
+/** Next function type for middleware chain */
+type NextFunction = () => Promise<void>;
+
 export class TelegrafParamsFactory implements ParamsFactory {
   exchangeKeyForValue(
     type: TelegrafParamtype,
@@ -10,7 +13,7 @@ export class TelegrafParamsFactory implements ParamsFactory {
     args: unknown[],
   ): unknown {
     const ctx = args[0] as Context;
-    const next = args[1] as Function;
+    const next = args[1] as NextFunction;
 
     switch (type) {
       case TelegrafParamtype.CONTEXT:

@@ -3,7 +3,7 @@
 ## Overview
 
 ### One-line Summary
-Transform the database architecture to support multiple Telegram bots operating independently, with shared user profiles, per-bot subscriptions, customizable bot settings, and flexible message configurations.
+Transform the database architecture and `@libs/telegraf` module to support multiple Telegram bots operating independently, with shared user profiles, per-bot subscriptions, customizable bot settings, flexible message configurations, and dynamic bot loading capabilities.
 
 ### Background
 The Quantum Deal platform currently operates with a single-bot architecture where all users, subscriptions, and settings are implicitly tied to one bot instance. As the business expands to serve multiple broker partners through different branded Telegram bots, the system needs to support:
@@ -13,8 +13,66 @@ The Quantum Deal platform currently operates with a single-bot architecture wher
 3. **Per-bot subscriptions** - Users subscribe independently to each bot's services
 4. **Bot-specific settings** - Each bot has its own token, name, messages, and payment configuration
 5. **Message customization** - Bots can use default messages or override with custom ones
+6. **Dynamic bot loading** - New bots can be added via database configuration without code changes
 
 This architectural change enables the multi-brand business model described in the project context, where a single MT5 signal source is distributed to multiple Telegram bots serving different broker partnerships.
+
+### Three-Tier Bot Architecture
+
+The platform supports three distinct bot tiers with different management approaches:
+
+```mermaid
+flowchart TB
+    subgraph "Tier 1: Master Bot"
+        M[MasterBot]
+        M1[Special admin permissions]
+        M2[Manager-only access]
+        M3[System monitoring]
+    end
+
+    subgraph "Tier 2: Static Bots"
+        S[Static Bots]
+        S1[Code-configured via TelegrafModule.forRootAsync]
+        S2[Environment variable tokens]
+        S3[Full nest-telegraf decorator support]
+    end
+
+    subgraph "Tier 3: Dynamic Bots"
+        D[Dynamic Bots]
+        D1[Database-configured]
+        D2[Loaded at application startup]
+        D3[Feature-configurable]
+        D4[Per-bot Stage instances]
+    end
+
+    M --> M1
+    M --> M2
+    M --> M3
+    S --> S1
+    S --> S2
+    S --> S3
+    D --> D1
+    D --> D2
+    D --> D3
+    D --> D4
+```
+
+| Tier | Bot Type | Configuration | Handler Approach | Stage/Scene | Examples |
+|------|----------|---------------|------------------|-------------|----------|
+| 1 | Master Bot | Environment + Code | nest-telegraf decorators | Shared Stage | QuantumDealMasterBot |
+| 2 | Static Bot | Environment + Code | nest-telegraf decorators | Shared Stage | QuantumDealBot |
+| 3 | Dynamic Bot | Database | Programmatic registration | Per-bot Stage | BrandBot, PartnerBot |
+
+### Architecture Decisions (User-Specified)
+
+The following architecture choices have been made for the dynamic bot loading system:
+
+| Decision Area | Choice | Rationale |
+|---------------|--------|-----------|
+| **Handler Scope** | Hybrid (shared default + per-bot override) | Maximizes code reuse while allowing bot-specific behavior |
+| **Loading Mode** | Application startup only | Simplifies lifecycle management, restart required for new bots |
+| **Backward Compatibility** | Yes - support both static and dynamic | Existing bots continue working unchanged |
+| **Stage Management** | Per-bot Stage instances | Prevents conversation state conflicts between bots |
 
 ## User Stories
 
@@ -107,13 +165,23 @@ journey
 ```mermaid
 flowchart TB
     subgraph InScope["In Scope: Multi-Bot Architecture"]
-        S1[Bot Settings Table]
-        S2[Bot-User Relationship Table]
-        S3[Per-Bot Subscriptions]
-        S4[Per-Bot Tariffs]
-        S5[Message Override System]
-        S6[Bot Feature Flags]
-        S7[Schema Migration]
+        subgraph Database["Database Layer"]
+            S1[Bot Settings Table]
+            S2[Bot-User Relationship Table]
+            S3[Per-Bot Subscriptions]
+            S4[Per-Bot Tariffs]
+            S5[Message Override System]
+            S6[Bot Feature Flags]
+            S7[Schema Migration]
+        end
+        subgraph DynamicLoading["Dynamic Loading - @libs/telegraf"]
+            D1[forRootDynamic Module Method]
+            D2[DynamicTelegrafService]
+            D3[Per-bot Stage Instances]
+            D4[Shared Handler Pattern]
+            D5[Bot Registry Map]
+            D6[Webhook Auto-configuration]
+        end
     end
 
     subgraph OutScope["Out of Scope"]
@@ -122,6 +190,8 @@ flowchart TB
         O3[User Authentication Changes]
         O4[Admin Panel UI]
         O5[Cross-Bot Analytics Dashboard]
+        O6[Runtime Bot Addition]
+        O7[Hot Reload]
     end
 
     subgraph Related["Related/Affected Systems"]
@@ -154,12 +224,52 @@ flowchart TB
 - [ ] **FR-011**: Add unique constraint on (userId, botId) in bot_users table
 - [ ] **FR-012**: Add partial unique index on (userId, subscriptionId, botId) WHERE isActive = true - allows subscription history while preventing duplicate active subscriptions
 
+### Must Have: Dynamic Bot Loading System (MVP)
+
+- [ ] **FR-020**: Implement `forRootDynamic()` module method in `@libs/telegraf` alongside existing `forRoot()`/`forRootAsync()` methods
+- [ ] **FR-021**: Load bot configurations from `bots` table at application startup via `OnModuleInit` lifecycle hook
+- [ ] **FR-022**: Create Telegraf bot instances dynamically based on database records where `isDynamic = true` and `isActive = true`
+- [ ] **FR-023**: Add `isDynamic` boolean column to `bots` table to distinguish static (false) from dynamic (true) bots
+- [ ] **FR-024**: Add `webhookPath` column to `bots` table for unique webhook routing per bot (e.g., `/dynamic/brand1`)
+- [ ] **FR-025**: Validate bot tokens at startup by calling `telegram.getMe()` and log validation results
+- [ ] **FR-026**: Configure webhooks automatically for each dynamic bot using the stored `webhookPath`
+- [ ] **FR-027**: Store dynamic bot instances in a registry (Map<botId, TelegrafInstance>) for runtime access
+- [ ] **FR-028**: Support both static bots (via `forRoot()`/`forRootAsync()`) and dynamic bots (via `forRootDynamic()`) in the same application
+
+### Must Have: Feature-based Handler Configuration (MVP)
+
+- [ ] **FR-030**: Dynamic bots use feature flags from `bot_settings.settings.features` to determine active handlers
+- [ ] **FR-031**: Implement shared handler pattern - handlers can be shared across all bots by default
+- [ ] **FR-032**: Support per-bot handler overrides when specific bot behavior differs from default
+- [ ] **FR-033**: Feature flags control handler activation: `signalsEnabled`, `paymentsEnabled`, `trialEnabled`, `broadcastEnabled`
+- [ ] **FR-034**: Handlers receive `botId` and `botSettings` context for bot-specific behavior within shared logic
+- [ ] **FR-035**: Create shared handler services (`SharedStartHandler`, `SharedLangHandler`, etc.) that work with both static and dynamic bots
+
+### Must Have: Per-bot Stage/Scene Isolation (MVP)
+
+- [ ] **FR-040**: Each dynamic bot receives its own `Stage` instance for scene management
+- [ ] **FR-041**: Scenes are registered per-bot based on bot configuration (not globally shared)
+- [ ] **FR-042**: Conversation state is isolated per bot - scene session data does not leak between bots
+- [ ] **FR-043**: `enterScene` and `leaveScene` operations are scoped to the bot's Stage instance
+- [ ] **FR-044**: Scene middleware is applied independently to each dynamic bot's Telegraf instance
+
+### Must Have: Bot Lifecycle Management (MVP)
+
+- [ ] **FR-050**: Implement proper initialization sequence: load config -> validate token -> register handlers -> setup webhook
+- [ ] **FR-051**: Implement graceful shutdown via `OnApplicationShutdown` - delete webhooks for all dynamic bots
+- [ ] **FR-052**: Failed bot initialization does not block other bots from starting (fault isolation)
+- [ ] **FR-053**: Log initialization results for each bot: success count, failure count, failure reasons
+- [ ] **FR-054**: Provide `DynamicTelegrafService` methods: `getBot(botId)`, `getBotByWebhookPath(path)`, `getAllBots()`, `getBotCount()`
+
 ### Nice to Have
 
 - [ ] **FR-013**: Bot groups for managing related bots together
 - [ ] **FR-014**: Bot templates for quick setup of new bots with predefined settings
 - [ ] **FR-015**: Message inheritance hierarchy (global > group > bot)
 - [ ] **FR-016**: Cross-bot user statistics aggregation
+- [ ] **FR-060**: Hot-reload capability - add/remove bots without full application restart
+- [ ] **FR-061**: Database polling for new bot configurations (scheduled check for new `isDynamic = true` records)
+- [ ] **FR-062**: Bot health monitoring and automatic restart for failed bots
 
 ### Out of Scope
 
@@ -171,6 +281,9 @@ flowchart TB
   - Direct SQL queries or Drizzle ORM scripts for data modifications
   - Environment variables for sensitive data (tokens, API keys)
 - **Bot analytics**: Cross-bot reporting and dashboards (separate feature)
+- **Runtime bot addition**: Adding bots while application is running (requires restart)
+- **Cross-bot scene sharing**: Scenes cannot be shared between different bot instances
+- **Dynamic handler compilation**: All handlers must be defined at compile time, only activation is dynamic
 
 ## Non-Functional Requirements
 
@@ -178,21 +291,37 @@ flowchart TB
 - **Query Efficiency**: Bot-user lookups must use indexed foreign keys
 - **Message Resolution**: Message override resolution must complete within 10ms
 - **Subscription Queries**: Finding user subscriptions for a bot must be O(1) with proper indexing
+- **Bot Initialization**: Each dynamic bot should initialize in < 5 seconds
+- **Update Handling Latency**: Webhook update processing < 100ms p95
+- **Memory per Bot**: Each dynamic bot instance should consume < 50MB memory
 
 ### Reliability
 - **Data Integrity**: Foreign key constraints ensure referential integrity across bot relationships
 - **Migration Safety**: Schema migration must be reversible and preserve existing data
 - **Cascade Rules**: Define clear cascade behavior for bot deletion scenarios
+- **Fault Isolation**: Failed dynamic bot does not affect other bots or static bots
+- **Graceful Degradation**: If dynamic bot loading fails, static bots continue operating
+- **Webhook Retry Prevention**: Always return HTTP 200 to Telegram to prevent retry storms
 
 ### Security
-- **Token Storage**: Bot tokens must be stored securely. Encryption approach to be defined in Design Doc, referencing project's security standards and available encryption mechanisms.
+- **Token Storage**: Bot tokens stored in plain text in database (per ADR-004 Decision 4). Tokens are regenerable via BotFather if compromised.
+- **Token Masking**: Bot tokens must never appear in logs - mask with asterisks
 - **Bot Isolation**: Users on one bot cannot access another bot's data through the API
 - **Access Control**: Bot settings modification restricted to users with database access (developers/administrators)
+- **Webhook Validation**: Rely on Telegram's built-in webhook security (secret tokens if enabled)
 
 ### Scalability
 - **Horizontal Scaling**: Schema supports unlimited bots without structural changes
 - **Independent Operations**: Bots operate independently without cross-bot locking
 - **Efficient Queries**: Indexes designed for common access patterns (user+bot lookups)
+- **Bot Capacity**: Support up to 100 dynamic bots per application instance (memory-bound)
+- **Parallel Initialization**: Dynamic bots can be initialized in parallel to reduce startup time
+
+### Backward Compatibility
+- **Static Bot Support**: Existing `forRoot()` and `forRootAsync()` methods continue to work unchanged
+- **Migration Path**: Existing single-bot deployments work without modification
+- **Coexistence**: Static and dynamic bots operate in the same application simultaneously
+- **Handler Reuse**: Existing handler logic can be wrapped in shared handler pattern
 
 ## Data Model
 
@@ -212,9 +341,11 @@ erDiagram
 
     bots {
         bigint id PK
-        varchar token UK "encrypted"
-        varchar name
+        varchar token UK "plain text per ADR-004"
+        varchar name UK
         varchar username "bot username"
+        varchar webhookPath UK "unique webhook route"
+        boolean isDynamic "true for DB-loaded bots"
         boolean isActive
         timestamp createdAt
         timestamp updatedAt
@@ -356,6 +487,10 @@ interface PaymentSettings {
 3. **Query Performance**: Bot-user lookups < 5ms at p95
 4. **Data Integrity**: Zero orphaned records across bot relationships
 5. **Test Coverage**: 80%+ coverage on multi-bot repository operations
+6. **Dynamic Bot Loading**: 100% of active dynamic bots successfully initialized at startup
+7. **Bot Initialization Time**: Each dynamic bot initializes in < 5 seconds
+8. **Fault Isolation**: Failed bot does not prevent other bots from starting (0 cascade failures)
+9. **Webhook Response Time**: Update handling < 100ms p95
 
 ### Qualitative Metrics
 
@@ -363,6 +498,9 @@ interface PaymentSettings {
 2. **Maintainability**: Schema changes documented and migration scripts provided
 3. **Extensibility**: Easy to add new bot settings without schema changes (JSONB)
 4. **Backward Compatibility**: Existing single-bot workflows continue to function
+5. **Zero Code Changes**: New dynamic bots can be added via database INSERT + application restart only
+6. **Handler Reusability**: Shared handlers work identically for static and dynamic bots
+7. **Scene Isolation**: No conversation state leakage between dynamic bot instances
 
 ## Technical Considerations
 
@@ -370,7 +508,9 @@ interface PaymentSettings {
 - **PostgreSQL**: JSONB support for flexible settings storage
 - **Drizzle ORM**: Schema definition and migration support
 - **NestJS**: Module and provider injection for multi-bot support
-- **Grammy**: Bot instance management per token
+- **Telegraf.js**: Bot instance management per token (per ADR-005)
+- **nest-telegraf** (`@libs/telegraf`): NestJS integration for static bots
+- **@libs/telegraf Extension**: New `forRootDynamic()` method for database-driven bots
 
 ### Constraints
 - **Telegram Limitations**: Bot tokens must be unique across all bots
@@ -432,12 +572,52 @@ This approach is appropriate for the current team structure (solo developer with
 | `NotificationService` | Send messages through correct bot instance |
 | **NEW** `BotManagementService` | Bot lifecycle and configuration |
 
+### Module Layer Impact (@libs/telegraf)
+
+| Component | Changes |
+|-----------|---------|
+| `TelegrafModule` | Add `forRootDynamic()` static method alongside existing `forRoot()` and `forRootAsync()` |
+| **NEW** `DynamicTelegrafModule` | Global module for dynamic bot loading |
+| **NEW** `DynamicTelegrafService` | Bot registry, lifecycle management, update routing |
+
+### Dynamic Bot Service Interface
+
+```typescript
+interface DynamicTelegrafService {
+  // Lifecycle (OnModuleInit, OnApplicationShutdown)
+  onModuleInit(): Promise<void>
+  onApplicationShutdown(signal?: string): Promise<void>
+
+  // Bot Access
+  getBot(botId: number): Telegraf<Context> | undefined
+  getBotByWebhookPath(webhookPath: string): Telegraf<Context> | undefined
+  getAllBots(): Map<number, DynamicBotInstance>
+  getBotCount(): number
+
+  // Update Handling
+  handleUpdate(webhookPath: string, update: Update): Promise<boolean>
+}
+```
+
+### Shared Handler Services
+
+| Service | Purpose |
+|---------|---------|
+| **NEW** `SharedStartHandler` | /start command logic reusable by static and dynamic bots |
+| **NEW** `SharedLangHandler` | /lang command logic reusable by static and dynamic bots |
+| **NEW** `SharedCallbackHandler` | Callback query routing reusable by static and dynamic bots |
+| **NEW** `SharedHandlersModule` | Module exporting all shared handlers |
+
 ## Appendix
 
 ### References
 - Current schema: `libs/db/src/schema/`
 - Subscription PRD: `docs/prd/subscription-core-prd.md`
 - Project context: `docs/rules/project-context.md`
+- ADR-004: Multi-Bot Database Architecture - `docs/adr/ADR-004-multi-bot-architecture.md`
+- ADR-005: Telegram Bot Framework Selection (Telegraf.js + nest-telegraf)
+- Design Doc: Multi-Bot Dynamic Loader - `docs/design/multi-bot-dynamic-loader.md`
+- Design Doc: Multi-Bot Database Schema - `docs/design/multi-bot-database-schema.md`
 
 ### Glossary
 - **Bot**: A Telegram bot instance with unique token and configuration
@@ -446,6 +626,13 @@ This approach is appropriate for the current team structure (solo developer with
 - **Bot-Scoped Subscription**: Subscription tied to specific bot, not transferable
 - **Message Override**: Bot-specific message replacing the global default
 - **Default Bot**: The initial bot created during migration to maintain backward compatibility
+- **Static Bot**: Bot configured via code (`TelegrafModule.forRootAsync()`) with environment variable token
+- **Dynamic Bot**: Bot configured via database (`isDynamic = true`), loaded at application startup
+- **Master Bot**: Special administrative bot with elevated permissions for system management
+- **Stage**: Telegraf's scene manager; dynamic bots each receive their own Stage instance
+- **Shared Handler**: Business logic service callable by both static and dynamic bots
+- **Bot Registry**: In-memory Map storing active dynamic bot instances keyed by botId
+- **forRootDynamic()**: New module method for enabling dynamic bot loading from database
 
 ### Database Indexes
 
@@ -465,11 +652,18 @@ CREATE INDEX idx_codes_bot ON codes(bot_id);
 
 -- Bot Messages: Message resolution
 CREATE INDEX idx_bot_messages_bot_type_lang ON bot_messages(bot_id, type, lang);
+
+-- Bots: Dynamic bot loading at startup
+CREATE INDEX idx_bots_dynamic_active ON bots(is_dynamic, is_active)
+  WHERE is_dynamic = true AND is_active = true;
+
+-- Bots: Webhook path lookup for update routing
+CREATE UNIQUE INDEX idx_bots_webhook_path ON bots(webhook_path);
 ```
 
 ---
 
-**Document Version**: 1.2.0
+**Document Version**: 1.3.0
 **Created**: 2025-11-26
 **Last Updated**: 2025-11-26
 **Status**: Draft
@@ -479,6 +673,7 @@ CREATE INDEX idx_bot_messages_bot_type_lang ON bot_messages(bot_id, type, lang);
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.0 | 2025-11-26 | **Major update: Dynamic Bot Loading for @libs/telegraf module**<br/>- Added Three-Tier Bot Architecture section (Master, Static, Dynamic bots)<br/>- Added Architecture Decisions table documenting user-specified choices<br/>- Added FR-020 to FR-028: Dynamic Bot Loading System requirements<br/>- Added FR-030 to FR-035: Feature-based Handler Configuration requirements<br/>- Added FR-040 to FR-044: Per-bot Stage/Scene Isolation requirements<br/>- Added FR-050 to FR-054: Bot Lifecycle Management requirements<br/>- Added FR-060 to FR-062: Nice-to-have dynamic loading enhancements<br/>- Updated Scope Boundary Diagram with Dynamic Loading layer<br/>- Updated bots table schema with isDynamic and webhookPath columns<br/>- Added non-functional requirements for performance, fault isolation, backward compatibility<br/>- Added Module Layer Impact section with DynamicTelegrafModule/Service<br/>- Added Shared Handler Services section<br/>- Updated Dependencies to reference Telegraf.js and nest-telegraf per ADR-005<br/>- Added database indexes for dynamic bot loading<br/>- Updated Glossary with dynamic loading terminology<br/>- Updated Success Criteria with dynamic loading metrics |
 | 1.2.0 | 2025-11-26 | Clarified no admin panel needed - all bot settings managed directly through database (SQL/migrations/Drizzle ORM scripts). Updated Out of Scope, Technical Considerations, and administrator references throughout document. |
 | 1.1.0 | 2025-11-26 | Fixed critical issues from document review: FR-012 partial unique index, field migration notes, feature flags storage clarification, message resolution hierarchy, migration strategy details |
 | 1.0.0 | 2025-11-26 | Initial PRD creation |

@@ -15,3 +15,15 @@ export const PARAM_ARGS_METADATA = ROUTE_ARGS_METADATA;
 export const TELEGRAF_STAGE = 'TelegrafStage';
 
 export const TELEGRAF_ALL_BOTS = 'TELEGRAF_ALL_BOTS';
+
+// Dynamic Telegraf Module tokens
+export const DYNAMIC_TELEGRAF_SERVICE = 'DYNAMIC_TELEGRAF_SERVICE';
+export const DYNAMIC_TELEGRAF_MODULE_OPTIONS =
+  'DYNAMIC_TELEGRAF_MODULE_OPTIONS';
+
+// Dynamic Telegraf Metadata keys
+export const BOT_TARGET_METADATA = 'BOT_TARGET_METADATA';
+export const FEATURE_FLAG_METADATA = 'FEATURE_FLAG_METADATA';
+
+// Dynamic Telegraf Constants
+export const DYNAMIC_WEBHOOK_PREFIX = '/dynamic';
