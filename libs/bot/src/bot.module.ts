@@ -29,6 +29,7 @@ import { FilterSessionService } from './services/filter-session.service';
 import { PaymentService } from './services/payment.service';
 import { BotCommandsService } from './services/bot-commands.service';
 import { BotInitService } from './services/bot-init.service';
+import { DynamicBotConfigService } from './services/dynamic-bot-config.service';
 import { TrialService } from './services/trial.service';
 import { StatisticsRefreshService } from './services/statistics-refresh.service';
 import { OnboardingService } from './services/onboarding.service';
@@ -84,6 +85,9 @@ import { RenewalAction } from './actions/renewal/renewal.action';
     BotCommandsService,
     BotInitService,
 
+    // Dynamic bot configuration
+    DynamicBotConfigService,
+
     // Trial services
     TrialService,
 
@@ -135,6 +139,9 @@ import { RenewalAction } from './actions/renewal/renewal.action';
     // Bot commands & init
     BotCommandsService,
     BotInitService,
+
+    // Dynamic bot configuration
+    DynamicBotConfigService,
 
     // Trial services
     TrialService,

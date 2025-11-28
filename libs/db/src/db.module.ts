@@ -15,6 +15,7 @@ import {
   InstrumentsRepository,
   RenewalTariffsRepository,
   PaymentTransactionsRepository,
+  BotsRepository,
 } from './repositories';
 
 @Module({
@@ -58,6 +59,7 @@ export class DrizzleModule {}
     InstrumentsRepository,
     RenewalTariffsRepository,
     PaymentTransactionsRepository,
+    BotsRepository,
   ],
   exports: [
     // Export the database client for direct access if needed
@@ -76,6 +78,7 @@ export class DrizzleModule {}
     InstrumentsRepository,
     RenewalTariffsRepository,
     PaymentTransactionsRepository,
+    BotsRepository,
   ],
 })
 export class DbModule {}

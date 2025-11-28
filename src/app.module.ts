@@ -3,7 +3,12 @@ import { WebhookController } from './webhook.controller';
 import { TelegrafModule } from '@quantumdeal/telegraf';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { BotModule, BotName, UserManagementMiddleware } from '@quantumdeal/bot';
+import {
+  BotModule,
+  BotName,
+  UserManagementMiddleware,
+  DynamicBotConfigService,
+} from '@quantumdeal/bot';
 import { ManagersMiddleware, MasterbotModule } from '@quantumdeal/masterbot';
 import { DbModule, OrdersRepository } from '@quantumdeal/db';
 import { FrameworkModule, SentryModule } from '@quantumdeal/framework';
@@ -74,6 +79,15 @@ export const sessionMiddleware = session();
           path: '/masterbot',
         },
       }),
+    }),
+
+    // Dynamic bots loaded from database
+    TelegrafModule.forRootDynamic({
+      botConfigProvider: DynamicBotConfigService,
+      sharedHandlerModules: [BotModule],
+      webhookDomain: process.env.TELEGRAM_BOT_WEBHOOK_DOMAIN ?? '',
+      imports: [DbModule, ConfigModule, BotModule],
+      globalMiddlewares: [sessionMiddleware],
     }),
   ],
   controllers: [WebhookController],
