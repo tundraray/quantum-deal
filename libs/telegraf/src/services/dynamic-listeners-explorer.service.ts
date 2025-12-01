@@ -115,9 +115,9 @@ export class DynamicListenersExplorerService extends BaseExplorerService {
     const updates = this.flatMap<InstanceWrapper>(modules, (instance) =>
       this.filterUpdates(instance),
     );
-
     for (const wrapper of updates) {
       // Check for bot-specific handler targeting
+
       const targetBotId = this.metadataAccessor.getBotTargetMetadata(
         wrapper.metatype as MetadataTarget,
       );
@@ -131,7 +131,7 @@ export class DynamicListenersExplorerService extends BaseExplorerService {
       if (!this.shouldRegisterHandler(wrapper, settings)) {
         continue;
       }
-
+      this.logger.debug(`Registering update for bot ID ${botId}`);
       this.registerListeners(bot, wrapper);
     }
   }

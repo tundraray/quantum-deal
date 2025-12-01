@@ -112,6 +112,7 @@
       "^@quantumdeal/db(|/.*)$": "<rootDir>/libs/db/src/$1",
       "^@quantumdeal/framework(|/.*)$": "<rootDir>/libs/framework/src/$1",
       "^@quantumdeal/masterbot(|/.*)$": "<rootDir>/libs/masterbot/src/$1",
+      "^@quantumdeal/partner-bot(|/.*)$": "<rootDir>/libs/partner-bot/src/$1",
       "^@quantumdeal/telegraf(|/.*)$": "<rootDir>/libs/telegraf/src/$1"
     }
   },
