@@ -138,6 +138,93 @@ export class SubscriptionsRepository extends BaseRepository<
   }
 
   /**
+   * Find subscriptions for a specific bot and sector.
+   * Used by MultiBotSignalService for per-bot signal delivery (ADR-007).
+   *
+   * @param sector - Signal sector (e.g., 'crypto', 'forex')
+   * @param botId - Database bot ID (null for static bot QuantumDealBot)
+   * @returns Array of user-subscription pairs for the specified bot
+   */
+  async findBySectorForBot(
+    sector: string,
+    botId: number | null,
+  ): Promise<SubscriptionWithFeatures[]> {
+    // Alias for tier-based filtering join
+    const sfTier = subscriptionFeatures;
+
+    const result = await this.db
+      .select({
+        // Subscription fields
+        subscriptionId: subscriptions.id,
+        subscriptionName: subscriptions.name,
+        subscriptionIsActive: subscriptions.isActive,
+
+        // Feature flag: hasCustomFiltering (using subquery)
+        hasCustomFiltering: sql<boolean>`
+          COALESCE(
+            (SELECT sf_custom.is_enabled
+             FROM ${subscriptionFeatures} sf_custom
+             WHERE sf_custom.subscription_id = ${subscriptions.id}
+             AND sf_custom.feature_key = 'custom_user_filtering'
+             AND sf_custom.is_enabled = true
+            ), false
+          )
+        `,
+
+        // User fields
+        userId: users.telegramId,
+        userTelegramId: sql<string>`CAST(${users.telegramId} AS TEXT)`,
+        userFirstName: users.firstName,
+        userLastName: users.lastName,
+        userUsername: users.username,
+        userLang: users.lang,
+
+        // UserSubscription fields
+        userSubscriptionId: userSubscriptions.id,
+        userSubscriptionActivatedAt: userSubscriptions.activatedAt,
+        userSubscriptionExpiresAt: userSubscriptions.expiresAt,
+        userSubscriptionEndDate: userSubscriptions.expiresAt,
+        userSubscriptionIsActive: userSubscriptions.isActive,
+      })
+      .from(subscriptions)
+      .innerJoin(
+        sfTier,
+        and(
+          eq(sfTier.subscriptionId, subscriptions.id),
+          eq(sfTier.featureKey, 'tier_based_filtering'),
+        ),
+      )
+      .innerJoin(
+        userSubscriptions,
+        and(
+          eq(userSubscriptions.subscriptionId, subscriptions.id),
+          eq(userSubscriptions.isActive, true),
+          // Bot-specific filter: match botId or IS NULL for static bot
+          botId === null
+            ? sql`${userSubscriptions.botId} IS NULL`
+            : eq(userSubscriptions.botId, botId),
+        ),
+      )
+      .innerJoin(users, eq(users.telegramId, userSubscriptions.userId))
+      .where(
+        and(
+          // Sector filter with wildcard support
+          sql`(
+            ${sfTier.config}::jsonb->'sectors' ? ${sector}
+            OR
+            ${sfTier.config}::jsonb->'sectors' ? '*'
+          )`,
+          eq(sfTier.isEnabled, true),
+          eq(subscriptions.isActive, true),
+          // Only active, non-expired subscriptions
+          sql`${userSubscriptions.expiresAt} > NOW()`,
+        ),
+      );
+
+    return result as SubscriptionWithFeatures[];
+  }
+
+  /**
    * Find all active broadcast subscriptions
    * CRITICAL: Filters by type LIKE 'subscription_%'
    *
