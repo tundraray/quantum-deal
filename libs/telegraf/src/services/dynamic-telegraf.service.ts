@@ -19,6 +19,7 @@ import {
   type TelegrafDynamicModuleOptions,
 } from '../interfaces';
 import { DYNAMIC_TELEGRAF_MODULE_OPTIONS } from '../telegraf.constants';
+import { DynamicListenersExplorerService } from './dynamic-listeners-explorer.service';
 
 /**
  * DynamicTelegrafService
@@ -70,7 +71,7 @@ export class DynamicTelegrafService
     private readonly options: TelegrafDynamicModuleOptions,
     @Inject(BOT_CONFIGURATION_PROVIDER)
     private readonly botConfigProvider: BotConfigurationProvider,
-    // DynamicListenersExplorerService will be added in Phase 3
+    private readonly listenersExplorer: DynamicListenersExplorerService,
   ) {}
 
   /**
@@ -216,6 +217,9 @@ export class DynamicTelegrafService
       // Apply stage middleware (must be after global and factory middlewares)
       bot.use(stage.middleware());
 
+      // Register shared handlers from handler modules
+      this.listenersExplorer.registerHandlers(bot, id, stage, settings ?? null);
+
       // Setup global error handler
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       bot.catch((err: unknown, _ctx) => {
@@ -232,6 +236,9 @@ export class DynamicTelegrafService
       limiter.on('error', (error) => {
         this.logger.error(`Bottleneck error for bot "${name}":`, error);
       });
+
+      // Setup webhook with Telegram API
+      await this.setupWebhook(bot, webhookPath, name);
 
       // Store bot instance in registry
       const instance: DynamicBotInstance = {
@@ -266,19 +273,37 @@ export class DynamicTelegrafService
   /**
    * Setup webhook for a bot.
    *
+   * Constructs the full webhook URL from webhookDomain + webhookPath
+   * and configures it with Telegram via setWebhook API.
+   *
+   * Error handling is non-blocking - failures are logged but don't prevent
+   * bot initialization. This allows manual webhook setup as a fallback.
+   *
    * @param bot - Telegraf instance
    * @param webhookPath - Unique webhook path for the bot
    * @param botName - Bot name for logging
    */
-  private setupWebhook(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private async setupWebhook(
     bot: Telegraf<Context>,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     webhookPath: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     botName: string,
   ): Promise<void> {
-    return Promise.reject(new Error('Not implemented'));
+    try {
+      const webhookUrl = `${this.options.webhookDomain}${webhookPath}`;
+      this.logger.debug(`Setting webhook for bot "${botName}": ${webhookUrl}`);
+
+      await bot.telegram.setWebhook(webhookUrl);
+
+      this.logger.log(`Webhook configured for bot "${botName}": ${webhookUrl}`);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Failed to setup webhook for bot "${botName}": ${errorMessage}`,
+      );
+      // Non-blocking: don't throw, allow bot to continue initialization
+      // Manual webhook setup can be performed if needed
+    }
   }
 
   /**
@@ -318,6 +343,7 @@ export class DynamicTelegrafService
    */
   async handleUpdate(webhookPath: string, update: Update): Promise<boolean> {
     const botId = this.webhookPathIndex.get(webhookPath);
+    this.logger.debug(`Handling update for webhook path: ${webhookPath}`);
 
     if (botId === undefined) {
       this.logger.warn(`No bot found for webhook path: ${webhookPath}`);

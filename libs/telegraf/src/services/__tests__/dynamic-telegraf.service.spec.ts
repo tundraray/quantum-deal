@@ -82,6 +82,9 @@ describe('DynamicTelegrafService Unit Tests', () => {
   let mockBotConfigProvider: {
     loadDynamicBots: jest.Mock;
   };
+  let mockListenersExplorer: {
+    registerHandlers: jest.Mock;
+  };
   let mockOptions: TelegrafDynamicModuleOptions;
 
   beforeEach(() => {
@@ -106,6 +109,10 @@ describe('DynamicTelegrafService Unit Tests', () => {
       loadDynamicBots: jest.fn(),
     };
 
+    mockListenersExplorer = {
+      registerHandlers: jest.fn(),
+    };
+
     mockOptions = {
       botConfigProvider:
         {} as TelegrafDynamicModuleOptions['botConfigProvider'],
@@ -117,6 +124,7 @@ describe('DynamicTelegrafService Unit Tests', () => {
     service = new DynamicTelegrafService(
       mockOptions,
       mockBotConfigProvider as BotConfigurationProvider,
+      mockListenersExplorer as any,
     );
   });
 
@@ -383,6 +391,7 @@ describe('DynamicTelegrafService Unit Tests', () => {
       service = new DynamicTelegrafService(
         mockOptions,
         mockBotConfigProvider as BotConfigurationProvider,
+        mockListenersExplorer as any,
       );
 
       const mockConfigs: DynamicBotConfig[] = [
@@ -417,6 +426,7 @@ describe('DynamicTelegrafService Unit Tests', () => {
       service = new DynamicTelegrafService(
         mockOptions,
         mockBotConfigProvider as BotConfigurationProvider,
+        mockListenersExplorer as any,
       );
 
       const mockConfigs: DynamicBotConfig[] = [
