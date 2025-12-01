@@ -99,8 +99,11 @@ export class ListenersExplorerService
     );
     const sceneIds: string[] = [];
     scenes.forEach((wrapper) => {
+      const instance = wrapper.instance as {
+        constructor: new (...args: unknown[]) => unknown;
+      };
       const sceneMetadata = this.metadataAccessor.getSceneMetadata(
-        wrapper.instance.constructor,
+        instance.constructor,
       );
       if (!sceneMetadata) {
         return;
@@ -111,15 +114,19 @@ export class ListenersExplorerService
       }
       sceneIds.push(sceneId);
 
-      const scene =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const scene: Scenes.BaseScene<any> | Scenes.WizardScene<any> =
         type === 'base'
-          ? new Scenes.BaseScene<any>(sceneId, options || ({} as any))
-          : new Scenes.WizardScene<any>(sceneId, options || ({} as any));
+          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            new Scenes.BaseScene<any>(sceneId, options || ({} as any))
+          : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            new Scenes.WizardScene<any>(sceneId, options || ({} as any));
       this.stage.register(scene);
 
       if (type === 'base') {
         this.registerListeners(scene, wrapper);
       } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         this.registerWizardListeners(scene as Scenes.WizardScene<any>, wrapper);
       }
     });
@@ -128,11 +135,11 @@ export class ListenersExplorerService
   private filterComposers(
     wrapper: InstanceWrapper,
   ): InstanceWrapper<unknown> | undefined {
-    const { instance } = wrapper;
+    const instance = wrapper.instance as object | null;
     if (!instance) return undefined;
 
     const isComposer = this.metadataAccessor.isComposer(
-      wrapper.metatype as Function,
+      wrapper.metatype as (...args: unknown[]) => unknown,
     );
     if (!isComposer) return undefined;
 
@@ -142,11 +149,11 @@ export class ListenersExplorerService
   private filterUpdates(
     wrapper: InstanceWrapper,
   ): InstanceWrapper<unknown> | undefined {
-    const { instance } = wrapper;
+    const instance = wrapper.instance as object | null;
     if (!instance) return undefined;
 
     const isUpdate = this.metadataAccessor.isUpdate(
-      wrapper.metatype as Function,
+      wrapper.metatype as (...args: unknown[]) => unknown,
     );
     if (!isUpdate) return undefined;
 
@@ -156,32 +163,41 @@ export class ListenersExplorerService
   private filterScenes(
     wrapper: InstanceWrapper,
   ): InstanceWrapper<unknown> | undefined {
-    const { instance } = wrapper;
+    const instance = wrapper.instance as object | null;
     if (!instance) return undefined;
 
-    const isScene = this.metadataAccessor.isScene(wrapper.metatype as Function);
+    const isScene = this.metadataAccessor.isScene(
+      wrapper.metatype as (...args: unknown[]) => unknown,
+    );
     if (!isScene) return undefined;
 
     return wrapper;
   }
 
   private registerListeners(
-    composer: Composer<any>,
+    composer: Composer<Context>,
     wrapper: InstanceWrapper<unknown>,
   ): void {
-    const { instance } = wrapper;
-    const prototype = Object.getPrototypeOf(instance);
+    const instance = wrapper.instance as Record<string, unknown>;
+    const prototype = Object.getPrototypeOf(instance) as Record<
+      string,
+      unknown
+    >;
     this.metadataScanner.scanFromPrototype(instance, prototype, (name) =>
       this.registerIfListener(composer, instance, prototype, name),
     );
   }
 
   private registerWizardListeners(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     wizard: Scenes.WizardScene<any>,
     wrapper: InstanceWrapper<unknown>,
   ): void {
-    const { instance } = wrapper;
-    const prototype = Object.getPrototypeOf(instance);
+    const instance = wrapper.instance as Record<string, unknown>;
+    const prototype = Object.getPrototypeOf(instance) as Record<
+      string,
+      unknown
+    >;
 
     type WizardMetadata = { step: number; methodName: string };
     const wizardSteps: WizardMetadata[] = [];
@@ -191,7 +207,9 @@ export class ListenersExplorerService
       instance,
       prototype,
       (methodName) => {
-        const methodRef = prototype[methodName];
+        const methodRef = prototype[methodName] as (
+          ...args: unknown[]
+        ) => unknown;
         const metadata = this.metadataAccessor.getWizardStepMetadata(methodRef);
         if (!metadata) {
           basicListeners.push(methodName);
@@ -231,13 +249,13 @@ export class ListenersExplorerService
   }
 
   private registerIfListener(
-    composer: Composer<any>,
-    instance: any,
-    prototype: any,
+    composer: Composer<Context>,
+    instance: Record<string, unknown>,
+    prototype: Record<string, unknown>,
     methodName: string,
     defaultMetadata?: ListenerMetadata[],
   ): void {
-    const methodRef = prototype[methodName];
+    const methodRef = prototype[methodName] as (...args: unknown[]) => unknown;
     const metadata =
       this.metadataAccessor.getListenerMetadata(methodRef) || defaultMetadata;
     if (!metadata || metadata.length < 1) {
@@ -255,12 +273,18 @@ export class ListenersExplorerService
       // composer[method](...args, listenerCallbackFn);
 
       /* Complex callback return value handing */
-      composer[method](
+      const composerMethod = composer[method as keyof typeof composer] as (
+        ...composeArgs: unknown[]
+      ) => void;
+      composerMethod.call(
+        composer,
         ...args,
-        async (ctx: Context, next: Function): Promise<void> => {
-          const result = await listenerCallbackFn(ctx, next);
-          if (result) {
-            await ctx.reply(String(result));
+        async (ctx: Context, next: () => Promise<void>): Promise<void> => {
+          const result = (await listenerCallbackFn(ctx, next)) as unknown;
+          if (result !== undefined && result !== null) {
+            const message =
+              typeof result === 'string' ? result : JSON.stringify(result);
+            await ctx.reply(message);
           }
           // TODO-Possible-Feature: Add more supported return types
         },

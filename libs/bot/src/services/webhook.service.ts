@@ -16,6 +16,7 @@ import {
   QueuedMessageType,
 } from '../interfaces/notification.interface';
 import { NotificationService } from './notification.service';
+import { MultiBotSignalService } from './multi-bot-signal.service';
 
 @Injectable()
 export class WebhookProcessorService {
@@ -27,6 +28,7 @@ export class WebhookProcessorService {
     private readonly messagesRepository: MessagesRepository,
     private readonly notificationService: NotificationService,
     private readonly userSubscriptionFeaturesRepository: UserSubscriptionFeaturesRepository,
+    private readonly multiBotSignalService: MultiBotSignalService,
   ) {}
 
   /**
@@ -60,7 +62,20 @@ export class WebhookProcessorService {
   }
 
   /**
-   * Main method to send notifications for order events
+   * Main method to send notifications for order events.
+   * Routes signal delivery through MultiBotSignalService for multi-bot broadcasting.
+   *
+   * @param order - The order data with all required fields
+   * @param eventType - The signal event type (open, close_plus, close_minus, etc.)
+   * @returns Notification result with backward-compatible format
+   *
+   * @remarks
+   * This method delegates to MultiBotSignalService.broadcastSignal() which:
+   * - Delivers signals to ALL active bots with signalsEnabled=true
+   * - Uses per-bot rate limiting (28 msg/sec each)
+   * - Applies custom filtering per user
+   * - Processes all bots in parallel (AC-002)
+   * - Provides fault isolation per bot (AC-006)
    */
   async sendOrderNotifications(
     order: MergedOrder,
@@ -71,56 +86,33 @@ export class WebhookProcessorService {
         `Processing ${eventType} notification for order ${order.ticketId} (${order.symbol})`,
       );
 
-      // Step 1: Get eligible users for this order's sector
-      const eligibleUsers = await this.getEligibleUsers(order);
-
-      if (eligibleUsers.length === 0) {
-        this.logger.debug(
-          `No eligible users found for sector: ${order.sector || 'unknown'}`,
-        );
-        return {
-          success: true,
-          sentCount: 0,
-          failedCount: 0,
-          retryCount: 0,
-          errors: [],
-          processedIds: [],
-        };
-      }
-
-      this.logger.debug(
-        `Found ${eligibleUsers.length} eligible users for notification`,
-      );
-
-      // Step 2: Prepare messages for each user
-      const preparedMessages = await this.prepareMessages(
-        eligibleUsers,
-        eventType,
+      // Route through MultiBotSignalService for multi-bot delivery
+      const broadcastResult = await this.multiBotSignalService.broadcastSignal(
         order,
+        eventType,
       );
-
-      if (preparedMessages.length === 0) {
-        this.logger.warn(
-          `No message templates found for event type: ${eventType}`,
-        );
-        return {
-          success: true,
-          sentCount: 0,
-          failedCount: 0,
-          retryCount: 0,
-          errors: [],
-          processedIds: [],
-        };
-      }
-
-      // Step 3: Send notifications with high priority (webhook notifications)
-      const result = this.sendNotifications(preparedMessages);
 
       this.logger.log(
-        `Notification batch completed: ${result.sentCount} sent, ${result.failedCount} failed`,
+        `Multi-bot notification complete: ${broadcastResult.totalSent} sent, ` +
+          `${broadcastResult.totalFailed} failed across ${broadcastResult.botsProcessed} bots ` +
+          `[${broadcastResult.totalDurationMs}ms]`,
       );
 
-      return result;
+      // Convert BroadcastResult to NotificationResult for backward compatibility
+      return {
+        success: broadcastResult.success,
+        sentCount: broadcastResult.totalSent,
+        failedCount: broadcastResult.totalFailed,
+        retryCount: 0, // Handled internally by NotificationService
+        errors: broadcastResult.perBotResults
+          .filter((r) => !r.success && r.error)
+          .map((r) => ({
+            telegramId: 0, // Bot-level error, not user-level
+            error: `Bot ${r.botName}: ${r.error}`,
+            retry: false,
+          })),
+        processedIds: [], // Individual message IDs not exposed at this level
+      };
     } catch (error) {
       const err = error as Error;
       this.logger.error(
