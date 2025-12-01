@@ -80,5 +80,5 @@ export interface MultiBotSignal {
    *
    * @returns Number of signal-capable bots
    */
-  getEligibleBotCount(): Promise<number>;
+  getEligibleBotCount(): number;
 }

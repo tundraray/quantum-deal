@@ -31,6 +31,7 @@ import { BotCommandsService } from './services/bot-commands.service';
 import { BotInitService } from './services/bot-init.service';
 import { DynamicBotConfigService } from './services/dynamic-bot-config.service';
 import { BotRegistryService } from './services/bot-registry.service';
+import { MultiBotSignalService } from './services/multi-bot-signal.service';
 import { TrialService } from './services/trial.service';
 import { StatisticsRefreshService } from './services/statistics-refresh.service';
 import { OnboardingService } from './services/onboarding.service';
@@ -92,6 +93,9 @@ import { RenewalAction } from './actions/renewal/renewal.action';
     // Bot registry (ADR-007: Multi-bot signal broadcasting)
     BotRegistryService,
 
+    // Multi-bot signal broadcasting (ADR-007)
+    MultiBotSignalService,
+
     // Trial services
     TrialService,
 
@@ -149,6 +153,9 @@ import { RenewalAction } from './actions/renewal/renewal.action';
 
     // Bot registry (ADR-007: Multi-bot signal broadcasting)
     BotRegistryService,
+
+    // Multi-bot signal broadcasting (ADR-007)
+    MultiBotSignalService,
 
     // Trial services
     TrialService,

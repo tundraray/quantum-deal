@@ -4,6 +4,7 @@ export * from './services/week-report.service';
 export * from './services/notification.service';
 export * from './services/dynamic-bot-config.service';
 export * from './services/bot-registry.service';
+export * from './services/multi-bot-signal.service';
 export * from './constants';
 export * from './middleware';
 export * from './interfaces';
