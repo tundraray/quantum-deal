@@ -1,6 +1,7 @@
 import type { ModuleMetadata, Type, Abstract } from '@nestjs/common/interfaces';
 import type { Context, Middleware, Telegraf } from 'telegraf';
 import type { Scenes } from 'telegraf';
+import type Bottleneck from 'bottleneck';
 
 /** Type for module class references */
 type ModuleClass = new (...args: unknown[]) => unknown;
@@ -188,6 +189,8 @@ export interface DynamicBotInstance {
   settings: BotSettings | null;
   /** Telegram bot username (populated after getMe()) */
   username: string;
+  /** Per-bot rate limiter for signal delivery (ADR-007) */
+  limiter: Bottleneck;
 }
 
 /**

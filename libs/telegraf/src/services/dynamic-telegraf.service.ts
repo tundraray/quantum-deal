@@ -8,6 +8,7 @@ import {
 import { Scenes, Telegraf } from 'telegraf';
 import type { Context } from 'telegraf';
 import type { Update } from 'telegraf/types';
+import Bottleneck from 'bottleneck';
 import {
   BOT_CONFIGURATION_PROVIDER,
   type BotConfigurationProvider,
@@ -53,6 +54,15 @@ export class DynamicTelegrafService
     successful: 0,
     failed: 0,
     bots: [],
+  };
+
+  /** Bottleneck configuration for per-bot rate limiting (ADR-007) */
+  private readonly bottleneckConfig = {
+    maxConcurrent: 4,
+    minTime: 30,
+    reservoir: 28,
+    reservoirRefreshAmount: 28,
+    reservoirRefreshInterval: 1000,
   };
 
   constructor(
@@ -217,6 +227,12 @@ export class DynamicTelegrafService
         );
       });
 
+      // Create per-bot rate limiter (ADR-007)
+      const limiter = new Bottleneck(this.bottleneckConfig);
+      limiter.on('error', (error) => {
+        this.logger.error(`Bottleneck error for bot "${name}":`, error);
+      });
+
       // Store bot instance in registry
       const instance: DynamicBotInstance = {
         botId: id,
@@ -226,6 +242,7 @@ export class DynamicTelegrafService
         webhookPath,
         settings: settings ?? null,
         username,
+        limiter,
       };
 
       this.bots.set(id, instance);
@@ -275,13 +292,14 @@ export class DynamicTelegrafService
     instance: DynamicBotInstance,
   ): Promise<void> {
     try {
+      // Stop the rate limiter (ADR-007)
+      await instance.limiter.stop({ dropWaitingJobs: false });
       await instance.bot.telegram.deleteWebhook();
-      this.logger.debug(`Webhook deleted for bot "${instance.name}"`);
-    } catch (error) {
-      this.logger.error(
-        `Error deleting webhook for bot "${instance.name}":`,
-        error,
+      this.logger.debug(
+        `Bot "${instance.name}" stopped (webhook deleted, limiter stopped)`,
       );
+    } catch (error) {
+      this.logger.error(`Error stopping bot "${instance.name}":`, error);
       throw error; // Re-throw for Promise.allSettled to catch
     }
   }

@@ -23,7 +23,9 @@ const mockBotCatch = jest.fn();
 const mockBotHandleUpdate = jest.fn();
 
 jest.mock('telegraf', () => {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const originalModule = jest.requireActual('telegraf');
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   return {
     ...originalModule,
     Telegraf: jest.fn().mockImplementation(() => ({
@@ -33,6 +35,17 @@ jest.mock('telegraf', () => {
       handleUpdate: mockBotHandleUpdate,
     })),
   };
+});
+
+// Mock Bottleneck for rate limiting tests (ADR-007)
+const mockLimiterOn = jest.fn();
+const mockLimiterStop = jest.fn().mockResolvedValue(undefined);
+
+jest.mock('bottleneck', () => {
+  return jest.fn().mockImplementation(() => ({
+    on: mockLimiterOn,
+    stop: mockLimiterStop,
+  }));
 });
 
 /**
@@ -73,6 +86,10 @@ describe('DynamicTelegrafService Unit Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Reset Bottleneck mocks
+    mockLimiterOn.mockClear();
+    mockLimiterStop.mockClear().mockResolvedValue(undefined);
 
     // Setup default mock responses
     mockTelegram.getMe.mockResolvedValue({
@@ -533,6 +550,30 @@ describe('DynamicTelegrafService Unit Tests', () => {
       // Assert - Error handler should be registered via bot.catch()
       expect(mockBotCatch).toHaveBeenCalled();
     });
+
+    it('creates Bottleneck limiter for each bot (ADR-007)', async () => {
+      // Arrange
+      const mockConfigs: DynamicBotConfig[] = [
+        {
+          id: 1,
+          name: 'TestBot',
+          token: '123:abc',
+          webhookPath: '/dynamic/bot1',
+          isActive: true,
+          username: 'testbot',
+          settings: null,
+        },
+      ];
+      mockBotConfigProvider.loadDynamicBots.mockResolvedValue(mockConfigs);
+
+      // Act
+      await service.onModuleInit();
+
+      // Assert - Limiter should be created and error handler registered
+      const instance = service.getBotInstance(1);
+      expect(instance?.limiter).toBeDefined();
+      expect(mockLimiterOn).toHaveBeenCalledWith('error', expect.any(Function));
+    });
   });
 
   // =============================================================================
@@ -911,6 +952,39 @@ describe('DynamicTelegrafService Unit Tests', () => {
 
       // Assert
       expect(mockTelegram.deleteWebhook).toHaveBeenCalledTimes(2); // For 2 bots
+    });
+
+    it('stops Bottleneck limiters for all bots on shutdown (ADR-007)', async () => {
+      // Arrange
+      const mockConfigs: DynamicBotConfig[] = [
+        {
+          id: 1,
+          name: 'Bot1',
+          token: '123:abc',
+          webhookPath: '/dynamic/bot1',
+          isActive: true,
+          username: 'bot1',
+          settings: null,
+        },
+        {
+          id: 2,
+          name: 'Bot2',
+          token: '456:def',
+          webhookPath: '/dynamic/bot2',
+          isActive: true,
+          username: 'bot2',
+          settings: null,
+        },
+      ];
+      mockBotConfigProvider.loadDynamicBots.mockResolvedValue(mockConfigs);
+      await service.onModuleInit();
+
+      // Act
+      await service.onApplicationShutdown('SIGTERM');
+
+      // Assert - Limiter.stop() should be called for each bot with dropWaitingJobs: false
+      expect(mockLimiterStop).toHaveBeenCalledTimes(2);
+      expect(mockLimiterStop).toHaveBeenCalledWith({ dropWaitingJobs: false });
     });
 
     it('clears bot registry on shutdown', async () => {
