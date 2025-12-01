@@ -5,7 +5,7 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { InjectBot } from '@quantumdeal/telegraf';
-import { Telegraf } from 'telegraf';
+import { Telegraf, Context } from 'telegraf';
 import Bottleneck from 'bottleneck';
 import { v4 as uuidv4 } from 'uuid';
 import * as Sentry from '@sentry/nestjs';
@@ -21,6 +21,13 @@ import {
 } from '../interfaces/notification.interface';
 import type { UserContext } from '../interfaces';
 import { UsersRepository } from '@quantumdeal/db';
+
+/**
+ * Type alias for bot instances that can send messages.
+ * Works with both static bot (Telegraf<UserContext>) and dynamic bots (Telegraf<Context>).
+ * Both have compatible .telegram.sendMessage() methods.
+ */
+type TelegrafInstance = Telegraf<UserContext> | Telegraf<Context>;
 
 /**
  * Production-ready notification service with rate limiting
@@ -165,6 +172,81 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       `Batch queued: ${result.queuedCount} messages, ${result.errorCount} errors`,
     );
     return result;
+  }
+
+  /**
+   * Schedule a message using a specific bot instance and limiter.
+   * Used by MultiBotSignalService for per-bot signal delivery (ADR-007).
+   *
+   * NOTE: This method coexists with addMessage() - it does NOT replace it.
+   * addMessage() continues to use the injected static bot.
+   * sendWithBot() uses the provided bot parameter.
+   *
+   * @param bot - Telegraf bot instance to send from (accepts both UserContext and Context types)
+   * @param limiter - Per-bot Bottleneck rate limiter
+   * @param userId - Telegram user ID
+   * @param message - Message content
+   * @param options - Message options (type, priority, retries)
+   * @returns Message ID for tracking
+   */
+  sendWithBot(
+    bot: TelegrafInstance,
+    limiter: Bottleneck,
+    userId: number,
+    message: string,
+    options: MessageOptions = {},
+  ): string {
+    try {
+      const messageId = uuidv4();
+      const queuedMessage: QueuedMessage = {
+        id: messageId,
+        userId,
+        message,
+        messageType: options.messageType ?? QueuedMessageType.TEXT,
+        priority: options.priority ?? MessagePriority.NORMAL,
+        status: QueueMessageStatus.PENDING,
+        retryCount: 0,
+        maxRetries: options.maxRetries ?? 3,
+        createdAt: new Date(),
+        scheduledAt: options.scheduledAt,
+        metadata: options.metadata,
+        buttons: options.buttons,
+      };
+
+      // Schedule with provided limiter (not internal limiter)
+      const bottleneckPriority = this.convertToBotleneckPriority(
+        queuedMessage.priority,
+      );
+
+      limiter
+        .schedule({ priority: bottleneckPriority }, () =>
+          this.processMessageWithBot(bot, queuedMessage),
+        )
+        .catch((error) => {
+          this.logger.error(`Failed to schedule message ${messageId}:`, error);
+          Sentry.captureException(error, {
+            tags: {
+              service: 'notification',
+              messageId,
+              userId: userId.toString(),
+            },
+          });
+        });
+
+      this.messageStats.totalScheduled++;
+
+      this.logger.debug(
+        `Message scheduled via external bot for user ${userId}`,
+      );
+
+      return messageId;
+    } catch (error) {
+      this.logger.error('Error scheduling message with bot', error);
+      Sentry.captureException(error, {
+        tags: { userId, service: 'notification' },
+      });
+      throw error;
+    }
   }
 
   /**
@@ -439,6 +521,91 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
     }
 
     await this.bot.telegram.sendMessage(message.userId, messageText, {
+      parse_mode: parseMode,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      reply_markup:
+        message.buttons && message.buttons.length > 0
+          ? ({
+              inline_keyboard: message.buttons,
+            } as any)
+          : undefined,
+    });
+  }
+
+  /**
+   * Process a message with a specific bot instance.
+   * Includes error handling and stats tracking for per-bot delivery.
+   * Used by sendWithBot() for multi-bot signal broadcasting (ADR-007).
+   */
+  private async processMessageWithBot(
+    bot: TelegrafInstance,
+    message: QueuedMessage,
+  ): Promise<void> {
+    try {
+      message.status = QueueMessageStatus.PROCESSING;
+      message.processedAt = new Date();
+
+      await this.sendTelegramMessageWithBot(bot, message);
+
+      message.status = QueueMessageStatus.SENT;
+      this.messageStats.successCount++;
+    } catch (error) {
+      this.logger.error(
+        `Error sending message ${message.id} to user ${message.userId}:`,
+        error,
+      );
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const isPermanentError = this.isPermanentError(errorMessage);
+
+      if (!isPermanentError && message.retryCount < message.maxRetries) {
+        message.retryCount++;
+        message.status = QueueMessageStatus.RETRY;
+        this.messageStats.retryCount++;
+        // Rethrow for Bottleneck retry handling
+        throw error;
+      } else {
+        message.status = QueueMessageStatus.FAILED;
+        message.error = errorMessage;
+        this.messageStats.failureCount++;
+
+        if (isPermanentError) {
+          await this.usersRepository.deactivateUser(message.userId);
+        }
+
+        Sentry.captureException(error, {
+          tags: {
+            service: 'notification',
+            userId: message.userId.toString(),
+            messageId: message.id,
+          },
+        });
+
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Send message via specific Telegram bot instance.
+   * Used by processMessageWithBot() for per-bot delivery (ADR-007).
+   */
+  private async sendTelegramMessageWithBot(
+    bot: TelegrafInstance,
+    message: QueuedMessage,
+  ): Promise<void> {
+    let messageText = message.message;
+    let parseMode: 'HTML' | 'MarkdownV2' | undefined;
+
+    if (message.messageType === QueuedMessageType.HTML) {
+      parseMode = 'HTML';
+    } else if (message.messageType === QueuedMessageType.MARKDOWN) {
+      parseMode = 'MarkdownV2';
+      messageText = telegramifyMarkdown(messageText, 'remove');
+    }
+
+    await bot.telegram.sendMessage(message.userId, messageText, {
       parse_mode: parseMode,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       reply_markup:
