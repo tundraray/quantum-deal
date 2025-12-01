@@ -41,7 +41,7 @@ export interface BotRegistry {
    *
    * @returns Array of signal-capable bots (static + dynamic)
    */
-  getSignalCapableBots(): Promise<SignalCapableBot[]>;
+  getSignalCapableBots(): SignalCapableBot[];
 
   /**
    * Get a specific bot by ID.
