@@ -14,24 +14,24 @@ Review `SubscriptionExpirationService` to verify it works correctly with the new
 3. User information is obtained through joins, not direct `userId` queries
 
 ## Target Files
-- [ ] `libs/bot/src/services/subscription-expiration.service.ts` (review only)
+- [x] `libs/bot/src/services/subscription-expiration.service.ts` (review only)
 
 ## Implementation Steps
 
 ### 1. Verify Current Implementation
-- [ ] Review `processExpirationDay` method
-- [ ] Confirm `findExpiring(daysFromNow, 'signals')` still works
-- [ ] Verify user data is obtained through joins (not direct userId lookup)
+- [x] Review `processExpirationDay` method
+- [x] Confirm `findExpiring(daysFromNow, 'signals')` still works
+- [x] Verify user data is obtained through joins (not direct userId lookup)
 
 ### 2. Verify Queries Work
-- [ ] `findExpiring()` joins `user_subscriptions` -> `users` via `user_subscriptions.userId = users.telegramId`
-- [ ] This join pattern still works because `userId` column is preserved (deprecated but functional)
-- [ ] Future optimization: Could add optional `botUserId` filtering for per-bot expiration checks
+- [x] `findExpiring()` joins `user_subscriptions` -> `users` via `user_subscriptions.userId = users.telegramId`
+- [x] This join pattern still works because `userId` column is preserved (deprecated but functional)
+- [x] Future optimization: Could add optional `botUserId` filtering for per-bot expiration checks
 
 ### 3. Verify Notification Flow
-- [ ] User language is obtained from `user.lang` (via join)
-- [ ] `userSubscriptionId` and `subscriptionId` are obtained from query results
-- [ ] No direct `userId` queries that would need updating
+- [x] User language is obtained from `user.lang` (via join)
+- [x] `userSubscriptionId` and `subscriptionId` are obtained from query results
+- [x] No direct `userId` queries that would need updating
 
 ## Current Implementation Analysis
 
@@ -62,10 +62,10 @@ In a future iteration, consider adding `botUserId` to the expiration notificatio
 For now, the global expiration check behavior is acceptable as it queries ALL subscriptions regardless of bot.
 
 ## Completion Criteria
-- [ ] Verified `findExpiring()` method uses joins correctly
-- [ ] Verified no direct `userId` queries that need updating
-- [ ] **AC-4.3**: `SubscriptionExpirationService` queries work correctly (no changes needed)
-- [ ] Build passes: `npm run build`
+- [x] Verified `findExpiring()` method uses joins correctly
+- [x] Verified no direct `userId` queries that need updating
+- [x] **AC-4.3**: `SubscriptionExpirationService` queries work correctly (no changes needed)
+- [x] Build passes: `npm run build`
 
 ## Verification Commands
 ```bash

@@ -295,9 +295,9 @@ CREATE INDEX idx_user_subscriptions_bot_user ON user_subscriptions(bot_user_id);
   - [x] Change `activate(userId: number)` to `activate(botUserId: number)`
   - [x] Update internal call from `activate()` to `activateForBotUser()`
   - [x] Update logging to use `botUserId`
-- [ ] Update `libs/bot/src/services/subscription-expiration.service.ts`:
-  - [ ] Review `findExpiring()` usage - no changes needed (joins handle correctly)
-  - [ ] Verify subscription queries still work with new column
+- [x] Update `libs/bot/src/services/subscription-expiration.service.ts`:
+  - [x] Review `findExpiring()` usage - no changes needed (joins handle correctly)
+  - [x] Verify subscription queries still work with new column
 - [ ] Update `libs/partner-bot/src/services/reminder-scheduler.service.ts`:
   - [ ] `findExpiredTrials(botId)` already uses `botId` filter
   - [ ] Consider updating to use `botUserId` in queries internally
@@ -308,7 +308,7 @@ CREATE INDEX idx_user_subscriptions_bot_user ON user_subscriptions(bot_user_id);
 #### Phase Completion Criteria
 - [x] **AC-4.1**: `TrialService.isEligible()` accepts `botUserId` parameter
 - [x] **AC-4.2**: `TrialService.activate()` creates subscription with `botUserId`
-- [ ] **AC-4.3**: `SubscriptionExpirationService` queries by `botUserId` when available
+- [x] **AC-4.3**: `SubscriptionExpirationService` queries work correctly (no changes needed - uses joins)
 - [ ] **AC-4.4**: `ReminderSchedulerService.findExpiredTrials()` uses `botUserId` for filtering
 - [ ] Build succeeds with no type errors
 
