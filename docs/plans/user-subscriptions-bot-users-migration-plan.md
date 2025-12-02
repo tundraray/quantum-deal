@@ -330,10 +330,10 @@ CREATE INDEX idx_user_subscriptions_bot_user ON user_subscriptions(bot_user_id);
 **Verification Level**: L1 (Functional Operation)
 
 #### Tasks
-- [ ] Update `libs/bot/src/middleware/user-management.middleware.ts`:
-  - [ ] Ensure `botUser` is loaded before subscription queries
-  - [ ] Change subscription query from `findActiveByUserIdWithSubscription(telegramId)` to `findActiveByBotUserIdWithSubscription(botUserId)`
-  - [ ] Attach `botUser.id` to context for downstream use
+- [x] Update `libs/bot/src/middleware/user-management.middleware.ts`:
+  - [x] Ensure `botUser` is loaded before subscription queries
+  - [x] Change subscription query from `findActiveByUserIdWithSubscription(telegramId)` to `findActiveByBotUserIdWithSubscription(botUserId)`
+  - [x] Attach `botUser.id` to context for downstream use
 - [ ] Update `libs/partner-bot/src/middleware/user-management.middleware.ts`:
   - [ ] Same changes as bot middleware
   - [ ] Ensure `botUser` is properly resolved via `BotUsersRepository`

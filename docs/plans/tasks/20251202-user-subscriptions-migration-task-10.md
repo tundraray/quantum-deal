@@ -15,7 +15,7 @@ Update the main bot's `UserManagementMiddleware` to:
 **Key Understanding**: This middleware needs access to `botUser.id` (auto-generated internal ID) for subscription queries, not just `user.telegramId`.
 
 ## Target Files
-- [ ] `libs/bot/src/middleware/user-management.middleware.ts`
+- [x] `libs/bot/src/middleware/user-management.middleware.ts`
 
 ## Implementation Steps
 
@@ -34,8 +34,8 @@ const subscriptions = await this.userSubscriptionsRepository.findActiveByUserIdW
 ### 2. Update Implementation
 
 #### Add BotUsersRepository Dependency
-- [ ] Import `BotUsersRepository` from `@quantumdeal/db`
-- [ ] Add to constructor injection
+- [x] Import `BotUsersRepository` from `@quantumdeal/db`
+- [x] Add to constructor injection
 
 ```typescript
 import {
@@ -56,8 +56,8 @@ constructor(
 ```
 
 #### Update `loadUserWithSubscriptions` Method
-- [ ] Resolve `botUser` first (need `botId` from context)
-- [ ] Use `findActiveByBotUserIdWithSubscription(botUserId)` instead of `findActiveByUserIdWithSubscription(userId)`
+- [x] Resolve `botUser` first (need `botId` from context)
+- [x] Use `findActiveByBotUserIdWithSubscription(botUserId)` instead of `findActiveByUserIdWithSubscription(userId)`
 
 **Challenge**: The main bot middleware may not have `botId` in context easily. Options:
 1. Get `botId` from environment config (main bot ID)
@@ -69,9 +69,9 @@ constructor(
 - If multi-bot deployment: Need to resolve `botId` and `botUser`
 
 ### 3. Conditional Update Based on Context
-- [ ] Check if `botId` is available in context
-- [ ] If available: Use `botUserId` flow
-- [ ] If not available: Fall back to `userId` flow (with deprecation warning)
+- [x] Check if `botId` is available in context
+- [x] If available: Use `botUserId` flow
+- [x] If not available: Fall back to `userId` flow (with deprecation warning)
 
 ```typescript
 private async loadUserWithSubscriptions(user: {...}, ctx: Context): Promise<UserWithSubscriptions> {
@@ -103,8 +103,8 @@ private async loadUserWithSubscriptions(user: {...}, ctx: Context): Promise<User
 ```
 
 ### 4. Update Context Types (If Needed)
-- [ ] Ensure `UserContext` interface includes optional `botUser` property
-- [ ] Or add to existing context type
+- [x] Ensure `UserContext` interface includes optional `botUser` property (cast during assignment)
+- [x] Or add to existing context type (used inline cast: `ctx as UserContext & { botUser?: BotUser }`)
 
 ## Alternative: Simple Update for Single-Bot Deployment
 If main bot is always single-bot deployment:
@@ -127,12 +127,12 @@ private async loadUserWithSubscriptions(user: {...}): Promise<UserWithSubscripti
 ```
 
 ## Completion Criteria
-- [ ] Middleware resolves `botUser` from `BotUsersRepository`
-- [ ] Subscription queries use `findActiveByBotUserIdWithSubscription(botUserId)`
-- [ ] `botUser` attached to context (if applicable)
-- [ ] Build passes: `npm run build`
-- [ ] **AC-5.1**: Bot middleware passes `botUser.id` to subscription operations
-- [ ] **AC-5.2**: Context includes `botUser` with valid `id`
+- [x] Middleware resolves `botUser` from `BotUsersRepository`
+- [x] Subscription queries use `findActiveByBotUserIdWithSubscription(botUserId)`
+- [x] `botUser` attached to context (if applicable)
+- [x] Build passes: `npm run build`
+- [x] **AC-5.1**: Bot middleware passes `botUser.id` to subscription operations
+- [x] **AC-5.2**: Context includes `botUser` with valid `id`
 
 ## Verification Commands
 ```bash
