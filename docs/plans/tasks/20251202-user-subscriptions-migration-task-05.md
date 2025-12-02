@@ -10,7 +10,7 @@ Metadata:
 Add `@deprecated` JSDoc annotations to all existing repository methods that use `userId` parameter. This marks them for future removal while maintaining backward compatibility during the transition period.
 
 ## Target Files
-- [ ] `libs/db/src/repositories/user-subscriptions.repository.ts`
+- [x] `libs/db/src/repositories/user-subscriptions.repository.ts`
 
 ## Implementation Steps
 
@@ -26,7 +26,7 @@ Methods using `userId` parameter that now have `botUserId` equivalents:
 - `deactivate(userId, subscriptionId)` -> `deactivateForBotUser(botUserId, subscriptionId)`
 
 ### 2. Add Deprecation Annotations
-- [ ] Add `@deprecated` JSDoc to `findByUserId`:
+- [x] Add `@deprecated` JSDoc to `findByUserId`:
   ```typescript
   /**
    * Find all subscriptions for a specific user
@@ -38,7 +38,7 @@ Methods using `userId` parameter that now have `botUserId` equivalents:
    */
   ```
 
-- [ ] Add `@deprecated` JSDoc to `findActiveByUserId`:
+- [x] Add `@deprecated` JSDoc to `findActiveByUserId`:
   ```typescript
   /**
    * Find all active subscriptions for a specific user
@@ -49,7 +49,7 @@ Methods using `userId` parameter that now have `botUserId` equivalents:
    */
   ```
 
-- [ ] Add `@deprecated` JSDoc to `findByUserAndSubscription`:
+- [x] Add `@deprecated` JSDoc to `findByUserAndSubscription`:
   ```typescript
   /**
    * Find user subscription by user ID and subscription ID
@@ -61,7 +61,7 @@ Methods using `userId` parameter that now have `botUserId` equivalents:
    */
   ```
 
-- [ ] Add `@deprecated` JSDoc to `findActiveByUserIdWithSubscription`:
+- [x] Add `@deprecated` JSDoc to `findActiveByUserIdWithSubscription`:
   ```typescript
   /**
    * Find active user subscriptions with full subscription details
@@ -72,7 +72,7 @@ Methods using `userId` parameter that now have `botUserId` equivalents:
    */
   ```
 
-- [ ] Add `@deprecated` JSDoc to `isUserSubscribed`:
+- [x] Add `@deprecated` JSDoc to `isUserSubscribed`:
   ```typescript
   /**
    * Check if a user is subscribed to a specific subscription
@@ -84,7 +84,7 @@ Methods using `userId` parameter that now have `botUserId` equivalents:
    */
   ```
 
-- [ ] Add `@deprecated` JSDoc to `hasActiveSubscription`:
+- [x] Add `@deprecated` JSDoc to `hasActiveSubscription`:
   ```typescript
   /**
    * Check if a user has an active subscription to a specific subscription
@@ -96,7 +96,7 @@ Methods using `userId` parameter that now have `botUserId` equivalents:
    */
   ```
 
-- [ ] Add `@deprecated` JSDoc to `activate`:
+- [x] Add `@deprecated` JSDoc to `activate`:
   ```typescript
   /**
    * Activate a subscription for a user
@@ -109,7 +109,7 @@ Methods using `userId` parameter that now have `botUserId` equivalents:
    */
   ```
 
-- [ ] Add `@deprecated` JSDoc to `deactivate`:
+- [x] Add `@deprecated` JSDoc to `deactivate`:
   ```typescript
   /**
    * Deactivate a user's subscription (soft delete)
@@ -122,16 +122,16 @@ Methods using `userId` parameter that now have `botUserId` equivalents:
   ```
 
 ### 3. Verify Deprecation Warnings
-- [ ] Build project and verify deprecation warnings appear when methods are called
-- [ ] Ensure existing tests still pass (methods should remain functional)
+- [x] Build project and verify deprecation warnings appear when methods are called
+- [x] Ensure existing tests still pass (methods should remain functional)
 
 ## Completion Criteria
-- [ ] All 8 methods have `@deprecated` JSDoc annotations
-- [ ] Deprecation annotations reference the new `botUserId` method names
-- [ ] Existing functionality preserved (backward compatibility)
-- [ ] Build passes: `npm run build`
-- [ ] Existing tests pass: `npm test`
-- [ ] **AC-3.5**: Existing methods with `userId` parameter are deprecated with warnings
+- [x] All 8 methods have `@deprecated` JSDoc annotations
+- [x] Deprecation annotations reference the new `botUserId` method names
+- [x] Existing functionality preserved (backward compatibility)
+- [x] Build passes: `npm run build`
+- [x] Existing tests pass: `npm test`
+- [x] **AC-3.5**: Existing methods with `userId` parameter are deprecated with warnings
 
 ## Verification Commands
 ```bash

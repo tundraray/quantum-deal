@@ -40,6 +40,9 @@ export class UserSubscriptionsRepository extends BaseRepository<
    * Find all subscriptions for a specific user
    * @param userId - The user's Telegram ID
    * @returns Array of user subscriptions
+   * @deprecated Use findByBotUserId(botUserId) instead.
+   * This method queries by users.telegramId which is being replaced by bot_users.id.
+   * Will be removed in future migration after validation period.
    */
   async findByUserId(userId: number): Promise<UserSubscription[]> {
     return this.findBy(eq(this.table.userId, userId));
@@ -49,6 +52,8 @@ export class UserSubscriptionsRepository extends BaseRepository<
    * Find all active subscriptions for a specific user
    * @param userId - The user's Telegram ID
    * @returns Array of active user subscriptions
+   * @deprecated Use findActiveByBotUserId(botUserId) instead.
+   * Will be removed in future migration after validation period.
    */
   async findActiveByUserId(userId: number): Promise<UserSubscription[]> {
     return this.findBy(
@@ -66,6 +71,8 @@ export class UserSubscriptionsRepository extends BaseRepository<
    * @param userId - The user's Telegram ID
    * @param subscriptionId - The subscription ID
    * @returns User subscription or null if not found
+   * @deprecated Use findByBotUserAndSubscription(botUserId, subscriptionId) instead.
+   * Will be removed in future migration after validation period.
    */
   async findByUserAndSubscription(
     userId: number,
@@ -85,6 +92,8 @@ export class UserSubscriptionsRepository extends BaseRepository<
    * Returns joined data: userSubscription + subscription
    * @param userId - The user's Telegram ID
    * @returns Array of objects containing userSubscription and subscription
+   * @deprecated Use findActiveByBotUserIdWithSubscription(botUserId) instead.
+   * Will be removed in future migration after validation period.
    */
   async findActiveByUserIdWithSubscription(userId: number): Promise<
     Array<{
@@ -129,6 +138,8 @@ export class UserSubscriptionsRepository extends BaseRepository<
    * @param userId - The user's Telegram ID
    * @param subscriptionId - The subscription ID
    * @returns true if the user is subscribed (active or inactive)
+   * @deprecated Use isBotUserSubscribed(botUserId, subscriptionId) instead.
+   * Will be removed in future migration after validation period.
    */
   async isUserSubscribed(
     userId: number,
@@ -148,6 +159,8 @@ export class UserSubscriptionsRepository extends BaseRepository<
    * @param userId - The user's Telegram ID
    * @param subscriptionId - The subscription ID
    * @returns true if the user has an active subscription
+   * @deprecated Use hasActiveSubscriptionByBotUser(botUserId, subscriptionId) instead.
+   * Will be removed in future migration after validation period.
    */
   async hasActiveSubscription(
     userId: number,
@@ -176,6 +189,8 @@ export class UserSubscriptionsRepository extends BaseRepository<
    * @param subscriptionId - The subscription ID
    * @param expiresAt - Optional expiration date (typically 30 days from now for new codes)
    * @returns The created or updated user subscription
+   * @deprecated Use activateForBotUser(botUserId, subscriptionId, expiresAt) instead.
+   * Will be removed in future migration after validation period.
    */
   async activate(
     userId: number,
@@ -252,6 +267,8 @@ export class UserSubscriptionsRepository extends BaseRepository<
    * @param userId - The user's Telegram ID
    * @param subscriptionId - The subscription ID
    * @returns void
+   * @deprecated Use deactivateForBotUser(botUserId, subscriptionId) instead.
+   * Will be removed in future migration after validation period.
    */
   async deactivate(userId: number, subscriptionId: number): Promise<void> {
     await this.db
