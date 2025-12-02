@@ -159,14 +159,14 @@ graph LR
 
 #### Tasks
 - [x] Generate migration via `pnpm drizzle-kit generate`
-- [ ] Enhance generated migration SQL with:
-  - [ ] Phase 1: Add nullable `bot_user_id` column
-  - [ ] Phase 2: Create missing `bot_users` records for orphaned subscriptions
-  - [ ] Phase 3: Populate `bot_user_id` from existing `bot_users` records
-  - [ ] Phase 4: Add FK constraint
-  - [ ] Phase 5: Create index
-  - [ ] Phase 6: Make column NOT NULL (conditional, after verification)
-- [ ] Add prerequisite check comment for seed migration `20251126200000_seed_default_bot.sql`
+- [x] Enhance generated migration SQL with:
+  - [x] Phase 1: Add nullable `bot_user_id` column
+  - [x] Phase 2: Create missing `bot_users` records for orphaned subscriptions
+  - [x] Phase 3: Populate `bot_user_id` from existing `bot_users` records
+  - [x] Phase 4: Add FK constraint
+  - [x] Phase 5: Create index
+  - [x] Phase 6: Make column NOT NULL (conditional, after verification)
+- [x] Add prerequisite check comment for seed migration `20251126200000_seed_default_bot.sql`
 - [ ] Test migration on development database
 
 #### Migration SQL Template
@@ -446,7 +446,7 @@ After validation period (1-2 weeks post-deployment):
 ### Phase 2: Migration SQL Execution
 - Start: 2025-12-03
 - Complete: In Progress
-- Notes: Migration file generated: `20251202221748_elite_piledriver.sql`. Task 02 (generate migration) completed. Task 03 (enhance migration) pending.
+- Notes: Migration file generated: `20251202221748_elite_piledriver.sql`. Task 02 (generate migration) completed. Task 03 (enhance migration) completed - added phased structure with orphan handling, data population, and verification queries.
 
 ### Phase 3: Repository Updates
 - Start: YYYY-MM-DD HH:MM

@@ -16,21 +16,21 @@ Enhance the drizzle-kit generated migration SQL to include:
 **Critical Constraint**: This task modifies the migration SQL file. Do NOT execute `drizzle-kit migrate`.
 
 ## Target Files
-- [ ] `libs/db/migrations/[timestamp]_user_subscriptions_bot_user_id.sql` (modify)
+- [x] `libs/db/migrations/20251202221748_elite_piledriver.sql` (modify)
 
 ## Implementation Steps
 
 ### 1. Verify Prerequisites
-- [ ] Task 02 completed (migration SQL generated)
-- [ ] Note the migration file path from Task 02
+- [x] Task 02 completed (migration SQL generated)
+- [x] Note the migration file path from Task 02
 
 ### 2. Restructure Migration SQL
-- [ ] Open the generated migration file
-- [ ] Restructure into phased approach with comments
-- [ ] Ensure FK constraint is added AFTER data population
+- [x] Open the generated migration file
+- [x] Restructure into phased approach with comments
+- [x] Ensure FK constraint is added AFTER data population
 
 ### 3. Add Orphan Handling
-- [ ] Add SQL to create missing `bot_users` records:
+- [x] Add SQL to create missing `bot_users` records:
   ```sql
   -- Phase 2: Create missing bot_users for orphaned subscriptions
   INSERT INTO bot_users (user_id, bot_id, is_active, created_at, updated_at)
@@ -41,7 +41,7 @@ Enhance the drizzle-kit generated migration SQL to include:
   ```
 
 ### 4. Add Data Population
-- [ ] Add SQL to populate `bot_user_id` from existing records:
+- [x] Add SQL to populate `bot_user_id` from existing records:
   ```sql
   -- Phase 3: Populate bot_user_id from bot_users
   UPDATE user_subscriptions us
@@ -51,7 +51,7 @@ Enhance the drizzle-kit generated migration SQL to include:
   ```
 
 ### 5. Add Prerequisite Comment
-- [ ] Add comment at top of file documenting prerequisite seed migration
+- [x] Add comment at top of file documenting prerequisite seed migration
 
 ## Expected Final Migration SQL
 
@@ -104,17 +104,17 @@ ON "user_subscriptions" USING btree ("bot_user_id");
 ```
 
 ## Completion Criteria
-- [ ] Migration SQL has phased structure with comments
-- [ ] Orphan handling SQL added (create missing `bot_users`)
-- [ ] Data population SQL added (populate `bot_user_id`)
-- [ ] Prerequisite comment added at top of file
-- [ ] FK constraint added AFTER data population
-- [ ] Verification queries included as comments
-- [ ] **AC-2.1**: Migration handles all existing subscriptions
-- [ ] **AC-2.2**: Orphaned subscriptions get `bot_users` records created
-- [ ] **AC-2.3**: `botUserId` mapping logic is correct
-- [ ] **AC-2.4**: Migration is idempotent (CREATE INDEX IF NOT EXISTS)
-- [ ] **AC-2.5**: Prerequisite seed migration documented
+- [x] Migration SQL has phased structure with comments
+- [x] Orphan handling SQL added (create missing `bot_users`)
+- [x] Data population SQL added (populate `bot_user_id`)
+- [x] Prerequisite comment added at top of file
+- [x] FK constraint added AFTER data population
+- [x] Verification queries included as comments
+- [x] **AC-2.1**: Migration handles all existing subscriptions
+- [x] **AC-2.2**: Orphaned subscriptions get `bot_users` records created
+- [x] **AC-2.3**: `botUserId` mapping logic is correct
+- [x] **AC-2.4**: Migration is idempotent (CREATE INDEX IF NOT EXISTS)
+- [x] **AC-2.5**: Prerequisite seed migration documented
 
 ## Verification (Manual by User)
 After user runs `drizzle-kit migrate`:
