@@ -5,20 +5,39 @@ import { userSubscriptions } from '../../schema/user-subscriptions';
 import { users } from '../../schema/users';
 import { subscriptions } from '../../schema/subscriptions';
 
+interface MockDb {
+  select: jest.Mock;
+  from: jest.Mock;
+  innerJoin: jest.Mock;
+  where: jest.Mock;
+  execute: jest.Mock;
+  update: jest.Mock;
+  set: jest.Mock;
+  returning: jest.Mock;
+  insert: jest.Mock;
+  values: jest.Mock;
+  limit: jest.Mock;
+  leftJoin: jest.Mock;
+}
+
 describe('UserSubscriptionsRepository', () => {
   let repository: UserSubscriptionsRepository;
-  let mockDb: any;
+  let mockDb: MockDb;
 
   beforeEach(async () => {
     mockDb = {
       select: jest.fn().mockReturnThis(),
       from: jest.fn().mockReturnThis(),
       innerJoin: jest.fn().mockReturnThis(),
+      leftJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       execute: jest.fn(),
       update: jest.fn().mockReturnThis(),
       set: jest.fn().mockReturnThis(),
       returning: jest.fn(),
+      insert: jest.fn().mockReturnThis(),
+      values: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -130,6 +149,302 @@ describe('UserSubscriptionsRepository', () => {
       const result = await repository.findExpiredTrials(botId);
 
       expect(result[0].user.lang).toBe('es');
+    });
+  });
+
+  describe('botUserId methods', () => {
+    describe('findByBotUserId', () => {
+      it('should return all subscriptions for a specific bot user', async () => {
+        const botUserId = 1;
+        const mockSubscriptions = [
+          { id: 1, botUserId: 1, subscriptionId: 1, isActive: true },
+          { id: 2, botUserId: 1, subscriptionId: 2, isActive: false },
+        ];
+        mockDb.where.mockResolvedValue(mockSubscriptions);
+
+        const result = await repository.findByBotUserId(botUserId);
+
+        expect(result).toEqual(mockSubscriptions);
+        expect(result).toHaveLength(2);
+      });
+
+      it('should return empty array when no subscriptions exist', async () => {
+        const botUserId = 999;
+        mockDb.where.mockResolvedValue([]);
+
+        const result = await repository.findByBotUserId(botUserId);
+
+        expect(result).toEqual([]);
+      });
+    });
+
+    describe('findActiveByBotUserId', () => {
+      it('should return only active non-expired subscriptions for a bot user', async () => {
+        const botUserId = 1;
+        const mockActiveSubscriptions = [
+          {
+            id: 1,
+            botUserId: 1,
+            subscriptionId: 1,
+            isActive: true,
+            expiresAt: new Date('2026-01-01'),
+          },
+        ];
+        mockDb.where.mockResolvedValue(mockActiveSubscriptions);
+
+        const result = await repository.findActiveByBotUserId(botUserId);
+
+        expect(result).toEqual(mockActiveSubscriptions);
+        expect(result[0].isActive).toBe(true);
+      });
+
+      it('should return empty array when no active subscriptions exist', async () => {
+        const botUserId = 1;
+        mockDb.where.mockResolvedValue([]);
+
+        const result = await repository.findActiveByBotUserId(botUserId);
+
+        expect(result).toEqual([]);
+      });
+    });
+
+    describe('findByBotUserAndSubscription', () => {
+      it('should return subscription for specific bot user and subscription ID', async () => {
+        const botUserId = 1;
+        const subscriptionId = 1;
+        const mockSubscription = {
+          id: 1,
+          botUserId: 1,
+          subscriptionId: 1,
+          isActive: true,
+        };
+        mockDb.where.mockResolvedValue([mockSubscription]);
+
+        const result = await repository.findByBotUserAndSubscription(
+          botUserId,
+          subscriptionId,
+        );
+
+        expect(result).toEqual(mockSubscription);
+      });
+
+      it('should return null when subscription not found', async () => {
+        const botUserId = 1;
+        const subscriptionId = 999;
+        mockDb.where.mockResolvedValue([]);
+
+        const result = await repository.findByBotUserAndSubscription(
+          botUserId,
+          subscriptionId,
+        );
+
+        expect(result).toBeNull();
+      });
+    });
+
+    describe('findActiveByBotUserIdWithSubscription', () => {
+      it('should return active subscriptions with full subscription details', async () => {
+        const botUserId = 1;
+        const mockResult = [
+          {
+            userSubscription: {
+              id: 1,
+              botUserId: 1,
+              subscriptionId: 1,
+              isActive: true,
+            },
+            subscription: {
+              id: 1,
+              name: 'Test Subscription',
+              type: 'signals',
+            },
+          },
+        ];
+        mockDb.where.mockResolvedValue(mockResult);
+
+        const result =
+          await repository.findActiveByBotUserIdWithSubscription(botUserId);
+
+        expect(result).toEqual(mockResult);
+        expect(mockDb.select).toHaveBeenCalledWith({
+          userSubscription: userSubscriptions,
+          subscription: subscriptions,
+        });
+        expect(mockDb.innerJoin).toHaveBeenCalled();
+      });
+
+      it('should return empty array when no active subscriptions', async () => {
+        const botUserId = 1;
+        mockDb.where.mockResolvedValue([]);
+
+        const result =
+          await repository.findActiveByBotUserIdWithSubscription(botUserId);
+
+        expect(result).toEqual([]);
+      });
+    });
+
+    describe('isBotUserSubscribed', () => {
+      it('should return true when bot user has subscription (active or inactive)', async () => {
+        const botUserId = 1;
+        const subscriptionId = 1;
+        const mockSubscription = { id: 1, botUserId: 1, subscriptionId: 1 };
+        // findOneBy uses select().from().where().limit() chain
+        mockDb.where.mockReturnThis();
+        mockDb.limit.mockResolvedValue([mockSubscription]);
+
+        const result = await repository.isBotUserSubscribed(
+          botUserId,
+          subscriptionId,
+        );
+
+        expect(result).toBe(true);
+      });
+
+      it('should return false when bot user has no subscription', async () => {
+        const botUserId = 1;
+        const subscriptionId = 999;
+        // findOneBy uses select().from().where().limit() chain
+        mockDb.where.mockReturnThis();
+        mockDb.limit.mockResolvedValue([]);
+
+        const result = await repository.isBotUserSubscribed(
+          botUserId,
+          subscriptionId,
+        );
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('hasActiveSubscriptionByBotUser', () => {
+      it('should return true when bot user has active subscription', async () => {
+        const botUserId = 1;
+        const subscriptionId = 1;
+        const mockActiveSubscription = {
+          id: 1,
+          botUserId: 1,
+          subscriptionId: 1,
+          isActive: true,
+        };
+        // findOneBy uses select().from().where().limit() chain
+        mockDb.where.mockReturnThis();
+        mockDb.limit.mockResolvedValue([mockActiveSubscription]);
+
+        const result = await repository.hasActiveSubscriptionByBotUser(
+          botUserId,
+          subscriptionId,
+        );
+
+        expect(result).toBe(true);
+      });
+
+      it('should return false when bot user has no active subscription', async () => {
+        const botUserId = 1;
+        const subscriptionId = 1;
+        // findOneBy uses select().from().where().limit() chain
+        mockDb.where.mockReturnThis();
+        mockDb.limit.mockResolvedValue([]);
+
+        const result = await repository.hasActiveSubscriptionByBotUser(
+          botUserId,
+          subscriptionId,
+        );
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('activateForBotUser', () => {
+      it('should create new subscription with botUserId when none exists', async () => {
+        const botUserId = 1;
+        const subscriptionId = 1;
+        const userId = 123456789; // telegramId from bot_users
+        const botId = 1;
+        const expiresAt = new Date('2025-12-31');
+        const mockNewSubscription = {
+          id: 1,
+          botUserId: 1,
+          userId,
+          botId,
+          subscriptionId: 1,
+          expiresAt,
+          isActive: true,
+        };
+        const mockBotUser = { userId, botId };
+
+        // findOneBy returns null (no existing subscription)
+        // uses select().from().where().limit() chain
+        mockDb.where.mockReturnThis();
+        mockDb.limit
+          .mockResolvedValueOnce([]) // findOneBy returns no existing subscription
+          .mockResolvedValueOnce([mockBotUser]); // bot_users lookup returns the bot user
+        // create returns new subscription via insert().values().returning()
+        mockDb.values.mockReturnThis();
+        mockDb.returning.mockResolvedValue([mockNewSubscription]);
+
+        const result = await repository.activateForBotUser(
+          botUserId,
+          subscriptionId,
+          expiresAt,
+        );
+
+        expect(result.botUserId).toBe(botUserId);
+        expect(result.isActive).toBe(true);
+      });
+
+      it('should extend existing active subscription for bot user', async () => {
+        const botUserId = 1;
+        const subscriptionId = 1;
+        const existingExpiry = new Date();
+        existingExpiry.setDate(existingExpiry.getDate() + 10); // expires in 10 days
+        const newExpiry = new Date();
+        newExpiry.setDate(newExpiry.getDate() + 30); // add 30 days
+
+        const existingSubscription = {
+          id: 1,
+          botUserId: 1,
+          subscriptionId: 1,
+          expiresAt: existingExpiry,
+          isActive: true,
+        };
+        const extendedSubscription = {
+          ...existingSubscription,
+          expiresAt: new Date(
+            existingExpiry.getTime() + 30 * 24 * 60 * 60 * 1000,
+          ),
+        };
+
+        // findOneBy returns existing subscription
+        // uses select().from().where().limit() chain
+        mockDb.where.mockReturnThis();
+        mockDb.limit.mockResolvedValueOnce([existingSubscription]);
+        // update returns extended subscription via update().set().where().returning()
+        mockDb.returning.mockResolvedValue([extendedSubscription]);
+
+        const result = await repository.activateForBotUser(
+          botUserId,
+          subscriptionId,
+          newExpiry,
+        );
+
+        expect(result.botUserId).toBe(botUserId);
+        expect(result.isActive).toBe(true);
+        expect(mockDb.update).toHaveBeenCalled();
+      });
+    });
+
+    describe('deactivateForBotUser', () => {
+      it('should deactivate subscription for bot user', async () => {
+        const botUserId = 1;
+        const subscriptionId = 1;
+        mockDb.returning.mockResolvedValue([]);
+
+        await repository.deactivateForBotUser(botUserId, subscriptionId);
+
+        expect(mockDb.update).toHaveBeenCalledWith(userSubscriptions);
+        expect(mockDb.set).toHaveBeenCalledWith({ isActive: false });
+      });
     });
   });
 });

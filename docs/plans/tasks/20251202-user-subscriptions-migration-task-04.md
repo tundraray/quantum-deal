@@ -12,31 +12,31 @@ Add new repository methods to `UserSubscriptionsRepository` that use `botUserId`
 **Key Understanding**: `botUserId` is `bot_users.id` (auto-generated internal ID), NOT `telegramId`.
 
 ## Target Files
-- [ ] `libs/db/src/repositories/user-subscriptions.repository.ts`
-- [ ] `libs/db/src/repositories/__tests__/user-subscriptions.repository.spec.ts`
+- [x] `libs/db/src/repositories/user-subscriptions.repository.ts`
+- [x] `libs/db/src/repositories/__tests__/user-subscriptions.repository.spec.ts`
 
 ## Implementation Steps (TDD: Red-Green-Refactor)
 
 ### 1. Red Phase - Write Failing Tests First
-- [ ] Add test for `findByBotUserId(botUserId: number)`
-- [ ] Add test for `findActiveByBotUserId(botUserId: number)`
-- [ ] Add test for `findByBotUserAndSubscription(botUserId: number, subscriptionId: number)`
-- [ ] Add test for `findActiveByBotUserIdWithSubscription(botUserId: number)`
-- [ ] Add test for `isBotUserSubscribed(botUserId: number, subscriptionId: number)`
-- [ ] Add test for `hasActiveSubscriptionByBotUser(botUserId: number, subscriptionId: number)`
-- [ ] Add test for `activateForBotUser(botUserId: number, subscriptionId: number, expiresAt?: Date)`
-- [ ] Add test for `deactivateForBotUser(botUserId: number, subscriptionId: number)`
-- [ ] Run tests and confirm they fail
+- [x] Add test for `findByBotUserId(botUserId: number)`
+- [x] Add test for `findActiveByBotUserId(botUserId: number)`
+- [x] Add test for `findByBotUserAndSubscription(botUserId: number, subscriptionId: number)`
+- [x] Add test for `findActiveByBotUserIdWithSubscription(botUserId: number)`
+- [x] Add test for `isBotUserSubscribed(botUserId: number, subscriptionId: number)`
+- [x] Add test for `hasActiveSubscriptionByBotUser(botUserId: number, subscriptionId: number)`
+- [x] Add test for `activateForBotUser(botUserId: number, subscriptionId: number, expiresAt?: Date)`
+- [x] Add test for `deactivateForBotUser(botUserId: number, subscriptionId: number)`
+- [x] Run tests and confirm they fail
 
 ### 2. Green Phase - Implement Methods
-- [ ] Implement `findByBotUserId(botUserId: number)`:
+- [x] Implement `findByBotUserId(botUserId: number)`:
   ```typescript
   async findByBotUserId(botUserId: number): Promise<UserSubscription[]> {
     return this.findBy(eq(this.table.botUserId, botUserId));
   }
   ```
 
-- [ ] Implement `findActiveByBotUserId(botUserId: number)`:
+- [x] Implement `findActiveByBotUserId(botUserId: number)`:
   ```typescript
   async findActiveByBotUserId(botUserId: number): Promise<UserSubscription[]> {
     return this.findBy(
@@ -50,7 +50,7 @@ Add new repository methods to `UserSubscriptionsRepository` that use `botUserId`
   }
   ```
 
-- [ ] Implement `findByBotUserAndSubscription(botUserId: number, subscriptionId: number)`:
+- [x] Implement `findByBotUserAndSubscription(botUserId: number, subscriptionId: number)`:
   ```typescript
   async findByBotUserAndSubscription(
     botUserId: number,
@@ -66,7 +66,7 @@ Add new repository methods to `UserSubscriptionsRepository` that use `botUserId`
   }
   ```
 
-- [ ] Implement `findActiveByBotUserIdWithSubscription(botUserId: number)`:
+- [x] Implement `findActiveByBotUserIdWithSubscription(botUserId: number)`:
   ```typescript
   async findActiveByBotUserIdWithSubscription(botUserId: number): Promise<
     Array<{
@@ -87,7 +87,7 @@ Add new repository methods to `UserSubscriptionsRepository` that use `botUserId`
   }
   ```
 
-- [ ] Implement `isBotUserSubscribed(botUserId: number, subscriptionId: number)`:
+- [x] Implement `isBotUserSubscribed(botUserId: number, subscriptionId: number)`:
   ```typescript
   async isBotUserSubscribed(
     botUserId: number,
@@ -103,7 +103,7 @@ Add new repository methods to `UserSubscriptionsRepository` that use `botUserId`
   }
   ```
 
-- [ ] Implement `hasActiveSubscriptionByBotUser(botUserId: number, subscriptionId: number)`:
+- [x] Implement `hasActiveSubscriptionByBotUser(botUserId: number, subscriptionId: number)`:
   ```typescript
   async hasActiveSubscriptionByBotUser(
     botUserId: number,
@@ -120,7 +120,7 @@ Add new repository methods to `UserSubscriptionsRepository` that use `botUserId`
   }
   ```
 
-- [ ] Implement `activateForBotUser(botUserId: number, subscriptionId: number, expiresAt?: Date)`:
+- [x] Implement `activateForBotUser(botUserId: number, subscriptionId: number, expiresAt?: Date)`:
   ```typescript
   async activateForBotUser(
     botUserId: number,
@@ -164,7 +164,7 @@ Add new repository methods to `UserSubscriptionsRepository` that use `botUserId`
   }
   ```
 
-- [ ] Implement `deactivateForBotUser(botUserId: number, subscriptionId: number)`:
+- [x] Implement `deactivateForBotUser(botUserId: number, subscriptionId: number)`:
   ```typescript
   async deactivateForBotUser(botUserId: number, subscriptionId: number): Promise<void> {
     await this.db
@@ -179,13 +179,13 @@ Add new repository methods to `UserSubscriptionsRepository` that use `botUserId`
   }
   ```
 
-- [ ] Run tests and confirm they pass
+- [x] Run tests and confirm they pass
 
 ### 3. Refactor Phase
-- [ ] Extract common query patterns if any duplication
-- [ ] Add proper JSDoc comments to all new methods
-- [ ] Ensure consistent error handling patterns
-- [ ] Run lint and format checks
+- [x] Extract common query patterns if any duplication
+- [x] Add proper JSDoc comments to all new methods
+- [x] Ensure consistent error handling patterns
+- [x] Run lint and format checks
 
 ## Test Cases
 
@@ -234,12 +234,12 @@ describe('UserSubscriptionsRepository - botUserId methods', () => {
 ```
 
 ## Completion Criteria
-- [ ] All 8 new methods implemented
-- [ ] All tests pass: `npm test -- --testPathPattern=user-subscriptions.repository`
-- [ ] **AC-3.1**: `findByBotUserId(botUserId)` returns subscriptions for specific bot-user
-- [ ] **AC-3.2**: `findActiveByBotUserId(botUserId)` returns only active, non-expired subscriptions
-- [ ] **AC-3.3**: `activateForBotUser(botUserId, subscriptionId, expiresAt)` creates subscription with `botUserId`
-- [ ] Build passes: `npm run build`
+- [x] All 8 new methods implemented
+- [x] All tests pass: `npm test -- --testPathPattern=user-subscriptions.repository`
+- [x] **AC-3.1**: `findByBotUserId(botUserId)` returns subscriptions for specific bot-user
+- [x] **AC-3.2**: `findActiveByBotUserId(botUserId)` returns only active, non-expired subscriptions
+- [x] **AC-3.3**: `activateForBotUser(botUserId, subscriptionId, expiresAt)` creates subscription with `botUserId`
+- [x] Build passes: `npm run build`
 
 ## Verification Commands
 ```bash

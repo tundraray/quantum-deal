@@ -8,6 +8,7 @@ import {
 } from '../schema/user-subscriptions';
 import { users, User } from '../schema/users';
 import { subscriptions, Subscription } from '../schema/subscriptions';
+import { botUsers } from '../schema/bot-users';
 import { eq, and, sql, like } from 'drizzle-orm';
 
 /**
@@ -525,8 +526,8 @@ export class UserSubscriptionsRepository extends BaseRepository<
       .update(this.table)
       .set({
         expiresAt: sql`
-          CASE 
-            WHEN ${this.table.expiresAt} > NOW() 
+          CASE
+            WHEN ${this.table.expiresAt} > NOW()
             THEN ${this.table.expiresAt} + INTERVAL '${sql.raw(additionalDays.toString())} days'
             ELSE NOW() + INTERVAL '${sql.raw(additionalDays.toString())} days'
           END
@@ -537,5 +538,280 @@ export class UserSubscriptionsRepository extends BaseRepository<
       .returning();
 
     return result[0] || null;
+  }
+
+  /**
+   * Find expired trial subscriptions for reminder notifications
+   * Used by ReminderSchedulerService to send daily reminders
+   *
+   * @param botId - The bot ID to filter by
+   * @returns Array of objects containing user and userSubscription data
+   */
+  async findExpiredTrials(botId: number): Promise<
+    Array<{
+      user: User;
+      userSubscription: UserSubscription;
+    }>
+  > {
+    const now = new Date();
+    const result = await this.db
+      .select({
+        user: users,
+        userSubscription: this.table,
+      })
+      .from(this.table)
+      .innerJoin(users, eq(this.table.userId, users.telegramId))
+      .where(
+        and(
+          eq(this.table.botId, botId),
+          eq(this.table.isActive, false),
+          sql`${this.table.expiresAt} IS NOT NULL`,
+          sql`${this.table.expiresAt} < ${now}`,
+          eq(users.isActive, true),
+        ),
+      );
+
+    return result;
+  }
+
+  // ============================================================================
+  // botUserId Methods (New API - References bot_users.id)
+  // These methods use botUserId which is the internal auto-generated ID from
+  // the bot_users table, NOT the telegramId. This enables per-bot subscription
+  // isolation following the multi-bot architecture (ADR-004).
+  // ============================================================================
+
+  /**
+   * Find all subscriptions for a specific bot user
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
+   * @returns Array of user subscriptions for this bot user
+   */
+  async findByBotUserId(botUserId: number): Promise<UserSubscription[]> {
+    return this.findBy(eq(this.table.botUserId, botUserId));
+  }
+
+  /**
+   * Find all active (non-expired) subscriptions for a specific bot user
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
+   * @returns Array of active, non-expired user subscriptions
+   */
+  async findActiveByBotUserId(botUserId: number): Promise<UserSubscription[]> {
+    return this.findBy(
+      and(
+        eq(this.table.botUserId, botUserId),
+        eq(this.table.isActive, true),
+        sql`${this.table.expiresAt} IS NOT NULL`,
+        sql`${this.table.expiresAt} >= ${new Date()}`,
+      ),
+    );
+  }
+
+  /**
+   * Find user subscription by bot user ID and subscription ID
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
+   * @param subscriptionId - The subscription ID
+   * @returns User subscription or null if not found
+   */
+  async findByBotUserAndSubscription(
+    botUserId: number,
+    subscriptionId: number,
+  ): Promise<UserSubscription | null> {
+    const result = await this.findBy(
+      and(
+        eq(this.table.botUserId, botUserId),
+        eq(this.table.subscriptionId, subscriptionId),
+      ),
+    );
+    return result[0] ?? null;
+  }
+
+  /**
+   * Find active user subscriptions with full subscription details for a bot user
+   * Returns joined data: userSubscription + subscription
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
+   * @returns Array of objects containing userSubscription and subscription
+   */
+  async findActiveByBotUserIdWithSubscription(botUserId: number): Promise<
+    Array<{
+      userSubscription: UserSubscription;
+      subscription: Subscription;
+    }>
+  > {
+    const result = await this.db
+      .select({
+        userSubscription: this.table,
+        subscription: subscriptions,
+      })
+      .from(this.table)
+      .innerJoin(subscriptions, eq(this.table.subscriptionId, subscriptions.id))
+      .where(
+        and(eq(this.table.botUserId, botUserId), eq(this.table.isActive, true)),
+      );
+
+    return result;
+  }
+
+  /**
+   * Check if a bot user is subscribed to a specific subscription (active or inactive)
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
+   * @param subscriptionId - The subscription ID
+   * @returns true if the bot user has any subscription record
+   */
+  async isBotUserSubscribed(
+    botUserId: number,
+    subscriptionId: number,
+  ): Promise<boolean> {
+    const result = await this.findOneBy(
+      and(
+        eq(this.table.botUserId, botUserId),
+        eq(this.table.subscriptionId, subscriptionId),
+      ),
+    );
+    return result !== null;
+  }
+
+  /**
+   * Check if a bot user has an active subscription to a specific subscription
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
+   * @param subscriptionId - The subscription ID
+   * @returns true if the bot user has an active subscription
+   */
+  async hasActiveSubscriptionByBotUser(
+    botUserId: number,
+    subscriptionId: number,
+  ): Promise<boolean> {
+    const result = await this.findOneBy(
+      and(
+        eq(this.table.botUserId, botUserId),
+        eq(this.table.subscriptionId, subscriptionId),
+        eq(this.table.isActive, true),
+      ),
+    );
+    return result !== null;
+  }
+
+  /**
+   * Activate a subscription for a bot user
+   * - If subscription doesn't exist: create it with the provided expiration date
+   * - If subscription exists and is active (not expired): extend by adding days to current expiration
+   * - If subscription exists but is expired/inactive: reactivate with new expiration from now
+   *
+   * Note: During the transition period, this method looks up the userId (telegramId) from
+   * the bot_users table to satisfy the NOT NULL constraint on user_subscriptions.userId.
+   * This will be simplified once userId is removed in a future migration.
+   *
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
+   * @param subscriptionId - The subscription ID
+   * @param expiresAt - Optional expiration date (typically 30 days from now for new codes)
+   * @returns The created or updated user subscription
+   * @throws Error if botUserId doesn't correspond to a valid bot_users record
+   */
+  async activateForBotUser(
+    botUserId: number,
+    subscriptionId: number,
+    expiresAt?: Date,
+  ): Promise<UserSubscription> {
+    // Check if subscription already exists
+    const existing = await this.findOneBy(
+      and(
+        eq(this.table.botUserId, botUserId),
+        eq(this.table.subscriptionId, subscriptionId),
+      ),
+    );
+
+    if (existing) {
+      // Subscription exists - extend or reactivate it
+      let newExpiresAt: Date | undefined;
+
+      if (existing.expiresAt) {
+        const now = new Date();
+        const existingExpiry = new Date(existing.expiresAt);
+
+        if (existingExpiry > now && existing.isActive) {
+          // Active subscription - extend by adding days to current expiration
+          if (expiresAt) {
+            // Calculate days to add from the provided expiration date
+            const daysToAdd = Math.ceil(
+              (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+            );
+            newExpiresAt = new Date(existingExpiry);
+            newExpiresAt.setDate(newExpiresAt.getDate() + daysToAdd);
+          } else {
+            // No new expiration provided, keep existing
+            newExpiresAt = existing.expiresAt;
+          }
+        } else {
+          // Expired or inactive - use new expiration (start from now)
+          newExpiresAt = expiresAt ?? existing.expiresAt;
+        }
+      } else {
+        // No existing expiration - use new one
+        newExpiresAt = expiresAt;
+      }
+
+      const updated = await this.db
+        .update(this.table)
+        .set({
+          isActive: true,
+          expiresAt: newExpiresAt,
+          activatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(this.table.botUserId, botUserId),
+            eq(this.table.subscriptionId, subscriptionId),
+          ),
+        )
+        .returning();
+
+      return updated[0];
+    } else {
+      // Subscription doesn't exist - create it
+      // Look up userId (telegramId) from bot_users to satisfy the NOT NULL constraint
+      // This is needed during the transition period while userId is still required
+      const botUserResult = await this.db
+        .select({ userId: botUsers.userId, botId: botUsers.botId })
+        .from(botUsers)
+        .where(eq(botUsers.id, botUserId))
+        .limit(1);
+
+      if (!botUserResult[0]) {
+        throw new Error(
+          `Cannot create subscription: bot_users record not found for botUserId ${botUserId}`,
+        );
+      }
+
+      const { userId, botId } = botUserResult[0];
+
+      return this.create({
+        botUserId,
+        userId,
+        botId,
+        subscriptionId,
+        expiresAt,
+        isActive: true,
+      });
+    }
+  }
+
+  /**
+   * Deactivate a bot user's subscription (soft delete)
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
+   * @param subscriptionId - The subscription ID
+   * @returns void
+   */
+  async deactivateForBotUser(
+    botUserId: number,
+    subscriptionId: number,
+  ): Promise<void> {
+    await this.db
+      .update(this.table)
+      .set({ isActive: false })
+      .where(
+        and(
+          eq(this.table.botUserId, botUserId),
+          eq(this.table.subscriptionId, subscriptionId),
+        ),
+      );
   }
 }
