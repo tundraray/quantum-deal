@@ -334,15 +334,15 @@ CREATE INDEX idx_user_subscriptions_bot_user ON user_subscriptions(bot_user_id);
   - [x] Ensure `botUser` is loaded before subscription queries
   - [x] Change subscription query from `findActiveByUserIdWithSubscription(telegramId)` to `findActiveByBotUserIdWithSubscription(botUserId)`
   - [x] Attach `botUser.id` to context for downstream use
-- [ ] Update `libs/partner-bot/src/middleware/user-management.middleware.ts`:
-  - [ ] Same changes as bot middleware
-  - [ ] Ensure `botUser` is properly resolved via `BotUsersRepository`
-- [ ] Verify context types include `botUserId` where needed
-- [ ] Quality check: `npm run build` passes
+- [x] Update `libs/partner-bot/src/middleware/user-management.middleware.ts`:
+  - [x] Same changes as bot middleware
+  - [x] Ensure `botUser` is properly resolved via `BotUsersRepository`
+- [x] Verify context types include `botUserId` where needed
+- [x] Quality check: `npm run build` passes
 
 #### Phase Completion Criteria
-- [ ] **AC-5.1**: Both bot and partner-bot middleware pass `botUser.id` to subscription operations
-- [ ] **AC-5.2**: Context includes `botUser` with valid `id` for all subscription operations
+- [x] **AC-5.1**: Both bot and partner-bot middleware pass `botUser.id` to subscription operations
+- [x] **AC-5.2**: Context includes `botUser` with valid `id` for all subscription operations
 - [ ] E2E flow works in development environment
 
 #### Operational Verification Procedures
@@ -459,9 +459,9 @@ After validation period (1-2 weeks post-deployment):
 - Notes:
 
 ### Phase 5: Middleware Updates
-- Start: YYYY-MM-DD HH:MM
-- Complete: YYYY-MM-DD HH:MM
-- Notes:
+- Start: 2025-12-03
+- Complete: 2025-12-03
+- Notes: Both bot and partner-bot middleware updated to use botUserId. PartnerBotContext interface extended to include botUser.
 
 ### Phase 6: Quality Assurance
 - Start: YYYY-MM-DD HH:MM

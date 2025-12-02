@@ -15,7 +15,7 @@ Update the partner-bot's `UserManagementMiddleware` to:
 **Key Understanding**: Partner-bot already operates in multi-bot context and should have `botId` available.
 
 ## Target Files
-- [ ] `libs/partner-bot/src/middleware/user-management.middleware.ts`
+- [x] `libs/partner-bot/src/middleware/user-management.middleware.ts`
 
 ## Implementation Steps
 
@@ -34,8 +34,8 @@ const subscriptions = await this.userSubscriptionsRepository.findActiveByUserIdW
 ### 2. Update Implementation
 
 #### Add BotUsersRepository Dependency
-- [ ] Import `BotUsersRepository` from `@quantumdeal/db`
-- [ ] Add to constructor injection
+- [x] Import `BotUsersRepository` from `@quantumdeal/db`
+- [x] Add to constructor injection
 
 ```typescript
 import {
@@ -55,8 +55,8 @@ constructor(
 ```
 
 #### Get botId from Context
-- [ ] Partner-bot middleware should have access to `botId` from dynamic bot context
-- [ ] Check if `ctx.botInfo` or similar contains bot identifier
+- [x] Partner-bot middleware should have access to `botId` from dynamic bot context
+- [x] Check if `ctx.botInfo` or similar contains bot identifier
 
 ```typescript
 // Get botId from context (dynamic bot scenario)
@@ -70,9 +70,9 @@ if (!botId) {
 ```
 
 #### Update `loadUserWithSubscriptions` Method
-- [ ] Resolve `botUser` using `BotUsersRepository.findOrCreate(telegramId, botId)`
-- [ ] Use `findActiveByBotUserIdWithSubscription(botUserId)` for subscription query
-- [ ] Attach `botUser` to context
+- [x] Resolve `botUser` using `BotUsersRepository.findOrCreate(telegramId, botId)`
+- [x] Use `findActiveByBotUserIdWithSubscription(botUserId)` for subscription query
+- [x] Attach `botUser` to context
 
 ```typescript
 private async loadUserWithSubscriptions(
@@ -92,9 +92,9 @@ private async loadUserWithSubscriptions(
 ```
 
 #### Update `use` Method
-- [ ] Extract `botId` from context
-- [ ] Pass `botId` to `loadUserWithSubscriptions`
-- [ ] Attach `botUser` to context
+- [x] Extract `botId` from context
+- [x] Pass `botId` to `loadUserWithSubscriptions`
+- [x] Attach `botUser` to context
 
 ```typescript
 async use(ctx: Context, next: () => Promise<void>): Promise<void> {
@@ -135,12 +135,12 @@ async use(ctx: Context, next: () => Promise<void>): Promise<void> {
 ```
 
 ### 3. Update Module to Inject BotUsersRepository
-- [ ] Update `partner-bot.module.ts` to provide `BotUsersRepository` to middleware
-- [ ] Ensure `DbModule` is imported with `BotUsersRepository` exported
+- [x] Update `partner-bot.module.ts` to provide `BotUsersRepository` to middleware
+- [x] Ensure `DbModule` is imported with `BotUsersRepository` exported
 
 ### 4. Update Interface Types
-- [ ] Ensure `UserContext` includes `botUser` property in partner-bot interfaces
-- [ ] Or extend context type
+- [x] Ensure `UserContext` includes `botUser` property in partner-bot interfaces
+- [x] Or extend context type
 
 ```typescript
 // In interfaces/index.ts or similar
@@ -152,14 +152,14 @@ export interface PartnerBotContext extends Context {
 ```
 
 ## Completion Criteria
-- [ ] `BotUsersRepository` injected into middleware
-- [ ] `botUser` resolved using `findOrCreate(telegramId, botId)`
-- [ ] Subscription queries use `findActiveByBotUserIdWithSubscription(botUserId)`
-- [ ] `botUser` attached to context for downstream use
-- [ ] Module updated to provide `BotUsersRepository`
-- [ ] Build passes: `npm run build`
-- [ ] **AC-5.1**: Partner-bot middleware passes `botUser.id` to subscription operations
-- [ ] **AC-5.2**: Context includes `botUser` with valid `id`
+- [x] `BotUsersRepository` injected into middleware
+- [x] `botUser` resolved using `findOrCreate(telegramId, botId)`
+- [x] Subscription queries use `findActiveByBotUserIdWithSubscription(botUserId)`
+- [x] `botUser` attached to context for downstream use
+- [x] Module updated to provide `BotUsersRepository`
+- [x] Build passes: `npm run build`
+- [x] **AC-5.1**: Partner-bot middleware passes `botUser.id` to subscription operations
+- [x] **AC-5.2**: Context includes `botUser` with valid `id`
 
 ## Verification Commands
 ```bash

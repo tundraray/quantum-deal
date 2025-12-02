@@ -5,9 +5,16 @@ import {
   UsersRepository,
   NewUser,
   UserSubscriptionsRepository,
+  BotUsersRepository,
+  BotUser,
 } from '@quantumdeal/db';
-import { UserContext, UserWithSubscriptions } from '../interfaces';
-import { FeatureFlagService } from '../services/feature-flag.service';
+import { FeatureFlag, FeatureConfig } from '@quantumdeal/db/schema';
+import {
+  UserContext,
+  UserWithSubscriptions,
+  PartnerBotContext,
+} from '../interfaces';
+// import { FeatureFlagService } from '../services/feature-flag.service'; // TODO: Implement if needed
 
 /**
  * Middleware that handles user authentication and creation for Telegram bot
@@ -26,7 +33,8 @@ export class UserManagementMiddleware {
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
-    private readonly featureFlagService: FeatureFlagService,
+    private readonly botUsersRepository: BotUsersRepository,
+    // private readonly featureFlagService: FeatureFlagService, // TODO: Implement if needed
   ) {
     this.logger.debug('User management middleware constructor');
   }
@@ -45,11 +53,37 @@ export class UserManagementMiddleware {
         return;
       }
 
+      // Get botId from context (injected by DynamicTelegrafService middleware)
+      const botId = (ctx as PartnerBotContext).botId;
+      if (!botId) {
+        this.logger.error(
+          'botId not available in partner-bot context. Ensure middleware is used with DynamicTelegrafService.',
+        );
+        await next();
+        return;
+      }
+
       // Upsert user - creates new or updates existing (race-condition safe)
       const user = await this.upsertUser(ctx.from);
 
-      // Attach user to context with subscriptions
-      const userWithSubscriptions = await this.loadUserWithSubscriptions(user);
+      // Resolve or create botUser record for this user+bot combination
+      const botUser = await this.botUsersRepository.findOrCreate(
+        user.telegramId,
+        botId,
+        {
+          lang: user.lang ?? undefined,
+          isActive: true,
+        },
+      );
+
+      // Attach botUser to context for downstream services (e.g., TrialService)
+      (ctx as PartnerBotContext & { botUser?: BotUser }).botUser = botUser;
+
+      // Attach user to context with subscriptions (using botUserId)
+      const userWithSubscriptions = await this.loadUserWithSubscriptions(
+        user,
+        botUser.id,
+      );
       (ctx as UserContext).user = userWithSubscriptions;
 
       // Continue to next middleware
@@ -87,38 +121,45 @@ export class UserManagementMiddleware {
   }
 
   /**
-   * Loads user with active subscriptions and feature flags
+   * Loads user with active subscriptions and feature flags using botUserId
    *
    * This method:
-   * 1. Loads active subscriptions with subscription details
-   * 2. Loads feature flags via FeatureFlagService
+   * 1. Loads active subscriptions with subscription details using botUserId
+   * 2. Loads feature flags via FeatureFlagService (TODO: Implement if needed)
    * 3. Returns enriched UserWithSubscriptions DTO
    *
    * @param user - Raw user entity from database
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
    * @returns UserWithSubscriptions DTO with active subscriptions and feature flags
    */
-  private async loadUserWithSubscriptions(user: {
-    telegramId: number;
-    username: string | null;
-    firstName: string | null;
-    lastName: string | null;
-    lang: string | null;
-    isPremium: boolean | null;
-    isActive: boolean;
-    createdAt: Date;
-  }): Promise<UserWithSubscriptions> {
-    // Load active subscriptions with subscription details
+  private async loadUserWithSubscriptions(
+    user: {
+      telegramId: number;
+      username: string | null;
+      firstName: string | null;
+      lastName: string | null;
+      lang: string | null;
+      isPremium: boolean | null;
+      isActive: boolean;
+      createdAt: Date;
+    },
+    botUserId: number,
+  ): Promise<UserWithSubscriptions> {
+    // Load active subscriptions with subscription details using botUserId
     const subscriptions =
-      await this.userSubscriptionsRepository.findActiveByUserIdWithSubscription(
-        user.telegramId,
+      await this.userSubscriptionsRepository.findActiveByBotUserIdWithSubscription(
+        botUserId,
       );
 
     // Load feature flags for this user
-    const { enabledFeatures, featureConfigs } =
-      await this.featureFlagService.getUserFeatures(user.telegramId);
+    // TODO: Implement FeatureFlagService if needed
+    // const { enabledFeatures, featureConfigs } =
+    //   await this.featureFlagService.getUserFeatures(user.telegramId);
+    const enabledFeatures = new Set<FeatureFlag>();
+    const featureConfigs = new Map<FeatureFlag, FeatureConfig>();
 
     this.logger.debug(
-      `Loaded ${enabledFeatures.size} features for user ${user.telegramId}`,
+      `Loaded ${subscriptions.length} subscriptions and ${enabledFeatures.size} features for user ${user.telegramId} (botUserId: ${botUserId})`,
     );
 
     // Map to UserWithSubscriptions DTO
