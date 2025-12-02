@@ -12,29 +12,29 @@ Generate the base migration SQL file using `drizzle-kit generate`. This will cre
 **Critical Constraint**: `drizzle-kit generate` CAN be executed by automation. `drizzle-kit migrate` CANNOT be executed by automation (user runs manually).
 
 ## Target Files
-- [ ] `libs/db/migrations/[timestamp]_user_subscriptions_bot_user_id.sql` (generated)
+- [x] `libs/db/migrations/20251202221748_elite_piledriver.sql` (generated)
 
 ## Implementation Steps
 
 ### 1. Verify Prerequisites
-- [ ] Task 01 completed (schema updated)
-- [ ] Build passes: `npm run build`
+- [x] Task 01 completed (schema updated)
+- [x] Build passes: `npm run build`
 
 ### 2. Generate Migration
-- [ ] Run drizzle-kit generate:
+- [x] Run drizzle-kit generate:
   ```bash
   pnpm drizzle-kit generate
   ```
-- [ ] Verify migration file created in `libs/db/migrations/`
-- [ ] Note the generated timestamp filename
+- [x] Verify migration file created in `libs/db/migrations/`
+- [x] Note the generated timestamp filename: `20251202221748_elite_piledriver.sql`
 
 ### 3. Review Generated SQL
-- [ ] Open generated migration file
-- [ ] Verify it contains:
+- [x] Open generated migration file
+- [x] Verify it contains:
   - `ALTER TABLE user_subscriptions ADD COLUMN bot_user_id BIGINT`
   - FK constraint to `bot_users(id)` with CASCADE delete
   - Index creation `idx_user_subscriptions_bot_user`
-- [ ] Note: The generated SQL will be basic - enhancement needed in Task 03
+- [x] Note: The generated SQL will be basic - enhancement needed in Task 03
 
 ## Expected Generated SQL (Approximate)
 ```sql
@@ -52,11 +52,11 @@ ON "user_subscriptions" USING btree ("bot_user_id");
 ```
 
 ## Completion Criteria
-- [ ] Migration SQL file generated in `libs/db/migrations/`
-- [ ] File contains column addition statement
-- [ ] File contains FK constraint (may need adjustment in Task 03)
-- [ ] File contains index creation statement
-- [ ] Operation verified: Migration file exists and is syntactically valid
+- [x] Migration SQL file generated in `libs/db/migrations/`
+- [x] File contains column addition statement
+- [x] File contains FK constraint (may need adjustment in Task 03)
+- [x] File contains index creation statement
+- [x] Operation verified: Migration file exists and is syntactically valid
 
 ## Verification Commands
 ```bash

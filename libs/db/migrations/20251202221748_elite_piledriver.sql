@@ -1,0 +1,3 @@
+ALTER TABLE "user_subscriptions" ADD COLUMN "bot_user_id" bigint;--> statement-breakpoint
+ALTER TABLE "user_subscriptions" ADD CONSTRAINT "user_subscriptions_bot_user_id_bot_users_id_fk" FOREIGN KEY ("bot_user_id") REFERENCES "public"."bot_users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "idx_user_subscriptions_bot_user" ON "user_subscriptions" USING btree ("bot_user_id");

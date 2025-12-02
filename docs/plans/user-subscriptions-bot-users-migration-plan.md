@@ -158,7 +158,7 @@ graph LR
 **Verification Level**: L1 (Functional Operation)
 
 #### Tasks
-- [ ] Generate migration via `pnpm drizzle-kit generate`
+- [x] Generate migration via `pnpm drizzle-kit generate`
 - [ ] Enhance generated migration SQL with:
   - [ ] Phase 1: Add nullable `bot_user_id` column
   - [ ] Phase 2: Create missing `bot_users` records for orphaned subscriptions
@@ -444,9 +444,9 @@ After validation period (1-2 weeks post-deployment):
 - Notes: Added botUserId column with FK to bot_users.id, added index, added deprecation comment to userId
 
 ### Phase 2: Migration SQL Execution
-- Start: YYYY-MM-DD HH:MM
-- Complete: YYYY-MM-DD HH:MM
-- Notes:
+- Start: 2025-12-03
+- Complete: In Progress
+- Notes: Migration file generated: `20251202221748_elite_piledriver.sql`. Task 02 (generate migration) completed. Task 03 (enhance migration) pending.
 
 ### Phase 3: Repository Updates
 - Start: YYYY-MM-DD HH:MM
