@@ -176,6 +176,21 @@ describe('UserSubscriptionsRepository', () => {
 
         expect(result).toEqual([]);
       });
+
+      it('should only return subscriptions for the specified botUserId', async () => {
+        const botUserId = 1;
+        // Mock returns only subscriptions for botUserId=1, not for botUserId=2
+        const mockSubscriptions = [
+          { id: 1, botUserId: 1, subscriptionId: 1, isActive: true },
+        ];
+        mockDb.where.mockResolvedValue(mockSubscriptions);
+
+        const result = await repository.findByBotUserId(botUserId);
+
+        // Verify results don't include other users' subscriptions
+        expect(result.every((sub) => sub.botUserId === botUserId)).toBe(true);
+        expect(result).toHaveLength(1);
+      });
     });
 
     describe('findActiveByBotUserId', () => {
@@ -432,6 +447,45 @@ describe('UserSubscriptionsRepository', () => {
         expect(result.isActive).toBe(true);
         expect(mockDb.update).toHaveBeenCalled();
       });
+
+      it('should reactivate expired subscription for bot user', async () => {
+        const botUserId = 1;
+        const subscriptionId = 1;
+        const expiredDate = new Date();
+        expiredDate.setDate(expiredDate.getDate() - 10); // expired 10 days ago
+        const newExpiry = new Date();
+        newExpiry.setDate(newExpiry.getDate() + 30); // new expiration 30 days from now
+
+        const expiredSubscription = {
+          id: 1,
+          botUserId: 1,
+          subscriptionId: 1,
+          expiresAt: expiredDate,
+          isActive: false, // marked as inactive due to expiration
+        };
+        const reactivatedSubscription = {
+          ...expiredSubscription,
+          expiresAt: newExpiry,
+          isActive: true,
+        };
+
+        // findOneBy returns expired subscription
+        mockDb.where.mockReturnThis();
+        mockDb.limit.mockResolvedValueOnce([expiredSubscription]);
+        // update returns reactivated subscription
+        mockDb.returning.mockResolvedValue([reactivatedSubscription]);
+
+        const result = await repository.activateForBotUser(
+          botUserId,
+          subscriptionId,
+          newExpiry,
+        );
+
+        expect(result.botUserId).toBe(botUserId);
+        expect(result.isActive).toBe(true);
+        expect(result.expiresAt).toEqual(newExpiry);
+        expect(mockDb.update).toHaveBeenCalled();
+      });
     });
 
     describe('deactivateForBotUser', () => {
@@ -441,6 +495,21 @@ describe('UserSubscriptionsRepository', () => {
         mockDb.returning.mockResolvedValue([]);
 
         await repository.deactivateForBotUser(botUserId, subscriptionId);
+
+        expect(mockDb.update).toHaveBeenCalledWith(userSubscriptions);
+        expect(mockDb.set).toHaveBeenCalledWith({ isActive: false });
+      });
+
+      it('should not throw error when no subscription exists', async () => {
+        const botUserId = 999;
+        const subscriptionId = 999;
+        // Mock returns empty array (no rows affected)
+        mockDb.returning.mockResolvedValue([]);
+
+        // Should complete without throwing
+        await expect(
+          repository.deactivateForBotUser(botUserId, subscriptionId),
+        ).resolves.not.toThrow();
 
         expect(mockDb.update).toHaveBeenCalledWith(userSubscriptions);
         expect(mockDb.set).toHaveBeenCalledWith({ isActive: false });

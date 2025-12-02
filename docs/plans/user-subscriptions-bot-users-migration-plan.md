@@ -259,9 +259,9 @@ CREATE INDEX idx_user_subscriptions_bot_user ON user_subscriptions(bot_user_id);
 - [ ] Update internal queries in existing methods that need `botUserId`:
   - [ ] `findExpiredTrials(botId)` - Already uses `botId`, consider using `botUserId` internally
   - [ ] `extendSubscription` - Update to use `botUserId` where available
-- [ ] Update unit tests in `libs/db/src/repositories/__tests__/user-subscriptions.repository.spec.ts`:
-  - [ ] Add tests for all new `botUserId` methods
-  - [ ] Verify deprecated methods still work (backward compatibility)
+- [x] Update unit tests in `libs/db/src/repositories/__tests__/user-subscriptions.repository.spec.ts`:
+  - [x] Add tests for all new `botUserId` methods
+  - [x] Verify deprecated methods still work (backward compatibility)
 - [ ] Quality check: `npm run check` passes (lint + format)
 
 #### Phase Completion Criteria
