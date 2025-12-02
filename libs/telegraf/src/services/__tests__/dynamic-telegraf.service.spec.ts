@@ -1186,7 +1186,10 @@ describe('DynamicTelegrafService Unit Tests', () => {
       ];
       mockBotConfigProvider.loadDynamicBots.mockResolvedValue(mockConfigs);
       await service.onModuleInit();
-      const mockUpdate = { update_id: 123, message: { text: 'hello' } };
+      const mockUpdate = {
+        update_id: 123,
+        message: { text: 'hello' },
+      } as never;
 
       // Act
       const result = await service.handleUpdate('/dynamic/bot1', mockUpdate);
@@ -1211,7 +1214,7 @@ describe('DynamicTelegrafService Unit Tests', () => {
       ];
       mockBotConfigProvider.loadDynamicBots.mockResolvedValue(mockConfigs);
       await service.onModuleInit();
-      const mockUpdate = { update_id: 123 };
+      const mockUpdate = { update_id: 123 } as never;
 
       // Act
       const result = await service.handleUpdate('/unknown/path', mockUpdate);
@@ -1240,7 +1243,7 @@ describe('DynamicTelegrafService Unit Tests', () => {
       const warnSpy = jest.spyOn(service['logger'], 'warn');
 
       // Act
-      await service.handleUpdate('/unknown/path', { update_id: 123 });
+      await service.handleUpdate('/unknown/path', { update_id: 123 } as never);
 
       // Assert
       expect(warnSpy).toHaveBeenCalledWith(
@@ -1268,7 +1271,7 @@ describe('DynamicTelegrafService Unit Tests', () => {
       // Act
       const result = await service.handleUpdate('/dynamic/bot1', {
         update_id: 123,
-      });
+      } as never);
 
       // Assert
       expect(result).toBe(false);
@@ -1295,7 +1298,7 @@ describe('DynamicTelegrafService Unit Tests', () => {
       const errorSpy = jest.spyOn(service['logger'], 'error');
 
       // Act
-      await service.handleUpdate('/dynamic/bot1', { update_id: 123 });
+      await service.handleUpdate('/dynamic/bot1', { update_id: 123 } as never);
 
       // Assert
       expect(errorSpy).toHaveBeenCalledWith(
@@ -1326,7 +1329,7 @@ describe('DynamicTelegrafService Unit Tests', () => {
       // Act - Normal case should pass
       const result = await service.handleUpdate('/dynamic/bot1', {
         update_id: 123,
-      });
+      } as never);
 
       // Assert
       expect(result).toBe(true);

@@ -8,6 +8,7 @@ import {
 import { users } from './users';
 import { subscriptions } from './subscriptions';
 import { bots } from './bots';
+import { botUsers } from './bot-users';
 
 /**
  * User Subscriptions Table
@@ -27,6 +28,18 @@ export const userSubscriptions = pgTable(
     id: bigint('id', { mode: 'number' })
       .primaryKey()
       .generatedAlwaysAsIdentity(),
+
+    // NEW: Primary FK to bot-specific user context
+    // References bot_users.id (auto-generated internal ID, NOT telegramId)
+    botUserId: bigint('bot_user_id', { mode: 'number' }).references(
+      () => botUsers.id,
+      { onDelete: 'cascade' },
+    ),
+
+    /**
+     * @deprecated Use botUserId instead. References users.telegramId.
+     * Will be removed in future migration after validation period.
+     */
     userId: bigint('user_id', { mode: 'number' })
       .notNull()
       .references(() => users.telegramId, { onDelete: 'cascade' }),
@@ -44,6 +57,7 @@ export const userSubscriptions = pgTable(
   (table) => [
     index('idx_user_subscriptions_bot').on(table.botId),
     index('idx_user_subscriptions_user_bot').on(table.userId, table.botId),
+    index('idx_user_subscriptions_bot_user').on(table.botUserId),
   ],
 );
 

@@ -112,6 +112,7 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
         paymentsEnabled: false,
         signalsEnabled: true,
         broadcastEnabled: false,
+        partnerFlowEnabled: false,
       },
       defaults: {
         subscriptionDays: 30,
@@ -504,7 +505,7 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
 
       // Act
       const callback = service.createContextCallback(
-        handlerInstance as Record<string, unknown>,
+        handlerInstance as unknown as Record<string, unknown>,
         prototype,
         'onStart',
       );

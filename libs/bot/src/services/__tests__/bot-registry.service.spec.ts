@@ -32,6 +32,7 @@ describe('BotRegistryService', () => {
         paymentsEnabled: true,
         signalsEnabled: true,
         broadcastEnabled: true,
+        partnerFlowEnabled: false,
       },
       defaults: {
         subscriptionDays: 30,
@@ -106,6 +107,7 @@ describe('BotRegistryService', () => {
             paymentsEnabled: true,
             signalsEnabled: true,
             broadcastEnabled: true,
+            partnerFlowEnabled: false,
           },
           defaults: { subscriptionDays: 30, trialDays: 7, language: 'en' },
         },
@@ -133,6 +135,7 @@ describe('BotRegistryService', () => {
             paymentsEnabled: true,
             signalsEnabled: false, // Signals disabled
             broadcastEnabled: true,
+            partnerFlowEnabled: false,
           },
           defaults: { subscriptionDays: 30, trialDays: 7, language: 'en' },
         },
@@ -266,6 +269,7 @@ describe('BotRegistryService', () => {
           paymentsEnabled: true,
           signalsEnabled: true,
           broadcastEnabled: true,
+          partnerFlowEnabled: false,
         },
         defaults: {
           subscriptionDays: 30,
