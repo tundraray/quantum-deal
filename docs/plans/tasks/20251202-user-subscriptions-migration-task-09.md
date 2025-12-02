@@ -14,17 +14,17 @@ Review `ReminderSchedulerService` to verify it works correctly with the new `bot
 3. User information is obtained through joins, not direct `userId` queries
 
 ## Target Files
-- [ ] `libs/partner-bot/src/services/reminder-scheduler.service.ts` (review only)
+- [x] `libs/partner-bot/src/services/reminder-scheduler.service.ts` (review only)
 
 ## Implementation Steps
 
 ### 1. Verify Current Implementation
-- [ ] Review `processExpiredTrials(botId)` method
-- [ ] Confirm `findExpiredTrials(botId)` uses correct join pattern
-- [ ] Verify user data is obtained through joins
+- [x] Review `processExpiredTrials(botId)` method
+- [x] Confirm `findExpiredTrials(botId)` uses correct join pattern
+- [x] Verify user data is obtained through joins
 
 ### 2. Analyze Repository Method
-- [ ] `findExpiredTrials(botId)` in `UserSubscriptionsRepository`:
+- [x] `findExpiredTrials(botId)` in `UserSubscriptionsRepository`:
   ```typescript
   // Current implementation:
   const result = await this.db
@@ -46,10 +46,10 @@ Review `ReminderSchedulerService` to verify it works correctly with the new `bot
   ```
 
 ### 3. Verify No Changes Needed
-- [ ] The `botId` filter already provides per-bot scoping
-- [ ] Join via `userId` to `users.telegramId` still works (column preserved)
-- [ ] User language (`user.lang`) is obtained through the join
-- [ ] Message sending uses `user.telegramId` for chat ID
+- [x] The `botId` filter already provides per-bot scoping
+- [x] Join via `userId` to `users.telegramId` still works (column preserved)
+- [x] User language (`user.lang`) is obtained through the join
+- [x] Message sending uses `user.telegramId` for chat ID
 
 ## Current Implementation Analysis
 
@@ -85,10 +85,10 @@ In a future optimization, `findExpiredTrials` could be updated to:
 For now, the current implementation is functionally correct.
 
 ## Completion Criteria
-- [ ] Verified `findExpiredTrials(botId)` uses correct join pattern
-- [ ] Verified service correctly processes per-bot expired trials
-- [ ] **AC-4.4**: `ReminderSchedulerService.findExpiredTrials()` works correctly (no changes needed)
-- [ ] Build passes: `npm run build`
+- [x] Verified `findExpiredTrials(botId)` uses correct join pattern
+- [x] Verified service correctly processes per-bot expired trials
+- [x] **AC-4.4**: `ReminderSchedulerService.findExpiredTrials()` works correctly (no changes needed)
+- [x] Build passes: `npm run build`
 
 ## Verification Commands
 ```bash
