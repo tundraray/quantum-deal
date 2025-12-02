@@ -289,12 +289,12 @@ CREATE INDEX idx_user_subscriptions_bot_user ON user_subscriptions(bot_user_id);
 **Verification Level**: L2 (Test Operation)
 
 #### Tasks
-- [ ] Update `libs/bot/src/services/trial.service.ts`:
-  - [ ] Change `isEligible(userId: number)` to `isEligible(botUserId: number)`
-  - [ ] Update internal call from `findByUserId()` to `findByBotUserId()`
-  - [ ] Change `activate(userId: number)` to `activate(botUserId: number)`
-  - [ ] Update internal call from `activate()` to `activateForBotUser()`
-  - [ ] Update logging to use `botUserId`
+- [x] Update `libs/bot/src/services/trial.service.ts`:
+  - [x] Change `isEligible(userId: number)` to `isEligible(botUserId: number)`
+  - [x] Update internal call from `findByUserId()` to `findByBotUserId()`
+  - [x] Change `activate(userId: number)` to `activate(botUserId: number)`
+  - [x] Update internal call from `activate()` to `activateForBotUser()`
+  - [x] Update logging to use `botUserId`
 - [ ] Update `libs/bot/src/services/subscription-expiration.service.ts`:
   - [ ] Review `findExpiring()` usage - no changes needed (joins handle correctly)
   - [ ] Verify subscription queries still work with new column
@@ -306,8 +306,8 @@ CREATE INDEX idx_user_subscriptions_bot_user ON user_subscriptions(bot_user_id);
 - [ ] Quality check: `npm run build` passes
 
 #### Phase Completion Criteria
-- [ ] **AC-4.1**: `TrialService.isEligible()` accepts `botUserId` parameter
-- [ ] **AC-4.2**: `TrialService.activate()` creates subscription with `botUserId`
+- [x] **AC-4.1**: `TrialService.isEligible()` accepts `botUserId` parameter
+- [x] **AC-4.2**: `TrialService.activate()` creates subscription with `botUserId`
 - [ ] **AC-4.3**: `SubscriptionExpirationService` queries by `botUserId` when available
 - [ ] **AC-4.4**: `ReminderSchedulerService.findExpiredTrials()` uses `botUserId` for filtering
 - [ ] Build succeeds with no type errors

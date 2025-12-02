@@ -12,24 +12,24 @@ Update `TrialService` to accept `botUserId` parameter instead of `userId`. This 
 **Key Behavior Change**: Trial eligibility is now per-bot, not global across all bots.
 
 ## Target Files
-- [ ] `libs/bot/src/services/trial.service.ts`
-- [ ] `libs/bot/src/services/__tests__/trial.service.spec.ts` (if exists, or create)
+- [x] `libs/bot/src/services/trial.service.ts`
+- [x] `libs/bot/src/services/__tests__/trial.service.spec.ts` (if exists, or create)
 
 ## Implementation Steps (TDD: Red-Green-Refactor)
 
 ### 1. Red Phase - Write/Update Tests First
-- [ ] Create or update `trial.service.spec.ts`
-- [ ] Add test: `isEligible` should check subscription history per botUserId
-- [ ] Add test: `isEligible` should return true for new bot even if user has subscription on other bot
-- [ ] Add test: `activate` should create subscription with botUserId
-- [ ] Run tests and confirm they fail
+- [x] Create or update `trial.service.spec.ts`
+- [x] Add test: `isEligible` should check subscription history per botUserId
+- [x] Add test: `isEligible` should return true for new bot even if user has subscription on other bot
+- [x] Add test: `activate` should create subscription with botUserId
+- [x] Run tests and confirm they fail
 
 ### 2. Green Phase - Update TrialService
 
 #### Update `isEligible` Method
-- [ ] Change parameter from `userId: number` to `botUserId: number`
-- [ ] Change repository call from `findByUserId(userId)` to `findByBotUserId(botUserId)`
-- [ ] Update logging to use `botUserId`
+- [x] Change parameter from `userId: number` to `botUserId: number`
+- [x] Change repository call from `findByUserId(userId)` to `findByBotUserId(botUserId)`
+- [x] Update logging to use `botUserId`
 
 ```typescript
 /**
@@ -55,9 +55,9 @@ async isEligible(botUserId: number): Promise<boolean> {
 ```
 
 #### Update `activate` Method
-- [ ] Change parameter from `userId: number` to `botUserId: number`
-- [ ] Change repository call from `activate(userId, ...)` to `activateForBotUser(botUserId, ...)`
-- [ ] Update logging to use `botUserId`
+- [x] Change parameter from `userId: number` to `botUserId: number`
+- [x] Change repository call from `activate(userId, ...)` to `activateForBotUser(botUserId, ...)`
+- [x] Update logging to use `botUserId`
 
 ```typescript
 /**
@@ -116,12 +116,12 @@ async activate(botUserId: number): Promise<{
 }
 ```
 
-- [ ] Run tests and confirm they pass
+- [x] Run tests and confirm they pass
 
 ### 3. Refactor Phase
-- [ ] Ensure JSDoc comments are updated
-- [ ] Verify error messages use `botUserId` terminology
-- [ ] Run lint and format checks
+- [x] Ensure JSDoc comments are updated
+- [x] Verify error messages use `botUserId` terminology
+- [x] Run lint and format checks
 
 ## Test Cases
 
@@ -183,14 +183,14 @@ describe('TrialService', () => {
 ```
 
 ## Completion Criteria
-- [ ] `isEligible` accepts `botUserId` parameter
-- [ ] `isEligible` calls `findByBotUserId(botUserId)`
-- [ ] `activate` accepts `botUserId` parameter
-- [ ] `activate` calls `activateForBotUser(botUserId, ...)`
-- [ ] All tests pass
-- [ ] Build passes: `npm run build`
-- [ ] **AC-4.1**: `TrialService.isEligible()` accepts `botUserId` parameter
-- [ ] **AC-4.2**: `TrialService.activate()` creates subscription with `botUserId`
+- [x] `isEligible` accepts `botUserId` parameter
+- [x] `isEligible` calls `findByBotUserId(botUserId)`
+- [x] `activate` accepts `botUserId` parameter
+- [x] `activate` calls `activateForBotUser(botUserId, ...)`
+- [x] All tests pass
+- [x] Build passes: `npm run build`
+- [x] **AC-4.1**: `TrialService.isEligible()` accepts `botUserId` parameter
+- [x] **AC-4.2**: `TrialService.activate()` creates subscription with `botUserId`
 
 ## Verification Commands
 ```bash
