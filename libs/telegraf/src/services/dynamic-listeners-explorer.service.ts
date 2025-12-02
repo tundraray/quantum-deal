@@ -121,18 +121,17 @@ export class DynamicListenersExplorerService extends BaseExplorerService {
       const targetBotId = this.metadataAccessor.getBotTargetMetadata(
         wrapper.metatype as MetadataTarget,
       );
-
       // Skip handler if it targets a different bot
       if (targetBotId !== undefined && targetBotId !== botId) {
         continue;
       }
-
       // Check feature flags for conditional handlers
       if (!this.shouldRegisterHandler(wrapper, settings)) {
         continue;
       }
-      this.logger.debug(`Registering update for bot ID ${botId}`);
+
       this.registerListeners(bot, wrapper);
+      this.logger.debug(`Registered update for bot ID ${botId}`);
     }
   }
 
@@ -261,12 +260,15 @@ export class DynamicListenersExplorerService extends BaseExplorerService {
   private filterUpdates(
     wrapper: InstanceWrapper,
   ): InstanceWrapper<unknown> | undefined {
-    if (!wrapper.instance) return undefined;
+    const instance = wrapper.instance as object | null;
+    if (!instance) return undefined;
 
     const isUpdate = this.metadataAccessor.isUpdate(
-      wrapper.metatype as MetadataTarget,
+      wrapper.metatype as (...args: unknown[]) => unknown,
     );
-    return isUpdate ? wrapper : undefined;
+    if (!isUpdate) return undefined;
+
+    return this.filterDynamicHandlers(wrapper);
   }
 
   /**
@@ -280,7 +282,9 @@ export class DynamicListenersExplorerService extends BaseExplorerService {
     const isComposer = this.metadataAccessor.isComposer(
       wrapper.metatype as MetadataTarget,
     );
-    return isComposer ? wrapper : undefined;
+    if (!isComposer) return undefined;
+
+    return this.filterDynamicHandlers(wrapper);
   }
 
   /**
@@ -294,9 +298,29 @@ export class DynamicListenersExplorerService extends BaseExplorerService {
     const isScene = this.metadataAccessor.isScene(
       wrapper.metatype as MetadataTarget,
     );
-    return isScene ? wrapper : undefined;
+    if (!isScene) return undefined;
+
+    return this.filterDynamicHandlers(wrapper);
   }
 
+  private filterDynamicHandlers(
+    wrapper: InstanceWrapper,
+  ): InstanceWrapper<unknown> | undefined {
+    if (!wrapper.instance) return undefined;
+
+    const isFeatureFlag = this.metadataAccessor.getFeatureFlagMetadata(
+      wrapper.metatype as (...args: unknown[]) => unknown,
+    );
+    const isBotTargetId = this.metadataAccessor.getBotTargetMetadata(
+      wrapper.metatype as (...args: unknown[]) => unknown,
+    );
+
+    if (!!isFeatureFlag || !!isBotTargetId) {
+      return wrapper;
+    }
+
+    return undefined;
+  }
   /**
    * Register listener methods from a handler class on a Composer.
    *
@@ -315,9 +339,10 @@ export class DynamicListenersExplorerService extends BaseExplorerService {
       string,
       unknown
     >;
-    this.metadataScanner.scanFromPrototype(instance, prototype, (name) =>
-      this.registerIfListener(composer, instance, prototype, name),
-    );
+    this.metadataScanner.scanFromPrototype(instance, prototype, (name) => {
+      this.registerIfListener(composer, instance, prototype, name);
+      return;
+    });
   }
 
   /**
@@ -434,6 +459,7 @@ export class DynamicListenersExplorerService extends BaseExplorerService {
         ...args,
         async (ctx: Context, next: () => Promise<void>): Promise<void> => {
           const result: unknown = await listenerCallbackFn(ctx, next);
+
           if (result !== undefined && result !== null) {
             // Result can be any value returned by handler
             let replyText: string;

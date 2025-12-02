@@ -155,6 +155,13 @@
       "when": 1764200000000,
       "tag": "20251126200000_seed_default_bot",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1764713868317,
+      "tag": "20251202221748_elite_piledriver",
+      "breakpoints": true
     }
   ]
 }

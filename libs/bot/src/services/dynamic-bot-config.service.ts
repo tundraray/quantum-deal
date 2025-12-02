@@ -109,6 +109,9 @@ export class DynamicBotConfigService implements BotConfigurationProvider {
         broadcastEnabled: Boolean(
           (settings.features as Record<string, unknown>).broadcastEnabled,
         ),
+        partnerFlowEnabled: Boolean(
+          (settings.features as Record<string, unknown>).partnerFlowEnabled,
+        ),
       },
       defaults: {
         subscriptionDays: Number(
@@ -121,15 +124,6 @@ export class DynamicBotConfigService implements BotConfigurationProvider {
           (settings.defaults as Record<string, unknown>).language,
         ),
       },
-      ui: settings.ui
-        ? {
-            welcomeImage: (settings.ui as Record<string, unknown>)
-              .welcomeImage as string | undefined,
-            brandColor: (settings.ui as Record<string, unknown>).brandColor as
-              | string
-              | undefined,
-          }
-        : undefined,
     };
   }
 }

@@ -582,6 +582,192 @@ describe('BotMessagesRepository Integration Tests', () => {
   });
 
   // =============================================================================
+  // Partner Bot Messages (Task 02)
+  // =============================================================================
+
+  describe('Partner Bot Messages', () => {
+    // Test partner_welcome message in all 8 languages
+    it('should resolve partner_welcome message for all 8 languages', async () => {
+      // Skip if no database
+      if (!process.env.DATABASE_URL) {
+        return;
+      }
+
+      const languages = ['ru', 'en', 'uk', 'hi', 'fr', 'kk', 'uz', 'tg'];
+
+      for (const lang of languages) {
+        const resolved = await repository.resolveMessage(
+          null,
+          'partner_welcome',
+          lang,
+        );
+
+        expect(resolved).toBeDefined();
+        expect(typeof resolved).toBe('string');
+        expect(resolved.length).toBeGreaterThan(0);
+        expect(resolved).not.toBe('Message not available'); // Should not be hardcoded fallback
+      }
+    });
+
+    // Test partner_channel_prompt with variable placeholders
+    it('should resolve partner_channel_prompt message with placeholders in all languages', async () => {
+      // Skip if no database
+      if (!process.env.DATABASE_URL) {
+        return;
+      }
+
+      const languages = ['ru', 'en', 'uk', 'hi', 'fr', 'kk', 'uz', 'tg'];
+
+      for (const lang of languages) {
+        const resolved = await repository.resolveMessage(
+          null,
+          'partner_channel_prompt',
+          lang,
+        );
+
+        expect(resolved).toBeDefined();
+        expect(typeof resolved).toBe('string');
+        expect(resolved.length).toBeGreaterThan(0);
+        // Check for variable placeholders
+        expect(resolved).toContain('{channelUrl}');
+        expect(resolved).toContain('{channelName}');
+      }
+    });
+
+    // Test partner_verification_failed with placeholder
+    it('should resolve partner_verification_failed message with {channelName} placeholder in all languages', async () => {
+      // Skip if no database
+      if (!process.env.DATABASE_URL) {
+        return;
+      }
+
+      const languages = ['ru', 'en', 'uk', 'hi', 'fr', 'kk', 'uz', 'tg'];
+
+      for (const lang of languages) {
+        const resolved = await repository.resolveMessage(
+          null,
+          'partner_verification_failed',
+          lang,
+        );
+
+        expect(resolved).toBeDefined();
+        expect(typeof resolved).toBe('string');
+        expect(resolved.length).toBeGreaterThan(0);
+        expect(resolved).toContain('{channelName}');
+      }
+    });
+
+    // Test partner_trial_activated with placeholders
+    it('should resolve partner_trial_activated message with {expiryDate} and {daysRemaining} placeholders in all languages', async () => {
+      // Skip if no database
+      if (!process.env.DATABASE_URL) {
+        return;
+      }
+
+      const languages = ['ru', 'en', 'uk', 'hi', 'fr', 'kk', 'uz', 'tg'];
+
+      for (const lang of languages) {
+        const resolved = await repository.resolveMessage(
+          null,
+          'partner_trial_activated',
+          lang,
+        );
+
+        expect(resolved).toBeDefined();
+        expect(typeof resolved).toBe('string');
+        expect(resolved.length).toBeGreaterThan(0);
+        expect(resolved).toContain('{expiryDate}');
+        expect(resolved).toContain('{daysRemaining}');
+      }
+    });
+
+    // Test partner_trial_expired with placeholder
+    it('should resolve partner_trial_expired message with {expiryDate} placeholder in all languages', async () => {
+      // Skip if no database
+      if (!process.env.DATABASE_URL) {
+        return;
+      }
+
+      const languages = ['ru', 'en', 'uk', 'hi', 'fr', 'kk', 'uz', 'tg'];
+
+      for (const lang of languages) {
+        const resolved = await repository.resolveMessage(
+          null,
+          'partner_trial_expired',
+          lang,
+        );
+
+        expect(resolved).toBeDefined();
+        expect(typeof resolved).toBe('string');
+        expect(resolved.length).toBeGreaterThan(0);
+        expect(resolved).toContain('{expiryDate}');
+      }
+    });
+
+    // Test partner_coming_soon (no placeholders)
+    it('should resolve partner_coming_soon message in all languages', async () => {
+      // Skip if no database
+      if (!process.env.DATABASE_URL) {
+        return;
+      }
+
+      const languages = ['ru', 'en', 'uk', 'hi', 'fr', 'kk', 'uz', 'tg'];
+
+      for (const lang of languages) {
+        const resolved = await repository.resolveMessage(
+          null,
+          'partner_coming_soon',
+          lang,
+        );
+
+        expect(resolved).toBeDefined();
+        expect(typeof resolved).toBe('string');
+        expect(resolved.length).toBeGreaterThan(0);
+        expect(resolved).not.toBe('Message not available'); // Should not be hardcoded fallback
+      }
+    });
+
+    // Comprehensive test for all 6 message types
+    it('should resolve all 6 partner message types across all 8 languages', async () => {
+      // Skip if no database
+      if (!process.env.DATABASE_URL) {
+        return;
+      }
+
+      const messageTypes = [
+        'partner_welcome',
+        'partner_channel_prompt',
+        'partner_verification_failed',
+        'partner_trial_activated',
+        'partner_trial_expired',
+        'partner_coming_soon',
+      ];
+      const languages = ['ru', 'en', 'uk', 'hi', 'fr', 'kk', 'uz', 'tg'];
+
+      // Total should be 48 messages (6 types × 8 languages)
+      let successCount = 0;
+
+      for (const type of messageTypes) {
+        for (const lang of languages) {
+          const resolved = await repository.resolveMessage(null, type, lang);
+
+          expect(resolved).toBeDefined();
+          expect(typeof resolved).toBe('string');
+          expect(resolved.length).toBeGreaterThan(0);
+
+          // Should not be hardcoded fallback
+          if (resolved !== 'Message not available') {
+            successCount++;
+          }
+        }
+      }
+
+      // All 48 messages should be found
+      expect(successCount).toBe(48);
+    });
+  });
+
+  // =============================================================================
   // Delete operations
   // =============================================================================
 

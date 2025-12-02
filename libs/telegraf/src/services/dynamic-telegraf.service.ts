@@ -20,6 +20,7 @@ import {
 } from '../interfaces';
 import { DYNAMIC_TELEGRAF_MODULE_OPTIONS } from '../telegraf.constants';
 import { DynamicListenersExplorerService } from './dynamic-listeners-explorer.service';
+import { createBotFactory } from '../utils';
 
 /**
  * DynamicTelegrafService
@@ -181,9 +182,13 @@ export class DynamicTelegrafService
 
     try {
       this.logger.debug(`Initializing bot: ${name} (ID: ${id})`);
-
+      const bot = await createBotFactory({
+        token,
+        options: this.options.telegrafOptions,
+        middlewares: this.options.globalMiddlewares,
+      });
       // Create Telegraf instance with optional global options
-      const bot = new Telegraf<Context>(token, this.options.telegrafOptions);
+      // const bot = new Telegraf<Context>(token, this.options.telegrafOptions);
 
       // Validate token by calling getMe()
       const botInfo = await bot.telegram.getMe();
@@ -198,13 +203,6 @@ export class DynamicTelegrafService
 
       // Create per-bot Stage instance for scene isolation
       const stage = new Scenes.Stage<Scenes.SceneContext>([]);
-
-      // Apply global middlewares (order: global -> factory -> stage)
-      if (this.options.globalMiddlewares) {
-        for (const middleware of this.options.globalMiddlewares) {
-          bot.use(middleware);
-        }
-      }
 
       // Apply bot-specific middlewares from factory
       if (this.options.middlewareFactory) {
@@ -238,7 +236,7 @@ export class DynamicTelegrafService
       });
 
       // Setup webhook with Telegram API
-      await this.setupWebhook(bot, webhookPath, name);
+      // await this.setupWebhook(bot, webhookPath, name);
 
       // Store bot instance in registry
       const instance: DynamicBotInstance = {

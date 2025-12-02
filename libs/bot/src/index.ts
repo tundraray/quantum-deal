@@ -5,6 +5,8 @@ export * from './services/notification.service';
 export * from './services/dynamic-bot-config.service';
 export * from './services/bot-registry.service';
 export * from './services/multi-bot-signal.service';
+export * from './services/trial.service';
+export * from './services/bot-commands.service';
 export * from './constants';
 export * from './middleware';
 export * from './interfaces';

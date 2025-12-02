@@ -240,15 +240,18 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
     // @category: core-functionality
     // @dependency: ModulesContainer, MetadataAccessorService
     // @complexity: medium
-    it('Discovers all @Update decorated classes from shared handler modules', () => {
+    it('Discovers all @Update decorated classes from shared handler modules with targeting decorators', () => {
       // Arrange
       const mockWrapper = {
         instance: { onStart: jest.fn() },
         metatype: class TestUpdate {},
       };
 
-      // Configure mock to identify @Update decorated class
+      // Configure mock to identify @Update decorated class with @ForBot targeting
       (mockMetadataAccessor.isUpdate as jest.Mock).mockReturnValue(true);
+      (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
+        1,
+      );
 
       // Act
       const result = (
@@ -271,6 +274,12 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
 
       // Configure mock to return false (not @Update decorated)
       (mockMetadataAccessor.isUpdate as jest.Mock).mockReturnValue(false);
+      (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
+        undefined,
+      );
+      (
+        mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
+      ).mockReturnValue(undefined);
 
       // Act
       const result = (
@@ -304,15 +313,18 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
     // @category: core-functionality
     // @dependency: ModulesContainer, MetadataAccessorService
     // @complexity: medium
-    it('Discovers all @Scene decorated classes from shared handler modules', () => {
+    it('Discovers all @Scene decorated classes from shared handler modules with targeting decorators', () => {
       // Arrange
       const mockWrapper = {
         instance: { onEnter: jest.fn() },
         metatype: class TestScene {},
       };
 
-      // Configure mock to identify @Scene decorated class
+      // Configure mock to identify @Scene decorated class with @RequiresFeature targeting
       (mockMetadataAccessor.isScene as jest.Mock).mockReturnValue(true);
+      (
+        mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
+      ).mockReturnValue('partnerFlowEnabled');
 
       // Act
       const result = (
@@ -335,6 +347,12 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
 
       // Configure mock to return false (not @Scene decorated)
       (mockMetadataAccessor.isScene as jest.Mock).mockReturnValue(false);
+      (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
+        undefined,
+      );
+      (
+        mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
+      ).mockReturnValue(undefined);
 
       // Act
       const result = (
@@ -368,7 +386,7 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
     // @category: core-functionality
     // @dependency: ModulesContainer, MetadataAccessorService
     // @complexity: medium
-    it('Discovers all @Wizard decorated classes from shared handler modules', () => {
+    it('Discovers all @Wizard decorated classes from shared handler modules with targeting decorators', () => {
       // Arrange
       const mockWrapper = {
         instance: { step1: jest.fn() },
@@ -378,6 +396,10 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
       // @Wizard classes are also identified by isScene returning true
       // The difference is in the sceneMetadata.type ('wizard' vs 'base')
       (mockMetadataAccessor.isScene as jest.Mock).mockReturnValue(true);
+      // Must have targeting decorator to be returned by filterScenes
+      (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
+        1,
+      );
 
       // Act
       const result = (
@@ -1411,15 +1433,18 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
     // @category: core-functionality
     // @dependency: ModulesContainer, MetadataAccessorService
     // @complexity: medium
-    it('discovers @Composer decorated classes from shared handler modules', () => {
+    it('discovers @Composer decorated classes from shared handler modules with targeting decorators', () => {
       // Arrange
       const mockWrapper = {
         instance: { onUse: jest.fn() },
         metatype: class TestComposer {},
       };
 
-      // Configure mock to identify @Composer decorated class
+      // Configure mock to identify @Composer decorated class with targeting
       (mockMetadataAccessor.isComposer as jest.Mock).mockReturnValue(true);
+      (
+        mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
+      ).mockReturnValue('signalsEnabled');
 
       // Act
       const result = (
@@ -1442,6 +1467,12 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
 
       // Configure mock to return false (not @Composer decorated)
       (mockMetadataAccessor.isComposer as jest.Mock).mockReturnValue(false);
+      (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
+        undefined,
+      );
+      (
+        mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
+      ).mockReturnValue(undefined);
 
       // Act
       const result = (

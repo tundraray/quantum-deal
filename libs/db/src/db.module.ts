@@ -17,6 +17,8 @@ import {
   PaymentTransactionsRepository,
   BotsRepository,
   BotMessagesRepository,
+  BotUsersRepository,
+  BotSettingsRepository,
 } from './repositories';
 
 @Module({
@@ -62,6 +64,8 @@ export class DrizzleModule {}
     PaymentTransactionsRepository,
     BotsRepository,
     BotMessagesRepository,
+    BotUsersRepository,
+    BotSettingsRepository,
   ],
   exports: [
     // Export the database client for direct access if needed
@@ -82,6 +86,8 @@ export class DrizzleModule {}
     PaymentTransactionsRepository,
     BotsRepository,
     BotMessagesRepository,
+    BotUsersRepository,
+    BotSettingsRepository,
   ],
 })
 export class DbModule {}

@@ -46,6 +46,8 @@ export interface BotSettings {
     signalsEnabled: boolean;
     /** Whether broadcast messaging is enabled */
     broadcastEnabled: boolean;
+
+    partnerFlowEnabled: boolean;
   };
   /** Default values for bot operations */
   defaults: {
@@ -55,13 +57,6 @@ export interface BotSettings {
     trialDays: number;
     /** Default language code (e.g., 'en', 'ru') */
     language: string;
-  };
-  /** Optional UI customization settings */
-  ui?: {
-    /** URL to welcome image */
-    welcomeImage?: string;
-    /** Hex color code for branding */
-    brandColor?: string;
   };
 }
 

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Module } from '@nestjs/common';
 import { WebhookController } from './webhook.controller';
 import { TelegrafModule } from '@quantumdeal/telegraf';
@@ -15,6 +14,7 @@ import { DbModule, OrdersRepository } from '@quantumdeal/db';
 import { FrameworkModule, SentryModule } from '@quantumdeal/framework';
 import { session } from 'telegraf';
 import { WebhookService } from './webhook.service';
+import { PartnerBotModule } from '@quantumdeal/partner-bot';
 
 export const sessionMiddleware = session();
 @Module({
@@ -85,10 +85,19 @@ export const sessionMiddleware = session();
     // Dynamic bots loaded from database
     TelegrafModule.forRootDynamic({
       botConfigProvider: DynamicBotConfigService,
-      sharedHandlerModules: [BotModule],
+      sharedHandlerModules: [PartnerBotModule],
       webhookDomain: process.env.TELEGRAM_BOT_WEBHOOK_DOMAIN ?? '',
-      imports: [DbModule, ConfigModule, BotModule],
+      imports: [DbModule, ConfigModule, PartnerBotModule],
       globalMiddlewares: [sessionMiddleware],
+      // Inject botId into context for each dynamic bot
+      middlewareFactory: (botConfig) => [
+        async (ctx, next) => {
+          // Inject the database botId into the context
+          // This allows handlers to access ctx.botId for bot-specific operations
+          (ctx as { botId?: number }).botId = botConfig.id;
+          await next();
+        },
+      ],
     }),
   ],
   controllers: [WebhookController],
