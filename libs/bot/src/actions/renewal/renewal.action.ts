@@ -1,6 +1,5 @@
 import { Injectable, Logger, UseFilters } from '@nestjs/common';
 import { Action, Ctx, InjectBot, Update } from '@quantumdeal/telegraf';
-import { Telegraf } from 'telegraf';
 import type { UserContext } from '../../interfaces';
 import {
   UserSubscriptionsRepository,
@@ -81,7 +80,7 @@ export class RenewalAction {
       }
 
       // Verify ownership
-      if (userSubscription.userId !== user.telegramId) {
+      if (userSubscription.botUserId !== user.botUserId) {
         await ctx.reply('This subscription does not belong to you');
         return;
       }
@@ -110,7 +109,7 @@ export class RenewalAction {
       // Prepare invoice payload
       const payload = JSON.stringify({
         type: 'renewal',
-        userId: user.telegramId,
+        botUserId: user.botUserId,
         subscriptionId: subscription.id,
         userSubscriptionId: userSubscription.id,
         tariffId: tariff.id,
@@ -132,11 +131,11 @@ export class RenewalAction {
       });
 
       this.logger.log(
-        `Sent renewal invoice to user ${user.telegramId} for subscription ${subscriptionId}`,
+        `Sent renewal invoice to bot user ${user.botUserId} for subscription ${subscriptionId}`,
       );
     } catch (error) {
       this.logger.error(
-        `Error handling renewal for user ${user.telegramId}`,
+        `Error handling renewal for bot user ${user.botUserId}`,
         error,
       );
       await ctx.reply('An error occurred. Please try again later.');
@@ -166,7 +165,7 @@ export class RenewalAction {
       return;
     }
 
-    this.logger.debug(`User ${user.telegramId} opening renewal scene`); // DEBUG LOG
+    this.logger.debug(`Bot user ${user.botUserId} opening renewal scene`); // DEBUG LOG
 
     try {
       // Answer callback query immediately
@@ -178,11 +177,11 @@ export class RenewalAction {
       this.logger.debug('Scene entered successfully'); // DEBUG LOG
 
       this.logger.log(
-        `User ${user.telegramId} opened renewal scene from View Plans button`,
+        `Bot user ${user.botUserId} opened renewal scene from View Plans button`,
       );
     } catch (error) {
       this.logger.error(
-        `Error opening renewal scene for user ${user.telegramId}`,
+        `Error opening renewal scene for bot user ${user.botUserId}`,
         error,
       );
       await ctx.reply(

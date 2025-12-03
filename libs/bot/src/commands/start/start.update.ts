@@ -199,8 +199,8 @@ export class StartUpdate {
 
     // Fetch all active subscriptions for the user
     const userSubscriptions =
-      await this.userSubscriptionsRepository.findActiveByUserIdWithSubscription(
-        user.telegramId,
+      await this.userSubscriptionsRepository.findActiveByBotUserIdWithSubscription(
+        user.botUserId,
       );
 
     // Check trial eligibility
@@ -320,8 +320,8 @@ export class StartUpdate {
     expirationDate.setDate(expirationDate.getDate() + 30);
 
     // Create user subscription entry (unified architecture for ALL types)
-    await this.userSubscriptionsRepository.activate(
-      user.telegramId,
+    await this.userSubscriptionsRepository.activateForBotUser(
+      user.botUserId,
       subscription.id,
       expirationDate,
     );

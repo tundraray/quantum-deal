@@ -63,7 +63,7 @@ export class SubscriptionFeaturesRepository extends BaseRepository<
    * @param userId - The user's Telegram ID
    * @returns Array of distinct enabled features for the user
    */
-  async getFeaturesByUserId(userId: number): Promise<SubscriptionFeature[]> {
+  async getFeaturesByUserId(botUserId: number): Promise<SubscriptionFeature[]> {
     return this.db
       .selectDistinct({
         id: subscriptionFeatures.id,
@@ -88,7 +88,7 @@ export class SubscriptionFeaturesRepository extends BaseRepository<
       )
       .where(
         and(
-          eq(userSubscriptions.userId, userId),
+          eq(userSubscriptions.botUserId, botUserId),
           eq(userSubscriptions.isActive, true),
           eq(subscriptions.isActive, true),
           eq(subscriptionFeatures.isEnabled, true),
@@ -106,7 +106,10 @@ export class SubscriptionFeaturesRepository extends BaseRepository<
    * @param featureKey - The feature to check
    * @returns true if user has the feature enabled
    */
-  async hasFeature(userId: number, featureKey: FeatureFlag): Promise<boolean> {
+  async hasFeature(
+    botUserId: number,
+    featureKey: FeatureFlag,
+  ): Promise<boolean> {
     const result = await this.db
       .select({ exists: sql<number>`1` })
       .from(subscriptionFeatures)
@@ -123,7 +126,7 @@ export class SubscriptionFeaturesRepository extends BaseRepository<
       )
       .where(
         and(
-          eq(userSubscriptions.userId, userId),
+          eq(userSubscriptions.botUserId, botUserId),
           eq(subscriptionFeatures.featureKey, featureKey),
           eq(subscriptionFeatures.isEnabled, true),
           eq(userSubscriptions.isActive, true),

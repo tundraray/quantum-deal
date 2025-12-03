@@ -65,7 +65,7 @@ export class PaymentService {
    * @returns Transaction ID and invoice message ID
    */
   async createRenewalInvoice(
-    userId: number,
+    botUserId: number,
     subscriptionId: number,
     tariffId: number,
   ): Promise<{ transactionId: number; invoiceMessageId: number }> {
@@ -84,15 +84,15 @@ export class PaymentService {
 
     // Find or create user_subscription
     let userSubscription =
-      await this.userSubscriptionsRepo.findByUserAndSubscription(
-        userId,
+      await this.userSubscriptionsRepo.findByBotUserAndSubscription(
+        botUserId,
         subscriptionId,
       );
 
     if (!userSubscription) {
       // Create new inactive user_subscription
       userSubscription = await this.userSubscriptionsRepo.create({
-        userId,
+        botUserId,
         subscriptionId,
         isActive: false,
         activatedAt: new Date(),
@@ -102,7 +102,7 @@ export class PaymentService {
 
     // Create payment transaction
     const transaction = await this.paymentTransactionsRepo.create({
-      userId,
+      botUserId,
       userSubscriptionId: userSubscription.id,
       tariffId,
       amountStars: tariff.priceStars,
@@ -122,32 +122,36 @@ export class PaymentService {
 
     // Get subscription and user lang for invoice
     const subscription = await this.subscriptionsRepo.findById(subscriptionId);
-    const userLang = await this.resolveUserLang(userId);
+    const userLang = await this.resolveUserLang(botUserId);
+    const botUser = await this.botUsersRepo.findById(botUserId);
 
     // Send invoice to user
     try {
-      const invoiceMessage = await this.bot.telegram.sendInvoice(userId, {
-        title: getRenewalMessage(
-          userLang,
-          'invoiceTitle',
-          subscription?.name || '',
-        ),
-        description: getRenewalMessage(
-          userLang,
-          'invoiceDescription',
-          subscription?.name || '',
-          tariff.displayName,
-        ),
-        payload: JSON.stringify(payload),
-        provider_token: '', // Empty for Telegram Stars
-        currency: 'XTR', // Telegram Stars
-        prices: [
-          {
-            label: tariff.displayName,
-            amount: tariff.priceStars,
-          },
-        ],
-      });
+      const invoiceMessage = await this.bot.telegram.sendInvoice(
+        botUser?.userId || 0,
+        {
+          title: getRenewalMessage(
+            userLang,
+            'invoiceTitle',
+            subscription?.name || '',
+          ),
+          description: getRenewalMessage(
+            userLang,
+            'invoiceDescription',
+            subscription?.name || '',
+            tariff.displayName,
+          ),
+          payload: JSON.stringify(payload),
+          provider_token: '', // Empty for Telegram Stars
+          currency: 'XTR', // Telegram Stars
+          prices: [
+            {
+              label: tariff.displayName,
+              amount: tariff.priceStars,
+            },
+          ],
+        },
+      );
 
       // Update transaction with invoice ID
       await this.paymentTransactionsRepo.updateState(
@@ -161,7 +165,7 @@ export class PaymentService {
       );
 
       this.logger.log(
-        `Created invoice for user ${userId}, transaction ${transaction.id}`,
+        `Created invoice for bot user ${botUserId}, transaction ${transaction.id}`,
       );
 
       return {
@@ -198,7 +202,7 @@ export class PaymentService {
   async validatePreCheckout(
     payload: RenewalInvoicePayload,
     amount: number,
-    userId: number,
+    botUserId: number,
   ): Promise<boolean> {
     try {
       // Validate payload structure
@@ -234,9 +238,9 @@ export class PaymentService {
       }
 
       // Verify user owns transaction
-      if (transaction.userId !== userId) {
+      if (transaction.botUserId !== botUserId) {
         this.logger.warn(
-          `User ${userId} does not own transaction ${transaction.id}`,
+          `Bot user ${botUserId} does not own transaction ${transaction.id}`,
         );
         return false;
       }
