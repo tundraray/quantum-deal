@@ -440,6 +440,7 @@ export class UserSubscriptionsRepository extends BaseRepository<
       userSubscription: UserSubscription;
     }>
   > {
+    console.log('subscriptionId', subscriptionId);
     const result = await this.db
       .select({
         botUser: botUsers,
