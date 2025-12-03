@@ -126,6 +126,31 @@ export class PaymentTransactionsRepository {
   }
 
   /**
+   * Find bot user's payment history
+   * Returns transactions ordered by creation date (newest first)
+   *
+   * @param botUserId - Bot user ID (bot_users.id)
+   * @param options - Pagination options
+   * @returns Array of transactions
+   */
+  async findByBotUser(
+    botUserId: number,
+    options?: { limit?: number; offset?: number },
+  ): Promise<PaymentTransaction[]> {
+    const { limit = 20, offset = 0 } = options || {};
+
+    return this.db
+      .select()
+      .from(paymentTransactions)
+      .where(eq(paymentTransactions.botUserId, botUserId))
+      .orderBy(desc(paymentTransactions.createdAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  /**
+   * @deprecated Use findByBotUser instead. Will be removed after migration validation.
+   *
    * Find user's payment history
    * Returns transactions ordered by creation date (newest first)
    *
@@ -149,6 +174,42 @@ export class PaymentTransactionsRepository {
   }
 
   /**
+   * Get payment statistics for a bot user
+   * Returns aggregated payment data
+   *
+   * @param botUserId - Bot user ID (bot_users.id)
+   * @returns Payment statistics
+   */
+  async getStatisticsByBotUser(botUserId: number): Promise<{
+    totalPayments: number;
+    completedPayments: number;
+    failedPayments: number;
+    totalStarsSpent: number;
+    totalDaysPurchased: number;
+  }> {
+    const stats = await this.db
+      .select({
+        totalPayments: sql<number>`COUNT(*)`,
+        completedPayments: sql<number>`COUNT(*) FILTER (WHERE state = ${PaymentState.COMPLETED})`,
+        failedPayments: sql<number>`COUNT(*) FILTER (WHERE state = ${PaymentState.FAILED})`,
+        totalStarsSpent: sql<number>`SUM(CASE WHEN state = ${PaymentState.COMPLETED} THEN amount_stars ELSE 0 END)`,
+        totalDaysPurchased: sql<number>`SUM(CASE WHEN state = ${PaymentState.COMPLETED} THEN period_days ELSE 0 END)`,
+      })
+      .from(paymentTransactions)
+      .where(eq(paymentTransactions.botUserId, botUserId));
+
+    return {
+      totalPayments: Number(stats[0]?.totalPayments || 0),
+      completedPayments: Number(stats[0]?.completedPayments || 0),
+      failedPayments: Number(stats[0]?.failedPayments || 0),
+      totalStarsSpent: Number(stats[0]?.totalStarsSpent || 0),
+      totalDaysPurchased: Number(stats[0]?.totalDaysPurchased || 0),
+    };
+  }
+
+  /**
+   * @deprecated Use getStatisticsByBotUser instead. Will be removed after migration validation.
+   *
    * Get payment statistics for a user
    * Returns aggregated payment data
    *

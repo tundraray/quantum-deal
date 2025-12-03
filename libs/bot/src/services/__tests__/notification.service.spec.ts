@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import Bottleneck from 'bottleneck';
-import { Telegraf, Context } from 'telegraf';
+import { Telegraf } from 'telegraf';
 import { NotificationService } from '../notification.service';
-import { UsersRepository } from '@quantumdeal/db';
-import { getBotToken } from '@quantumdeal/telegraf';
+import { BotsRepository, BotUsersRepository } from '@quantumdeal/db';
+import { getBotToken, DynamicTelegrafService } from '@quantumdeal/telegraf';
 import {
   QueuedMessageType,
   MessagePriority,
@@ -38,18 +38,6 @@ import * as Sentry from '@sentry/nestjs';
 const INJECT_BOT_TOKEN = getBotToken('QuantumDealBot');
 
 /**
- * Create a mock Telegraf bot instance for testing.
- * Returns a mock that satisfies TelegrafInstance type (Telegraf<UserContext> | Telegraf<Context>)
- */
-function createMockBot() {
-  return {
-    telegram: {
-      sendMessage: jest.fn().mockResolvedValue({ message_id: 12345 }),
-    },
-  } as unknown as Telegraf<Context>;
-}
-
-/**
  * Create a mock Bottleneck limiter for testing.
  */
 function createMockLimiter() {
@@ -70,7 +58,9 @@ async function flushPromises(): Promise<void> {
 describe('NotificationService', () => {
   let service: NotificationService;
   let mockBot: Telegraf<UserContext>;
-  let mockUsersRepository: Partial<UsersRepository>;
+  let mockBotsRepository: Partial<BotsRepository>;
+  let mockBotUsersRepository: Partial<BotUsersRepository>;
+  let mockDynamicTelegrafService: Partial<DynamicTelegrafService>;
 
   beforeEach(async () => {
     // Reset mocks
@@ -84,9 +74,17 @@ describe('NotificationService', () => {
       },
     } as unknown as Telegraf<UserContext>;
 
-    // Create mock users repository
-    mockUsersRepository = {
-      deactivateUser: jest.fn().mockResolvedValue(undefined),
+    // Create mock repositories
+    mockBotsRepository = {
+      findById: jest.fn().mockResolvedValue({ id: 1, isDynamic: false }),
+    };
+
+    mockBotUsersRepository = {
+      deactivate: jest.fn().mockResolvedValue(undefined),
+    };
+
+    mockDynamicTelegrafService = {
+      getBot: jest.fn().mockReturnValue(null),
     };
 
     // Create testing module
@@ -98,8 +96,16 @@ describe('NotificationService', () => {
           useValue: mockBot,
         },
         {
-          provide: UsersRepository,
-          useValue: mockUsersRepository,
+          provide: BotsRepository,
+          useValue: mockBotsRepository,
+        },
+        {
+          provide: BotUsersRepository,
+          useValue: mockBotUsersRepository,
+        },
+        {
+          provide: DynamicTelegrafService,
+          useValue: mockDynamicTelegrafService,
         },
       ],
     }).compile();
@@ -118,13 +124,12 @@ describe('NotificationService', () => {
   describe('sendWithBot', () => {
     it('AC-009: should schedule message with provided limiter', async () => {
       // Arrange
-      const mockExternalBot = createMockBot();
       const mockLimiter = createMockLimiter();
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const scheduleSpy = jest.spyOn(mockLimiter, 'schedule');
 
       // Act
-      service.sendWithBot(mockExternalBot, mockLimiter, 123456, 'Test message');
+      service.sendWithBot(mockLimiter, 123456, 1, 'Test message');
 
       // Assert
       expect(scheduleSpy).toHaveBeenCalled();
@@ -138,18 +143,17 @@ describe('NotificationService', () => {
       await mockLimiter.stop({ dropWaitingJobs: true });
     });
 
-    it('AC-009: should send via provided bot instance', async () => {
+    it('AC-009: should send via static bot for non-dynamic bot', async () => {
       // Arrange
-      const mockExternalBot = createMockBot();
       const mockLimiter = createMockLimiter();
 
       // Act
-      service.sendWithBot(mockExternalBot, mockLimiter, 123456, 'Test message');
+      service.sendWithBot(mockLimiter, 123456, 1, 'Test message');
       await flushPromises();
 
-      // Assert
+      // Assert - should use static bot (mockBot) since isDynamic is false
       // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(mockExternalBot.telegram.sendMessage).toHaveBeenCalledWith(
+      expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
         123456,
         'Test message',
         expect.any(Object),
@@ -161,14 +165,13 @@ describe('NotificationService', () => {
 
     it('AC-009: should return unique message ID string', async () => {
       // Arrange
-      const mockExternalBot = createMockBot();
       const mockLimiter = createMockLimiter();
 
       // Act
       const messageId = service.sendWithBot(
-        mockExternalBot,
         mockLimiter,
         123456,
+        1,
         'Test message',
       );
 
@@ -178,9 +181,9 @@ describe('NotificationService', () => {
 
       // Act again to verify uniqueness
       const messageId2 = service.sendWithBot(
-        mockExternalBot,
         mockLimiter,
         123456,
+        1,
         'Another message',
       );
 
@@ -192,20 +195,15 @@ describe('NotificationService', () => {
 
     it('AC-009: should log to Sentry on send failure', async () => {
       // Arrange
-      const mockExternalBot = createMockBot();
-      mockExternalBot.telegram.sendMessage = jest
+      mockBot.telegram.sendMessage = jest
         .fn()
         .mockRejectedValue(new Error('API Error'));
       const mockLimiter = createMockLimiter();
 
       // Act
-      service.sendWithBot(
-        mockExternalBot,
-        mockLimiter,
-        123456,
-        'Test message',
-        { maxRetries: 0 },
-      );
+      service.sendWithBot(mockLimiter, 123456, 1, 'Test message', {
+        maxRetries: 0,
+      });
       await flushPromises();
 
       // Assert
@@ -217,12 +215,11 @@ describe('NotificationService', () => {
 
     it('should update messageStats.totalScheduled on message schedule', () => {
       // Arrange
-      const mockExternalBot = createMockBot();
       const mockLimiter = createMockLimiter();
       const initialScheduled = service.getQueueStatus().totalMessages;
 
       // Act
-      service.sendWithBot(mockExternalBot, mockLimiter, 123456, 'Test message');
+      service.sendWithBot(mockLimiter, 123456, 1, 'Test message');
 
       // Assert
       expect(service.getQueueStatus().totalMessages).toBe(initialScheduled + 1);
@@ -233,12 +230,11 @@ describe('NotificationService', () => {
 
     it('should update messageStats.successCount on successful send', async () => {
       // Arrange
-      const mockExternalBot = createMockBot();
       const mockLimiter = createMockLimiter();
       const initialSuccess = service.getQueueStatus().sentMessages;
 
       // Act
-      service.sendWithBot(mockExternalBot, mockLimiter, 123456, 'Test message');
+      service.sendWithBot(mockLimiter, 123456, 1, 'Test message');
       await flushPromises();
 
       // Assert
@@ -250,21 +246,16 @@ describe('NotificationService', () => {
 
     it('should update messageStats.failureCount on permanent error', async () => {
       // Arrange
-      const mockExternalBot = createMockBot();
-      mockExternalBot.telegram.sendMessage = jest
+      mockBot.telegram.sendMessage = jest
         .fn()
         .mockRejectedValue(new Error('bot was blocked by the user'));
       const mockLimiter = createMockLimiter();
       const initialFailures = service.getQueueStatus().failedMessages;
 
       // Act
-      service.sendWithBot(
-        mockExternalBot,
-        mockLimiter,
-        123456,
-        'Test message',
-        { maxRetries: 0 },
-      );
+      service.sendWithBot(mockLimiter, 123456, 1, 'Test message', {
+        maxRetries: 0,
+      });
       await flushPromises();
 
       // Assert
@@ -276,24 +267,19 @@ describe('NotificationService', () => {
 
     it('should deactivate user on permanent error', async () => {
       // Arrange
-      const mockExternalBot = createMockBot();
-      mockExternalBot.telegram.sendMessage = jest
+      mockBot.telegram.sendMessage = jest
         .fn()
         .mockRejectedValue(new Error('bot was blocked by the user'));
       const mockLimiter = createMockLimiter();
 
       // Act
-      service.sendWithBot(
-        mockExternalBot,
-        mockLimiter,
-        123456,
-        'Test message',
-        { maxRetries: 0 },
-      );
+      service.sendWithBot(mockLimiter, 123456, 1, 'Test message', {
+        maxRetries: 0,
+      });
       await flushPromises();
 
       // Assert
-      expect(mockUsersRepository.deactivateUser).toHaveBeenCalledWith(123456);
+      expect(mockBotUsersRepository.deactivate).toHaveBeenCalledWith(123456, 1);
 
       // Cleanup
       await mockLimiter.stop({ dropWaitingJobs: true });
@@ -301,26 +287,19 @@ describe('NotificationService', () => {
 
     it('should use provided message options', async () => {
       // Arrange
-      const mockExternalBot = createMockBot();
       const mockLimiter = createMockLimiter();
 
       // Act
-      service.sendWithBot(
-        mockExternalBot,
-        mockLimiter,
-        123456,
-        '**Bold text**',
-        {
-          messageType: QueuedMessageType.MARKDOWN,
-          priority: MessagePriority.HIGH,
-          maxRetries: 5,
-        },
-      );
+      service.sendWithBot(mockLimiter, 123456, 1, '**Bold text**', {
+        messageType: QueuedMessageType.MARKDOWN,
+        priority: MessagePriority.HIGH,
+        maxRetries: 5,
+      });
       await flushPromises();
 
       // Assert - Verify the message was sent with MarkdownV2 parse mode
       // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(mockExternalBot.telegram.sendMessage).toHaveBeenCalledWith(
+      expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
         123456,
         '**Bold text**', // telegramify-markdown mock returns text as-is
         expect.objectContaining({
@@ -334,24 +313,17 @@ describe('NotificationService', () => {
 
     it('should use HTML parse mode for HTML message type', async () => {
       // Arrange
-      const mockExternalBot = createMockBot();
       const mockLimiter = createMockLimiter();
 
       // Act
-      service.sendWithBot(
-        mockExternalBot,
-        mockLimiter,
-        123456,
-        '<b>Bold text</b>',
-        {
-          messageType: QueuedMessageType.HTML,
-        },
-      );
+      service.sendWithBot(mockLimiter, 123456, 1, '<b>Bold text</b>', {
+        messageType: QueuedMessageType.HTML,
+      });
       await flushPromises();
 
       // Assert
       // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(mockExternalBot.telegram.sendMessage).toHaveBeenCalledWith(
+      expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
         123456,
         '<b>Bold text</b>',
         expect.objectContaining({
@@ -365,14 +337,13 @@ describe('NotificationService', () => {
 
     it('should NOT use internal limiter (uses provided limiter instead)', async () => {
       // Arrange
-      const mockExternalBot = createMockBot();
       const mockLimiter = createMockLimiter();
 
       // Spy on internal limiter by getting queue status before/after
       const internalQueueBefore = service.getQueueStatus().pendingMessages;
 
       // Act
-      service.sendWithBot(mockExternalBot, mockLimiter, 123456, 'Test message');
+      service.sendWithBot(mockLimiter, 123456, 1, 'Test message');
 
       // The internal queue should NOT have increased
       // (message was scheduled via external limiter)
@@ -388,18 +359,13 @@ describe('NotificationService', () => {
 
     it('should convert MessagePriority to Bottleneck priority correctly', async () => {
       // Arrange
-      const mockExternalBot = createMockBot();
       const mockLimiter = createMockLimiter();
       const scheduleSpy = jest.spyOn(mockLimiter, 'schedule');
 
       // Act - send CRITICAL priority message
-      service.sendWithBot(
-        mockExternalBot,
-        mockLimiter,
-        123456,
-        'Critical message',
-        { priority: MessagePriority.CRITICAL },
-      );
+      service.sendWithBot(mockLimiter, 123456, 1, 'Critical message', {
+        priority: MessagePriority.CRITICAL,
+      });
 
       // Assert - Bottleneck priority 5 for CRITICAL
       expect(scheduleSpy).toHaveBeenCalledWith(
@@ -419,6 +385,7 @@ describe('NotificationService', () => {
       // Act
       const messageId = service.addMessage(
         123456,
+        1,
         'Test message via addMessage',
       );
 

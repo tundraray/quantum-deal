@@ -55,6 +55,11 @@ export interface ActiveSubscriptionDto {
  */
 export interface UserWithSubscriptions {
   /**
+   * Bot user ID (internal auto-generated ID, NOT telegramId)
+   */
+  botUserId: number;
+
+  /**
    * Telegram user ID (primary key)
    */
   telegramId: number;

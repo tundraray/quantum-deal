@@ -23,7 +23,6 @@ export class RenewalAction {
 
   constructor(
     @InjectBot('QuantumDealBot')
-    private readonly bot: Telegraf<UserContext>,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly renewalTariffsRepository: RenewalTariffsRepository,
