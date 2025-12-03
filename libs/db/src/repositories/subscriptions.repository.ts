@@ -11,6 +11,7 @@ import {
 import { subscriptionFeatures } from '../schema/subscription-features';
 import { users } from '../schema/users';
 import { userSubscriptions } from '../schema/user-subscriptions';
+import { botUsers } from '../schema/bot-users';
 
 /**
  * Extended subscription interface that includes feature flag information
@@ -26,7 +27,8 @@ export interface SubscriptionWithFeatures {
   hasCustomFiltering: boolean;
 
   // User fields
-  userId: number;
+  botUserId: number;
+  botId: number;
   userTelegramId: string;
   userFirstName: string;
   userLastName: string | null;
@@ -88,12 +90,13 @@ export class SubscriptionsRepository extends BaseRepository<
         `,
 
         // User fields
-        userId: users.telegramId,
+        botUserId: botUsers.id,
+        botId: botUsers.botId,
         userTelegramId: sql<string>`CAST(${users.telegramId} AS TEXT)`,
         userFirstName: users.firstName,
         userLastName: users.lastName,
         userUsername: users.username,
-        userLang: users.lang,
+        userLang: botUsers.lang,
 
         // UserSubscription fields
         userSubscriptionId: userSubscriptions.id,
@@ -117,7 +120,8 @@ export class SubscriptionsRepository extends BaseRepository<
           eq(userSubscriptions.isActive, true),
         ),
       )
-      .innerJoin(users, eq(users.telegramId, userSubscriptions.userId))
+      .innerJoin(botUsers, eq(botUsers.userId, userSubscriptions.botUserId))
+      .innerJoin(users, eq(users.telegramId, botUsers.userId))
       .where(
         and(
           // Check if sector is in the tier_access config's sectors array
@@ -172,12 +176,13 @@ export class SubscriptionsRepository extends BaseRepository<
         `,
 
         // User fields
-        userId: users.telegramId,
-        userTelegramId: sql<string>`CAST(${users.telegramId} AS TEXT)`,
+        botUserId: botUsers.id,
+        botId: botUsers.botId,
+        userTelegramId: sql<string>`CAST(${botUsers.userId} AS TEXT)`,
         userFirstName: users.firstName,
         userLastName: users.lastName,
         userUsername: users.username,
-        userLang: users.lang,
+        userLang: botUsers.lang,
 
         // UserSubscription fields
         userSubscriptionId: userSubscriptions.id,

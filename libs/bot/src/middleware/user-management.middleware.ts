@@ -64,7 +64,7 @@ export class UserManagementMiddleware {
       }
 
       // Resolve default bot ID if not cached
-      const botId = await this.resolveDefaultBotId();
+      const botId = (await this.resolveDefaultBotId()) ?? 1;
 
       if (!botId) {
         this.logger.warn(
@@ -72,8 +72,26 @@ export class UserManagementMiddleware {
         );
         // Fall back to legacy flow if bot not found
         const user = await this.upsertUser(ctx.from);
-        const userWithSubscriptions =
-          await this.loadUserWithSubscriptionsLegacy(user);
+        const botUser = await this.botUsersRepository.findOrCreate(
+          user.telegramId,
+          botId,
+          {
+            lang: ctx.from.language_code || 'en',
+            isActive: true,
+          },
+        );
+        const userWithSubscriptions = await this.loadUserWithSubscriptions(
+          {
+            telegramId: user.telegramId,
+            username: user.username,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            lang: ctx.from.language_code || 'en',
+            isPremium: user.isPremium ?? false,
+            createdAt: user.createdAt,
+          },
+          botUser,
+        );
         (ctx as UserContext).user = userWithSubscriptions;
         await next();
         return;
@@ -87,7 +105,7 @@ export class UserManagementMiddleware {
         user.telegramId,
         botId,
         {
-          lang: user.lang ?? undefined,
+          lang: ctx.from.language_code || 'en',
           isActive: true,
         },
       );
@@ -97,8 +115,16 @@ export class UserManagementMiddleware {
 
       // Attach user to context with subscriptions (using botUserId)
       const userWithSubscriptions = await this.loadUserWithSubscriptions(
-        user,
-        botUser.id,
+        {
+          telegramId: user.telegramId,
+          username: user.username,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          lang: botUser.lang,
+          isPremium: user.isPremium ?? false,
+          createdAt: user.createdAt,
+        },
+        botUser,
       );
       (ctx as UserContext).user = userWithSubscriptions;
 
@@ -128,8 +154,6 @@ export class UserManagementMiddleware {
       username: telegramUser.username || null,
       firstName: telegramUser.first_name || null,
       lastName: telegramUser.last_name || null,
-      isActive: true,
-      lang: telegramUser.language_code || 'en',
       isPremium: telegramUser.is_premium || false,
     };
 
@@ -183,15 +207,14 @@ export class UserManagementMiddleware {
       lastName: string | null;
       lang: string | null;
       isPremium: boolean | null;
-      isActive: boolean;
       createdAt: Date;
     },
-    botUserId: number,
+    botUser: BotUser,
   ): Promise<UserWithSubscriptions> {
     // Load active subscriptions with subscription details using botUserId
     const subscriptions =
       await this.userSubscriptionsRepository.findActiveByBotUserIdWithSubscription(
-        botUserId,
+        botUser.id,
       );
 
     // Load feature flags for this user
@@ -199,7 +222,7 @@ export class UserManagementMiddleware {
       await this.featureFlagService.getUserFeatures(user.telegramId);
 
     this.logger.debug(
-      `Loaded ${subscriptions.length} subscriptions and ${enabledFeatures.size} features for user ${user.telegramId} (botUserId: ${botUserId})`,
+      `Loaded ${subscriptions.length} subscriptions and ${enabledFeatures.size} features for user ${user.telegramId} (botUserId: ${botUser.id})`,
     );
 
     // Map to UserWithSubscriptions DTO
@@ -210,63 +233,7 @@ export class UserManagementMiddleware {
       lastName: user.lastName,
       lang: user.lang,
       isPremium: user.isPremium ?? false,
-      isActive: user.isActive,
-      createdAt: user.createdAt,
-      activeSubscriptions: subscriptions.map((s) => ({
-        subscriptionId: s.subscription.id,
-        name: s.subscription.name,
-        type: s.subscription.type,
-        activatedAt: s.userSubscription.activatedAt,
-        expiresAt: s.userSubscription.expiresAt,
-        isActive: s.userSubscription.isActive,
-      })),
-      enabledFeatures,
-      featureConfigs,
-    };
-  }
-
-  /**
-   * Legacy method for loading user with subscriptions using userId (telegramId)
-   *
-   * @deprecated This method uses the old userId-based query. Will be removed
-   * after the botUserId migration is complete and validated.
-   *
-   * @param user - Raw user entity from database
-   * @returns UserWithSubscriptions DTO with active subscriptions and feature flags
-   */
-  private async loadUserWithSubscriptionsLegacy(user: {
-    telegramId: number;
-    username: string | null;
-    firstName: string | null;
-    lastName: string | null;
-    lang: string | null;
-    isPremium: boolean | null;
-    isActive: boolean;
-    createdAt: Date;
-  }): Promise<UserWithSubscriptions> {
-    // Load active subscriptions with subscription details using userId (deprecated)
-    const subscriptions =
-      await this.userSubscriptionsRepository.findActiveByUserIdWithSubscription(
-        user.telegramId,
-      );
-
-    // Load feature flags for this user
-    const { enabledFeatures, featureConfigs } =
-      await this.featureFlagService.getUserFeatures(user.telegramId);
-
-    this.logger.debug(
-      `[LEGACY] Loaded ${subscriptions.length} subscriptions and ${enabledFeatures.size} features for user ${user.telegramId}`,
-    );
-
-    // Map to UserWithSubscriptions DTO
-    return {
-      telegramId: user.telegramId,
-      username: user.username,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      lang: user.lang,
-      isPremium: user.isPremium ?? false,
-      isActive: user.isActive,
+      isActive: botUser.isActive,
       createdAt: user.createdAt,
       activeSubscriptions: subscriptions.map((s) => ({
         subscriptionId: s.subscription.id,

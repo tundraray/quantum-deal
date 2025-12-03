@@ -71,7 +71,7 @@ export class UserManagementMiddleware {
         user.telegramId,
         botId,
         {
-          lang: user.lang ?? undefined,
+          lang: ctx.from.language_code || 'en',
           isActive: true,
         },
       );
@@ -81,8 +81,16 @@ export class UserManagementMiddleware {
 
       // Attach user to context with subscriptions (using botUserId)
       const userWithSubscriptions = await this.loadUserWithSubscriptions(
-        user,
-        botUser.id,
+        {
+          telegramId: user.telegramId,
+          username: user.username,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          lang: ctx.from.language_code || 'en',
+          isPremium: user.isPremium ?? false,
+          createdAt: user.createdAt,
+        },
+        botUser,
       );
       (ctx as UserContext).user = userWithSubscriptions;
 
@@ -112,8 +120,6 @@ export class UserManagementMiddleware {
       username: telegramUser.username || null,
       firstName: telegramUser.first_name || null,
       lastName: telegramUser.last_name || null,
-      isActive: true,
-      lang: telegramUser.language_code || 'en',
       isPremium: telegramUser.is_premium || false,
     };
 
@@ -140,15 +146,15 @@ export class UserManagementMiddleware {
       lastName: string | null;
       lang: string | null;
       isPremium: boolean | null;
-      isActive: boolean;
       createdAt: Date;
     },
-    botUserId: number,
+    botUser: BotUser,
   ): Promise<UserWithSubscriptions> {
     // Load active subscriptions with subscription details using botUserId
+
     const subscriptions =
       await this.userSubscriptionsRepository.findActiveByBotUserIdWithSubscription(
-        botUserId,
+        botUser.id,
       );
 
     // Load feature flags for this user
@@ -159,7 +165,7 @@ export class UserManagementMiddleware {
     const featureConfigs = new Map<FeatureFlag, FeatureConfig>();
 
     this.logger.debug(
-      `Loaded ${subscriptions.length} subscriptions and ${enabledFeatures.size} features for user ${user.telegramId} (botUserId: ${botUserId})`,
+      `Loaded ${subscriptions.length} subscriptions and ${enabledFeatures.size} features for user ${user.telegramId} (botUserId: ${botUser.id})`,
     );
 
     // Map to UserWithSubscriptions DTO
@@ -168,10 +174,10 @@ export class UserManagementMiddleware {
       username: user.username,
       firstName: user.firstName,
       lastName: user.lastName,
-      lang: user.lang,
+      lang: botUser.lang,
       isPremium: user.isPremium ?? false,
-      isActive: user.isActive,
-      createdAt: user.createdAt,
+      isActive: botUser.isActive,
+      createdAt: botUser.createdAt,
       activeSubscriptions: subscriptions.map((s) => ({
         subscriptionId: s.subscription.id,
         name: s.subscription.name,

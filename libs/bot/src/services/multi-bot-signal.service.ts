@@ -154,8 +154,9 @@ export class MultiBotSignalService implements MultiBotSignal {
 
       // Step 2: Map to NotificationUser format
       const users: NotificationUser[] = subscriptions.map((sub) => ({
-        userId: sub.userId,
+        botUserId: sub.botUserId,
         telegramId: Number(sub.userTelegramId),
+        botId: botId ?? 0,
         firstName: sub.userFirstName,
         lastName: sub.userLastName,
         username: sub.userUsername,
@@ -203,6 +204,7 @@ export class MultiBotSignalService implements MultiBotSignal {
             bot.instance,
             bot.limiter,
             user.telegramId,
+            user.botId,
             messageText,
             {
               messageType: QueuedMessageType.MARKDOWN,
@@ -282,7 +284,7 @@ export class MultiBotSignalService implements MultiBotSignal {
     try {
       const userFeature =
         await this.userSubscriptionFeaturesRepository.getUserFeatureSettings(
-          user.userId,
+          user.botUserId,
           FeatureFlag.CUSTOM_USER_FILTERING,
         );
 

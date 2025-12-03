@@ -156,8 +156,8 @@ export class WebhookProcessorService {
     // User has custom filtering - check if they've configured it
     try {
       const userFeature =
-        await this.userSubscriptionFeaturesRepository.getUserFeatureSettings(
-          user.userId,
+        await this.userSubscriptionFeaturesRepository.getBotUserFeatureSettings(
+          user.botUserId,
           FeatureFlag.CUSTOM_USER_FILTERING,
         );
 
@@ -268,7 +268,8 @@ export class WebhookProcessorService {
 
       // Map to NotificationUser format
       const users: NotificationUser[] = subscriptionsWithUsers.map((sub) => ({
-        userId: sub.userId,
+        botUserId: sub.botUserId,
+        botId: sub.botId,
         telegramId: Number(sub.userTelegramId),
         firstName: sub.userFirstName,
         lastName: sub.userLastName,
@@ -347,6 +348,7 @@ export class WebhookProcessorService {
 
         preparedMessages.push({
           telegramId: user.telegramId,
+          botId: user.botId,
           messageText,
           messageType: eventType,
           order,
@@ -424,6 +426,7 @@ export class WebhookProcessorService {
       try {
         const messageId = this.notificationService.addMessage(
           message.telegramId,
+          message.botId,
           message.messageText,
           {
             messageType: QueuedMessageType.MARKDOWN,

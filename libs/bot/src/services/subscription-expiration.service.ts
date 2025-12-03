@@ -5,9 +5,9 @@ import { CronJob } from 'cron';
 import {
   UserSubscriptionsRepository,
   SubscriptionsRepository,
-  User,
   Subscription,
   UserSubscription,
+  BotUser,
 } from '@quantumdeal/db';
 import { LLMService, QuotaExceededException } from '@quantumdeal/framework';
 import { NotificationService } from './notification.service';
@@ -189,7 +189,7 @@ export class SubscriptionExpirationService {
       }
 
       // Extract users from results
-      const users = expiringSubscriptions.map((result) => result.user);
+      const users = expiringSubscriptions.map((result) => result.botUser);
 
       this.logger.log(
         `Found ${users.length} users with subscriptions expiring in ${daysFromNow} days`,
@@ -229,10 +229,10 @@ export class SubscriptionExpirationService {
    * Generates messages via LLM for all languages in one request
    */
   private async sendNotificationsToUsers(
-    users: User[],
+    users: BotUser[],
     daysFromNow: number,
     expiringSubscriptions: Array<{
-      user: User;
+      botUser: BotUser;
       subscription: Subscription;
       userSubscription: UserSubscription;
     }>,
@@ -276,7 +276,7 @@ export class SubscriptionExpirationService {
       // Create a map for fast lookup of userSubscriptionId and subscriptionId by userId
       const userSubscriptionMap = new Map(
         expiringSubscriptions.map((item) => [
-          item.user.telegramId,
+          item.botUser.id,
           {
             userSubscriptionId: item.userSubscription.id,
             subscriptionId: item.subscription.id,
@@ -291,8 +291,8 @@ export class SubscriptionExpirationService {
             user,
             daysFromNow,
             messages,
-            userSubscriptionMap.get(user.telegramId)?.userSubscriptionId,
-            userSubscriptionMap.get(user.telegramId)?.subscriptionId,
+            userSubscriptionMap.get(user.id)?.userSubscriptionId,
+            userSubscriptionMap.get(user.id)?.subscriptionId,
           ),
         ),
       );
@@ -310,7 +310,7 @@ export class SubscriptionExpirationService {
             result.status === 'rejected'
               ? (result.reason as Error).message
               : 'Unknown error';
-          errors.push({ userId: user.telegramId, error });
+          errors.push({ userId: user.userId, error });
         }
       });
 
@@ -438,7 +438,7 @@ export class SubscriptionExpirationService {
    * Uses user's language if available, otherwise defaults to English
    */
   private async sendNotificationToUser(
-    user: User,
+    user: BotUser,
     daysFromNow: number,
     messages: ExpirationMessages,
     userSubscriptionId?: number,
@@ -451,7 +451,7 @@ export class SubscriptionExpirationService {
 
       if (!message) {
         this.logger.error(
-          `No message available for user ${user.telegramId}. User lang: ${userLang}, Available languages: ${Object.keys(messages).join(', ')}`,
+          `No message available for user ${user.userId}. User lang: ${userLang}, Available languages: ${Object.keys(messages).join(', ')}`,
         );
         throw new Error(
           `No message available for language: ${userLang} and English fallback is missing`,
@@ -495,21 +495,21 @@ export class SubscriptionExpirationService {
 
       // Send notification with renewal button
       // Note: NotificationService needs to support buttons parameter
-      this.notificationService.addMessage(user.telegramId, message, {
+      this.notificationService.addMessage(user.userId, user.botId, message, {
         messageType: QueuedMessageType.MARKDOWN,
         priority: MessagePriority.HIGH,
         buttons: renewalButton,
       });
 
       this.logger.debug(
-        `Sent ${daysFromNow}-day expiration notification to user ${user.telegramId} (trial: ${isTrial}, button: ${buttonTextKey})`,
+        `Sent ${daysFromNow}-day expiration notification to user ${user.userId} (trial: ${isTrial}, button: ${buttonTextKey})`,
       );
 
       return true;
     } catch (error) {
       const err = error as Error;
       this.logger.error(
-        `Failed to send notification to user ${user.telegramId}: ${err.message}`,
+        `Failed to send notification to user ${user.userId}: ${err.message}`,
         err.stack,
       );
       throw error;

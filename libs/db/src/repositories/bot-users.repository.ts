@@ -108,13 +108,7 @@ export class BotUsersRepository extends BaseRepository<
       })
       .from(botUsers)
       .innerJoin(users, eq(botUsers.userId, users.telegramId))
-      .where(
-        and(
-          eq(botUsers.botId, botId),
-          eq(botUsers.isActive, true),
-          eq(users.isActive, true),
-        ),
-      );
+      .where(and(eq(botUsers.botId, botId), eq(botUsers.isActive, true)));
 
     return result;
   }
@@ -173,11 +167,11 @@ export class BotUsersRepository extends BaseRepository<
   /**
    * Deactivate user for a specific bot (user blocked the bot)
    */
-  async deactivate(userId: number, botId: number): Promise<BotUser | null> {
+  async deactivate(telegramId: number, botId: number): Promise<BotUser | null> {
     const result = await this.db
       .update(botUsers)
       .set({ isActive: false, updatedAt: new Date() })
-      .where(and(eq(botUsers.userId, userId), eq(botUsers.botId, botId)))
+      .where(and(eq(botUsers.userId, telegramId), eq(botUsers.botId, botId)))
       .returning();
 
     return result[0] ?? null;
@@ -212,13 +206,6 @@ export class BotUsersRepository extends BaseRepository<
     const botUser = await this.findByUserAndBot(userId, botId);
     if (botUser?.lang) return botUser.lang;
 
-    // Fall back to global user language
-    const user = await this.db
-      .select({ lang: users.lang })
-      .from(users)
-      .where(eq(users.telegramId, userId))
-      .limit(1);
-
-    return user[0]?.lang ?? defaultLang;
+    return defaultLang;
   }
 }

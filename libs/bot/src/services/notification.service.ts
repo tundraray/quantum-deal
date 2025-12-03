@@ -20,7 +20,8 @@ import {
   BatchSendResult,
 } from '../interfaces/notification.interface';
 import type { UserContext } from '../interfaces';
-import { UsersRepository } from '@quantumdeal/db';
+import { BotsRepository, BotUsersRepository } from '@quantumdeal/db';
+import { DynamicTelegrafService } from '@quantumdeal/telegraf';
 
 /**
  * Type alias for bot instances that can send messages.
@@ -60,7 +61,9 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @InjectBot('QuantumDealBot')
     private readonly bot: Telegraf<UserContext>,
-    private readonly usersRepository: UsersRepository,
+    private readonly dynamicTelegrafService: DynamicTelegrafService,
+    private readonly botsRepository: BotsRepository,
+    private readonly botUsersRepository: BotUsersRepository,
   ) {}
 
   onModuleInit() {
@@ -79,7 +82,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
    * Schedule a single message directly with Bottleneck
    */
   addMessage(
-    userId: number,
+    telegramId: number,
+    botId: number,
     message: string,
     options: MessageOptions = {},
   ): string {
@@ -87,7 +91,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       const messageId = uuidv4();
       const queuedMessage: QueuedMessage = {
         id: messageId,
-        userId,
+        telegramId,
+        botId,
         message,
         messageType: options.messageType ?? QueuedMessageType.TEXT,
         priority: options.priority ?? MessagePriority.NORMAL,
@@ -112,7 +117,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       this.messageStats.totalScheduled++;
 
       this.logger.debug(
-        `Message scheduled: ${options.messageType ?? QueuedMessageType.TEXT} for user ${userId}`,
+        `Message scheduled: ${options.messageType ?? QueuedMessageType.TEXT} for user ${telegramId}`,
       );
 
       // Track message scheduling in Sentry
@@ -120,7 +125,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
         message: 'Message scheduled with Bottleneck',
         data: {
           messageId,
-          userId,
+          telegramId,
           priority: queuedMessage.priority,
           messageType: queuedMessage.messageType,
         },
@@ -131,7 +136,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.logger.error('Error scheduling message', error);
       Sentry.captureException(error, {
-        tags: { userId, service: 'notification' },
+        tags: { telegramId, botId, service: 'notification' },
       });
       throw error;
     }
@@ -142,7 +147,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
    */
   addMessages(
     messages: Array<{
-      userId: number;
+      telegramId: number;
+      botId: number;
       message: string;
       options?: MessageOptions;
     }>,
@@ -157,14 +163,19 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
 
     for (const msg of messages) {
       try {
-        const messageId = this.addMessage(msg.userId, msg.message, msg.options);
+        const messageId = this.addMessage(
+          msg.telegramId,
+          msg.botId,
+          msg.message,
+          msg.options,
+        );
         result.queuedCount++;
         result.queuedIds.push(messageId);
       } catch (error) {
         result.errorCount++;
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error';
-        result.errors.push(`User ${msg.userId}: ${errorMessage}`);
+        result.errors.push(`User ${msg.telegramId}: ${errorMessage}`);
       }
     }
 
@@ -184,7 +195,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
    *
    * @param bot - Telegraf bot instance to send from (accepts both UserContext and Context types)
    * @param limiter - Per-bot Bottleneck rate limiter
-   * @param userId - Telegram user ID
+   * @param telegramId - Telegram user ID
    * @param message - Message content
    * @param options - Message options (type, priority, retries)
    * @returns Message ID for tracking
@@ -192,7 +203,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
   sendWithBot(
     bot: TelegrafInstance,
     limiter: Bottleneck,
-    userId: number,
+    telegramId: number,
+    botId: number,
     message: string,
     options: MessageOptions = {},
   ): string {
@@ -200,7 +212,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       const messageId = uuidv4();
       const queuedMessage: QueuedMessage = {
         id: messageId,
-        userId,
+        telegramId,
+        botId,
         message,
         messageType: options.messageType ?? QueuedMessageType.TEXT,
         priority: options.priority ?? MessagePriority.NORMAL,
@@ -228,7 +241,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
             tags: {
               service: 'notification',
               messageId,
-              userId: userId.toString(),
+              userId: telegramId.toString(),
             },
           });
         });
@@ -236,14 +249,14 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       this.messageStats.totalScheduled++;
 
       this.logger.debug(
-        `Message scheduled via external bot for user ${userId}`,
+        `Message scheduled via external bot for user ${telegramId}`,
       );
 
       return messageId;
     } catch (error) {
       this.logger.error('Error scheduling message with bot', error);
       Sentry.captureException(error, {
-        tags: { userId, service: 'notification' },
+        tags: { userId: telegramId, service: 'notification' },
       });
       throw error;
     }
@@ -283,7 +296,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
           tags: {
             service: 'notification',
             messageId: message.id,
-            userId: message.userId.toString(),
+            telegramId: message.telegramId,
+            botId: message.botId,
           },
         });
       });
@@ -304,7 +318,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       this.messageStats.successCount++;
     } catch (error) {
       this.logger.error(
-        `Error sending message ${message.id} to user ${message.userId}:`,
+        `Error sending message ${message.id} to user ${message.telegramId}:`,
         error,
       );
 
@@ -338,7 +352,10 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
         this.messageStats.failureCount++;
 
         if (isPermanentError) {
-          await this.usersRepository.deactivateUser(message.userId);
+          await this.botUsersRepository.deactivate(
+            message.telegramId,
+            message.botId,
+          );
           this.logger.warn(
             `Message ${message.id} failed with permanent error (no retry): ${errorMessage}`,
           );
@@ -353,7 +370,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       Sentry.captureException(error, {
         tags: {
           service: 'notification',
-          userId: message.userId.toString(),
+          telegramId: message.telegramId,
+          botId: message.botId,
           messageId: message.id,
         },
         extra: {
@@ -520,7 +538,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       messageText = telegramifyMarkdown(messageText, 'remove');
     }
 
-    await this.bot.telegram.sendMessage(message.userId, messageText, {
+    await this.bot.telegram.sendMessage(message.telegramId, messageText, {
       parse_mode: parseMode,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       reply_markup:
@@ -551,7 +569,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       this.messageStats.successCount++;
     } catch (error) {
       this.logger.error(
-        `Error sending message ${message.id} to user ${message.userId}:`,
+        `Error sending message ${message.id} to user ${message.telegramId}:`,
         error,
       );
 
@@ -571,13 +589,17 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
         this.messageStats.failureCount++;
 
         if (isPermanentError) {
-          await this.usersRepository.deactivateUser(message.userId);
+          await this.botUsersRepository.deactivate(
+            message.telegramId,
+            message.botId,
+          );
         }
 
         Sentry.captureException(error, {
           tags: {
             service: 'notification',
-            userId: message.userId.toString(),
+            telegramId: message.telegramId,
+            botId: message.botId,
             messageId: message.id,
           },
         });
@@ -605,7 +627,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       messageText = telegramifyMarkdown(messageText, 'remove');
     }
 
-    await bot.telegram.sendMessage(message.userId, messageText, {
+    await bot.telegram.sendMessage(message.telegramId, messageText, {
       parse_mode: parseMode,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       reply_markup:
@@ -615,5 +637,13 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
             } as any)
           : undefined,
     });
+  }
+
+  private async getBot(botId: number): Promise<TelegrafInstance> {
+    const bot = this.botsRepository.findById(botId);
+    if (!bot) {
+      throw new Error(`Bot with id ${botId} not found`);
+    }
+    return this.dynamicTelegrafService.getBot(bot.id);
   }
 }

@@ -33,6 +33,7 @@ interface TradingActivityStats {
 
 interface ClientSubscription {
   readonly telegramId: number;
+  readonly botId: number;
   readonly firstName?: string | null;
   readonly lastName?: string | null;
   readonly username?: string | null;
@@ -292,10 +293,11 @@ export class MonthReportService {
       const clientSubscriptions: ClientSubscription[] = results.map(
         (result) => ({
           telegramId: result.user.telegramId,
+          botId: result.botUser.botId,
           firstName: result.user.firstName,
           lastName: result.user.lastName,
           username: result.user.username,
-          lang: result.user.lang,
+          lang: result.botUser.lang,
           subscriptionId: result.subscription.id,
           subscriptionName: result.subscription.name,
           subscriptionScope: result.subscription.scope,
@@ -483,10 +485,15 @@ export class MonthReportService {
 
       const reportMessage = await this.formatClientMonthlyReport(clientReport);
 
-      this.notificationService.addMessage(client.telegramId, reportMessage, {
-        messageType: QueuedMessageType.HTML,
-        priority: MessagePriority.NORMAL,
-      });
+      this.notificationService.addMessage(
+        client.telegramId,
+        client.botId,
+        reportMessage,
+        {
+          messageType: QueuedMessageType.HTML,
+          priority: MessagePriority.NORMAL,
+        },
+      );
 
       this.logger.debug(
         `Successfully sent monthly report to client ${client.telegramId} using shared data`,

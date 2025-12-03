@@ -179,21 +179,21 @@ export class ReminderSchedulerService {
       });
 
       // Process each expired user
-      for (const { user } of expiredTrials) {
+      for (const { botUser } of expiredTrials) {
         try {
           // Retrieve message
           const messageTemplate =
             await this.botMessagesRepository.resolveMessage(
               botId,
               'partner_trial_expired',
-              user.lang ?? 'en',
+              botUser.lang ?? 'en',
             );
 
           // Interpolate referral URL
           const message = messageTemplate.replace('{referralUrl}', referralUrl);
 
           // Send reminder with action buttons using the bot's Telegraf instance
-          await botInstance.bot.telegram.sendMessage(user.telegramId, message, {
+          await botInstance.bot.telegram.sendMessage(botUser.userId, message, {
             reply_markup: {
               inline_keyboard: [
                 [
@@ -216,7 +216,7 @@ export class ReminderSchedulerService {
 
           this.logger.debug({
             message: 'Reminder sent',
-            userId: user.telegramId,
+            userId: botUser.userId,
             botId,
           });
         } catch (error) {
@@ -231,13 +231,13 @@ export class ReminderSchedulerService {
           ) {
             this.logger.log({
               message: 'User blocked bot or deactivated',
-              userId: user.telegramId,
+              userId: botUser.userId,
               botId,
             });
           } else {
             this.logger.error({
               message: 'Failed to send reminder',
-              userId: user.telegramId,
+              userId: botUser.userId,
               botId,
               error: errorMessage,
             });
