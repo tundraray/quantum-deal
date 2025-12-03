@@ -8,6 +8,7 @@ import {
   index,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
+import { botUsers } from './bot-users';
 import { renewalTariffs } from './renewal-tariffs';
 import { userSubscriptions } from './user-subscriptions';
 
@@ -57,7 +58,17 @@ export const paymentTransactions = pgTable(
       .primaryKey()
       .generatedAlwaysAsIdentity(),
 
+    // NEW: Primary FK to bot-specific user context
+    // References bot_users.id (auto-generated internal ID, NOT telegramId)
+    botUserId: bigint('bot_user_id', { mode: 'number' }).references(
+      () => botUsers.id,
+      { onDelete: 'cascade' },
+    ),
+
     /**
+     * @deprecated Use botUserId instead. References users.telegramId.
+     * Will be removed in future migration after validation period.
+     *
      * User making the payment
      * References users.telegram_id (Telegram user ID)
      * CASCADE: Delete payment records when user deleted (GDPR compliance)
@@ -182,6 +193,9 @@ export const paymentTransactions = pgTable(
     /**
      * Indexes for performance optimization
      */
+
+    /** Index for botUserId queries (multi-bot support) */
+    index('idx_payment_transactions_bot_user').on(table.botUserId),
 
     /** Fast lookup of user's payment history */
     index('idx_payment_transactions_user_id').on(table.userId),

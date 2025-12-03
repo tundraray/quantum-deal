@@ -44,7 +44,7 @@ export class TrialAction {
       await ctx.sendChatAction('typing');
 
       // Check eligibility (double-check)
-      const eligible = await this.trialService.isEligible(user.telegramId);
+      const eligible = await this.trialService.isEligible(user.botUserId);
       if (!eligible) {
         await ctx.reply(getTrialMessage(lang, 'trialNotAvailable'));
         return;

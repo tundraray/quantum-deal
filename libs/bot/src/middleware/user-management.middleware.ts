@@ -228,6 +228,7 @@ export class UserManagementMiddleware {
     // Map to UserWithSubscriptions DTO
     return {
       telegramId: user.telegramId,
+      botUserId: botUser.id,
       username: user.username,
       firstName: user.firstName,
       lastName: user.lastName,
