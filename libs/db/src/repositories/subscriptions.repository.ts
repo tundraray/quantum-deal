@@ -120,7 +120,7 @@ export class SubscriptionsRepository extends BaseRepository<
           eq(userSubscriptions.isActive, true),
         ),
       )
-      .innerJoin(botUsers, eq(botUsers.userId, userSubscriptions.botUserId))
+      .innerJoin(botUsers, eq(botUsers.id, userSubscriptions.botUserId))
       .innerJoin(users, eq(users.telegramId, botUsers.userId))
       .where(
         and(
@@ -210,7 +210,8 @@ export class SubscriptionsRepository extends BaseRepository<
             : eq(userSubscriptions.botId, botId),
         ),
       )
-      .innerJoin(users, eq(users.telegramId, userSubscriptions.userId))
+      .innerJoin(botUsers, eq(botUsers.id, userSubscriptions.botUserId))
+      .innerJoin(users, eq(users.telegramId, botUsers.userId))
       .where(
         and(
           // Sector filter with wildcard support
