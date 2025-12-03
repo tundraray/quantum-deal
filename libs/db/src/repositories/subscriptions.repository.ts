@@ -120,7 +120,7 @@ export class SubscriptionsRepository extends BaseRepository<
           eq(userSubscriptions.isActive, true),
         ),
       )
-      .innerJoin(botUsers, eq(botUsers.userId, userSubscriptions.botUserId))
+      .innerJoin(botUsers, eq(botUsers.id, userSubscriptions.botUserId))
       .innerJoin(users, eq(users.telegramId, botUsers.userId))
       .where(
         and(
@@ -151,7 +151,6 @@ export class SubscriptionsRepository extends BaseRepository<
    */
   async findBySectorForBot(
     sector: string,
-    botId: number | null,
   ): Promise<SubscriptionWithFeatures[]> {
     // Alias for tier-based filtering join
     const sfTier = subscriptionFeatures;
@@ -204,13 +203,10 @@ export class SubscriptionsRepository extends BaseRepository<
         and(
           eq(userSubscriptions.subscriptionId, subscriptions.id),
           eq(userSubscriptions.isActive, true),
-          // Bot-specific filter: match botId or IS NULL for static bot
-          botId === null
-            ? sql`${userSubscriptions.botId} IS NULL`
-            : eq(userSubscriptions.botId, botId),
         ),
       )
-      .innerJoin(users, eq(users.telegramId, userSubscriptions.userId))
+      .innerJoin(botUsers, eq(botUsers.id, userSubscriptions.botUserId))
+      .innerJoin(users, eq(users.telegramId, botUsers.userId))
       .where(
         and(
           // Sector filter with wildcard support
@@ -237,10 +233,7 @@ export class SubscriptionsRepository extends BaseRepository<
    */
   async findActiveBroadcastSubscriptions(): Promise<Subscription[]> {
     return this.findBy(
-      and(
-        eq(this.table.isActive, true),
-        like(this.table.type, 'subscription_%'),
-      ),
+      and(eq(this.table.isActive, true), eq(this.table.isHidden, false)),
     );
   }
 

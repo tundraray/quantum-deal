@@ -143,7 +143,7 @@ export class MultiBotSignalService implements MultiBotSignal {
     try {
       // Step 1: Get users subscribed to this specific bot
       const subscriptions =
-        await this.subscriptionsRepository.findBySectorForBot(sector, botId);
+        await this.subscriptionsRepository.findBySectorForBot(sector);
 
       if (subscriptions.length === 0) {
         this.logger.debug(
@@ -156,7 +156,7 @@ export class MultiBotSignalService implements MultiBotSignal {
       const users: NotificationUser[] = subscriptions.map((sub) => ({
         botUserId: sub.botUserId,
         telegramId: Number(sub.userTelegramId),
-        botId: botId ?? 0,
+        botId: sub.botId ?? 0,
         firstName: sub.userFirstName,
         lastName: sub.userLastName,
         username: sub.userUsername,
