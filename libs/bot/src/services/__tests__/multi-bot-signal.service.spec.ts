@@ -93,7 +93,8 @@ describe('MultiBotSignalService', () => {
     subscriptionName: 'VIP',
     subscriptionIsActive: true,
     hasCustomFiltering: false,
-    userId: 123456,
+    botUserId: 1,
+    botId: 1,
     userTelegramId: '123456',
     userFirstName: 'Test',
     userLastName: 'User',
@@ -177,7 +178,7 @@ describe('MultiBotSignalService', () => {
 
       // Each bot has 1 subscriber
       subscriptionsRepository.findBySectorForBot.mockResolvedValue([
-        createMockSubscription({ userId: 100, userTelegramId: '100' }),
+        createMockSubscription({ botUserId: 100, userTelegramId: '100' }),
       ]);
 
       const order = createMockOrder();
@@ -219,7 +220,7 @@ describe('MultiBotSignalService', () => {
           await new Promise((resolve) => setTimeout(resolve, 50)); // 50ms delay
           return [
             createMockSubscription({
-              userId: 100 * callCount,
+              botUserId: 100 * callCount,
               userTelegramId: `${100 * callCount}`,
             }),
           ];
@@ -258,7 +259,7 @@ describe('MultiBotSignalService', () => {
           }
           return [
             createMockSubscription({
-              userId: botId ?? 999,
+              botUserId: botId ?? 999,
               userTelegramId: `${botId ?? 999}`,
             }),
           ];
@@ -349,14 +350,14 @@ describe('MultiBotSignalService', () => {
         (_sector: string, botId: number | null) => {
           if (botId === 1) {
             return Promise.resolve([
-              createMockSubscription({ userId: 101, userTelegramId: '101' }),
-              createMockSubscription({ userId: 102, userTelegramId: '102' }),
+              createMockSubscription({ botUserId: 101, userTelegramId: '101' }),
+              createMockSubscription({ botUserId: 102, userTelegramId: '102' }),
             ]);
           }
           return Promise.resolve([
-            createMockSubscription({ userId: 201, userTelegramId: '201' }),
-            createMockSubscription({ userId: 202, userTelegramId: '202' }),
-            createMockSubscription({ userId: 203, userTelegramId: '203' }),
+            createMockSubscription({ botUserId: 201, userTelegramId: '201' }),
+            createMockSubscription({ botUserId: 202, userTelegramId: '202' }),
+            createMockSubscription({ botUserId: 203, userTelegramId: '203' }),
           ]);
         },
       );
@@ -461,6 +462,7 @@ describe('MultiBotSignalService', () => {
         {
           id: 1,
           userId: 123456,
+          botUserId: null,
           featureKey: FeatureFlag.CUSTOM_USER_FILTERING,
           isActive: true,
           settings: { symbols: ['ETHUSD', 'XRPUSD'] },
@@ -492,6 +494,7 @@ describe('MultiBotSignalService', () => {
         {
           id: 1,
           userId: 123456,
+          botUserId: null,
           featureKey: FeatureFlag.CUSTOM_USER_FILTERING,
           isActive: true,
           settings: { symbols: ['BTCUSD', 'ETHUSD'] },
@@ -523,6 +526,7 @@ describe('MultiBotSignalService', () => {
         {
           id: 1,
           userId: 123456,
+          botUserId: null,
           featureKey: FeatureFlag.CUSTOM_USER_FILTERING,
           isActive: true,
           settings: { symbols: [] },
