@@ -201,7 +201,6 @@ export class MultiBotSignalService implements MultiBotSignal {
 
           // Send via NotificationService with per-bot limiter
           this.notificationService.sendWithBot(
-            bot.instance,
             bot.limiter,
             user.telegramId,
             user.botId,

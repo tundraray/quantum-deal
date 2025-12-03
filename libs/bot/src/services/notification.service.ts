@@ -193,7 +193,6 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
    * addMessage() continues to use the injected static bot.
    * sendWithBot() uses the provided bot parameter.
    *
-   * @param bot - Telegraf bot instance to send from (accepts both UserContext and Context types)
    * @param limiter - Per-bot Bottleneck rate limiter
    * @param telegramId - Telegram user ID
    * @param message - Message content
@@ -201,7 +200,6 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
    * @returns Message ID for tracking
    */
   sendWithBot(
-    bot: TelegrafInstance,
     limiter: Bottleneck,
     telegramId: number,
     botId: number,
@@ -233,7 +231,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
 
       limiter
         .schedule({ priority: bottleneckPriority }, () =>
-          this.processMessageWithBot(bot, queuedMessage),
+          this.processMessageWithBot(queuedMessage),
         )
         .catch((error) => {
           this.logger.error(`Failed to schedule message ${messageId}:`, error);
@@ -555,15 +553,12 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
    * Includes error handling and stats tracking for per-bot delivery.
    * Used by sendWithBot() for multi-bot signal broadcasting (ADR-007).
    */
-  private async processMessageWithBot(
-    bot: TelegrafInstance,
-    message: QueuedMessage,
-  ): Promise<void> {
+  private async processMessageWithBot(message: QueuedMessage): Promise<void> {
     try {
       message.status = QueueMessageStatus.PROCESSING;
       message.processedAt = new Date();
 
-      await this.sendTelegramMessageWithBot(bot, message);
+      await this.sendTelegramMessageWithBot(message);
 
       message.status = QueueMessageStatus.SENT;
       this.messageStats.successCount++;
@@ -614,7 +609,6 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
    * Used by processMessageWithBot() for per-bot delivery (ADR-007).
    */
   private async sendTelegramMessageWithBot(
-    bot: TelegrafInstance,
     message: QueuedMessage,
   ): Promise<void> {
     let messageText = message.message;
@@ -627,7 +621,9 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       messageText = telegramifyMarkdown(messageText, 'remove');
     }
 
-    await bot.telegram.sendMessage(message.telegramId, messageText, {
+    const botInstance = await this.getBot(message.botId);
+
+    await botInstance.telegram.sendMessage(message.telegramId, messageText, {
       parse_mode: parseMode,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       reply_markup:
@@ -640,10 +636,17 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async getBot(botId: number): Promise<TelegrafInstance> {
-    const bot = this.botsRepository.findById(botId);
+    const bot = await this.botsRepository.findById(botId);
     if (!bot) {
       throw new Error(`Bot with id ${botId} not found`);
     }
-    return this.dynamicTelegrafService.getBot(bot.id);
+    if (!bot.isDynamic) {
+      return this.bot;
+    }
+    const dynamicBot = this.dynamicTelegrafService.getBot(bot.id);
+    if (!dynamicBot) {
+      throw new Error(`Bot with id ${botId} not found`);
+    }
+    return dynamicBot;
   }
 }
