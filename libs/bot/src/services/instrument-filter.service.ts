@@ -90,11 +90,7 @@ export class InstrumentFilterService {
    * @param botUserId - Bot user ID
    * @param symbols - Array of selected symbols (e.g., ['EURUSD.a', 'BTCUSD.a'])
    */
-  async saveUserFilters(
-    botUserId: number,
-    symbols: string[],
-    userId,
-  ): Promise<void> {
+  async saveUserFilters(botUserId: number, symbols: string[]): Promise<void> {
     try {
       const settings = {
         symbols: symbols.length > 0 ? symbols : [], // Empty array = all instruments
@@ -104,7 +100,6 @@ export class InstrumentFilterService {
         botUserId,
         FeatureFlag.CUSTOM_USER_FILTERING,
         settings,
-        userId,
       );
 
       this.logger.log(

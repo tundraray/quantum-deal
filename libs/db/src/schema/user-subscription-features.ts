@@ -9,7 +9,6 @@ import {
   unique,
   index,
 } from 'drizzle-orm/pg-core';
-import { users } from './users';
 import { botUsers } from './bot-users';
 
 /**
@@ -53,14 +52,6 @@ export const userSubscriptionFeatures = pgTable(
       { onDelete: 'cascade' },
     ),
 
-    /**
-     * @deprecated Use botUserId instead. References users.telegramId.
-     * Will be removed in future migration after validation period.
-     */
-    userId: bigint('user_id', { mode: 'number' })
-      .notNull()
-      .references(() => users.telegramId, { onDelete: 'cascade' }),
-
     featureKey: varchar('feature_key', { length: 50 }).notNull(),
 
     /**
@@ -83,8 +74,8 @@ export const userSubscriptionFeatures = pgTable(
   },
   (table) => ({
     // Unique constraint: one settings record per user per feature
-    uniqueUserFeature: unique('unique_user_feature').on(
-      table.userId,
+    uniqueUserFeature: unique('unique_bot_user_feature').on(
+      table.botUserId,
       table.featureKey,
     ),
     // Index for botUserId queries

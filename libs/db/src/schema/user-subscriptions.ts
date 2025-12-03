@@ -5,7 +5,6 @@ import {
   boolean,
   index,
 } from 'drizzle-orm/pg-core';
-import { users } from './users';
 import { subscriptions } from './subscriptions';
 import { bots } from './bots';
 import { botUsers } from './bot-users';
@@ -36,13 +35,6 @@ export const userSubscriptions = pgTable(
       { onDelete: 'cascade' },
     ),
 
-    /**
-     * @deprecated Use botUserId instead. References users.telegramId.
-     * Will be removed in future migration after validation period.
-     */
-    userId: bigint('user_id', { mode: 'number' })
-      .notNull()
-      .references(() => users.telegramId, { onDelete: 'cascade' }),
     subscriptionId: bigint('subscription_id', { mode: 'number' })
       .notNull()
       .references(() => subscriptions.id, { onDelete: 'cascade' }),
@@ -56,7 +48,6 @@ export const userSubscriptions = pgTable(
   },
   (table) => [
     index('idx_user_subscriptions_bot').on(table.botId),
-    index('idx_user_subscriptions_user_bot').on(table.userId, table.botId),
     index('idx_user_subscriptions_bot_user').on(table.botUserId),
   ],
 );

@@ -38,15 +38,15 @@ export class RenewalScene {
    */
   @SceneEnter()
   async onSceneEnter(@Ctx() ctx: UserContext): Promise<void> {
-    const userId = ctx.from?.id;
-    if (!userId) {
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) {
       await ctx.reply('Ошибка: пользователь не найден');
       await ctx.scene.leave();
       return;
     }
 
     try {
-      await this.showAllTariffs(ctx, userId);
+      await this.showAllTariffs(ctx, botUserId);
     } catch (error) {
       this.logger.error('Error entering renewal scene:', error);
       const lang = ctx.user?.lang || 'en';
@@ -60,7 +60,7 @@ export class RenewalScene {
    */
   private async showAllTariffs(
     ctx: UserContext,
-    userId: number,
+    botUserId: number,
   ): Promise<void> {
     const lang = ctx.user?.lang || 'en';
 
@@ -75,7 +75,7 @@ export class RenewalScene {
 
     // Get user's active subscriptions
     const userSubscriptions =
-      await this.userSubscriptionsRepo.findActiveByUserId(userId);
+      await this.userSubscriptionsRepo.findActiveByBotUserId(botUserId);
 
     // Group tariffs by subscription
     const subscriptionGroups = new Map<number, typeof allTariffs>();
@@ -141,7 +141,7 @@ export class RenewalScene {
         buttons.push([
           Markup.button.callback(
             buttonText,
-            `renew_select_tariff:${userId}:${tariff.subscriptionId}:${tariff.id}`,
+            `renew_select_tariff:${botUserId}:${tariff.subscriptionId}:${tariff.id}`,
           ),
         ]);
       }
@@ -287,13 +287,13 @@ export class RenewalScene {
 
     const lang = ctx.user?.lang || 'en';
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    const userId = parseInt(match[1]);
+    const botUserId = parseInt(match[1]);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const subscriptionId = parseInt(match[2]);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const tariffId = parseInt(match[3]);
 
-    if (!ctx.from?.id || ctx.from.id !== userId) {
+    if (!ctx.from?.id || ctx.from.id !== botUserId) {
       await ctx.answerCbQuery(getRenewalMessage(lang, 'userNotFound'));
       return;
     }
@@ -308,13 +308,13 @@ export class RenewalScene {
       // Create invoice
       const { transactionId, invoiceMessageId } =
         await this.paymentService.createRenewalInvoice(
-          userId,
+          botUserId,
           subscriptionId,
           tariffId,
         );
 
       this.logger.log(
-        `Created renewal invoice for user ${userId}, subscription ${subscriptionId}, transaction ${transactionId}, message ${invoiceMessageId}`,
+        `Created renewal invoice for bot user ${botUserId}, subscription ${subscriptionId}, transaction ${transactionId}, message ${invoiceMessageId}`,
       );
 
       // Invoice is automatically sent by Telegram

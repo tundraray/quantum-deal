@@ -116,7 +116,7 @@ export class RenewUpdate {
       const isValid = await this.paymentService.validatePreCheckout(
         payload,
         query.total_amount,
-        ctx.from!.id,
+        ctx.user?.botUserId || 0,
       );
 
       if (isValid) {
@@ -131,7 +131,9 @@ export class RenewUpdate {
           false,
           'Payment validation failed. Please try again or contact support.',
         );
-        this.logger.warn(`Pre-checkout rejected for user ${ctx.from!.id}`);
+        this.logger.warn(
+          `Pre-checkout rejected for bot user ${ctx.user?.botUserId}`,
+        );
       }
     } catch (error) {
       this.logger.error('Pre-checkout query error:', error);
@@ -167,7 +169,7 @@ export class RenewUpdate {
       ) as RenewalInvoicePayload;
 
       this.logger.log(
-        `Processing successful payment for user ${ctx.from!.id}, transaction ${payload.transactionId}`,
+        `Processing successful payment for bot user ${ctx.user?.botUserId}, transaction ${payload.transactionId}`,
       );
 
       // Process payment via service
@@ -184,7 +186,7 @@ export class RenewUpdate {
       await ctx.reply(getRenewalMessage(lang, 'paymentSuccess'));
 
       this.logger.log(
-        `Payment ${payload.transactionId} completed successfully for user ${ctx.from!.id}`,
+        `Payment ${payload.transactionId} completed successfully for bot user ${ctx.user?.botUserId}`,
       );
     } catch (error) {
       this.logger.error('Payment processing error:', error);

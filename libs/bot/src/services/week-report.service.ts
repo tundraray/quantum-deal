@@ -59,6 +59,7 @@ interface TradingActivityStats {
 
 interface ClientSubscription {
   readonly telegramId: number;
+  readonly botUserId: number;
   readonly botId: number;
   readonly firstName?: string | null;
   readonly lastName?: string | null;
@@ -322,6 +323,7 @@ export class WeekReportService {
       const clientSubscriptions: ClientSubscription[] = results.map(
         (result) => ({
           telegramId: result.botUser.userId,
+          botUserId: result.botUser.id,
           botId: result.botUser.botId,
           firstName: result.user.firstName,
           lastName: result.user.lastName,
@@ -357,7 +359,7 @@ export class WeekReportService {
 
       // Get sector-filtered trading data for this client (includes instrument filtering stats)
       const tradingActivity = await this.gatherClientTradingActivityData(
-        client.telegramId,
+        client.botUserId,
         startDate,
         endDate,
         client.subscriptionScope,
@@ -402,13 +404,13 @@ export class WeekReportService {
   }
 
   private async gatherClientTradingActivityData(
-    userId: number,
+    botUserId: number,
     startDate: Date,
     endDate: Date,
     subscriptionScope: unknown,
   ): Promise<TradingActivityStats> {
     this.logger.debug(
-      `Gathering client-specific trading activity data for user ${userId}`,
+      `Gathering client-specific trading activity data for bot user ${botUserId}`,
     );
 
     try {
@@ -436,13 +438,13 @@ export class WeekReportService {
       // Calculate instrument filtering statistics (for CUSTOM_USER_FILTERING feature)
       const filteredByInstruments =
         await this.calculateFilteredInstrumentsStats(
-          userId,
+          botUserId,
           allOrdersInSectors,
         );
 
       // Apply instrument filters to get final orders for this user
       const userFilteredOrders = filteredByInstruments
-        ? await this.applyInstrumentFilters(userId, allOrdersInSectors)
+        ? await this.applyInstrumentFilters(botUserId, allOrdersInSectors)
         : allOrdersInSectors;
 
       // Calculate all stats based on filtered orders (only closed orders)
@@ -495,37 +497,37 @@ export class WeekReportService {
    * @returns FilteredInstrumentsStats or undefined if feature not enabled or no filters
    */
   private async calculateFilteredInstrumentsStats(
-    userId: number,
+    botUserId: number,
     allOrdersInSectors: Order[],
   ): Promise<FilteredInstrumentsStats | undefined> {
     try {
       // Check if user has CUSTOM_USER_FILTERING feature enabled
       const hasFeature = await this.subscriptionFeaturesRepository.hasFeature(
-        userId,
+        botUserId,
         FeatureFlag.CUSTOM_USER_FILTERING,
       );
 
       if (!hasFeature) {
         this.logger.debug(
-          `User ${userId} does not have CUSTOM_USER_FILTERING feature`,
+          `Bot user ${botUserId} does not have CUSTOM_USER_FILTERING feature`,
         );
         return undefined;
       }
 
       // Get user's instrument filters
       const userSymbols =
-        await this.instrumentFilterService.getUserFilterSymbols(userId);
+        await this.instrumentFilterService.getUserFilterSymbols(botUserId);
 
       // Empty array means all instruments selected (no filtering)
       if (userSymbols.length === 0) {
         this.logger.debug(
-          `User ${userId} has no instrument filters (all selected)`,
+          `Bot user ${botUserId} has no instrument filters (all selected)`,
         );
         return undefined;
       }
 
       this.logger.debug(
-        `User ${userId} has ${userSymbols.length} instrument filters`,
+        `Bot user ${botUserId} has ${userSymbols.length} instrument filters`,
       );
 
       // Create a set of user's selected symbols for fast lookup
@@ -544,7 +546,7 @@ export class WeekReportService {
       // If no orders were filtered out, no need to show statistics
       if (totalFilteredOrders === 0) {
         this.logger.debug(
-          `User ${userId} has no filtered orders (all available orders match filters)`,
+          `Bot user ${botUserId} has no filtered orders (all available orders match filters)`,
         );
         return undefined;
       }
@@ -570,7 +572,7 @@ export class WeekReportService {
         .slice(0, 3);
 
       this.logger.debug(
-        `User ${userId}: ${totalFilteredOrders} orders filtered (${filteredPercentage}%), ` +
+        `Bot user ${botUserId}: ${totalFilteredOrders} orders filtered (${filteredPercentage}%), ` +
           `top missed: ${topMissedInstruments.map((i) => `${i.symbol}:${i.count}`).join(', ')}`,
       );
 
@@ -582,7 +584,7 @@ export class WeekReportService {
     } catch (error) {
       const err = error as Error;
       this.logger.error(
-        `Failed to calculate filtered instruments stats for user ${userId}: ${err.message}`,
+        `Failed to calculate filtered instruments stats for bot user ${botUserId}: ${err.message}`,
         err.stack,
       );
       // Return undefined on error to not break report generation
@@ -594,17 +596,17 @@ export class WeekReportService {
    * Apply user's instrument filters to orders
    * Returns all orders if no filters are configured
    *
-   * @param userId - User's telegram ID
+   * @param botUserId - Bot user ID
    * @param orders - Orders to filter
    * @returns Filtered orders
    */
   private async applyInstrumentFilters(
-    userId: number,
+    botUserId: number,
     orders: Order[],
   ): Promise<Order[]> {
     try {
       const userSymbols =
-        await this.instrumentFilterService.getUserFilterSymbols(userId);
+        await this.instrumentFilterService.getUserFilterSymbols(botUserId);
 
       // Empty array means all instruments (no filtering)
       if (userSymbols.length === 0) {
@@ -617,7 +619,7 @@ export class WeekReportService {
     } catch (error) {
       const err = error as Error;
       this.logger.error(
-        `Failed to apply instrument filters for user ${userId}: ${err.message}`,
+        `Failed to apply instrument filters for bot user ${botUserId}: ${err.message}`,
         err.stack,
       );
       // Return all orders on error to not break report generation

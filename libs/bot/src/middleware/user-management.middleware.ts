@@ -219,10 +219,10 @@ export class UserManagementMiddleware {
 
     // Load feature flags for this user
     const { enabledFeatures, featureConfigs } =
-      await this.featureFlagService.getUserFeatures(user.telegramId);
+      await this.featureFlagService.getUserFeatures(botUser.id);
 
     this.logger.debug(
-      `Loaded ${subscriptions.length} subscriptions and ${enabledFeatures.size} features for user ${user.telegramId} (botUserId: ${botUser.id})`,
+      `Loaded ${subscriptions.length} subscriptions and ${enabledFeatures.size} features for bot user ${botUser.id}`,
     );
 
     // Map to UserWithSubscriptions DTO

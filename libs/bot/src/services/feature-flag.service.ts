@@ -55,11 +55,12 @@ export class FeatureFlagService {
    * - VIP: [TIER_BASED_FILTERING, CUSTOM_USER_FILTERING]
    * - Result: [TIER_BASED_FILTERING, CUSTOM_USER_FILTERING]
    *
-   * @param userId - The user's Telegram ID
+   * @param botUserId - The bot user ID
    * @returns UserFeatures object with enabled features and configs
    */
-  async getUserFeatures(userId: number): Promise<UserFeatures> {
-    const features = await this.featuresRepository.getFeaturesByUserId(userId);
+  async getUserFeatures(botUserId: number): Promise<UserFeatures> {
+    const features =
+      await this.featuresRepository.getFeaturesByUserId(botUserId);
 
     const enabledFeatures = new Set<FeatureFlag>();
     const featureConfigs = new Map<FeatureFlag, FeatureConfig>();
@@ -81,7 +82,7 @@ export class FeatureFlagService {
     }
 
     this.logger.debug(
-      `User ${userId} has ${enabledFeatures.size} enabled features: ${Array.from(enabledFeatures).join(', ')}`,
+      `Bot user ${botUserId} has ${enabledFeatures.size} enabled features: ${Array.from(enabledFeatures).join(', ')}`,
     );
 
     return { enabledFeatures, featureConfigs };

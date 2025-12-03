@@ -568,7 +568,7 @@ export class FilterScene {
 
     try {
       const symbols = Array.from(session.sessionFilters);
-      await this.filterService.saveUserFilters(botUserId, symbols, botUserId);
+      await this.filterService.saveUserFilters(botUserId, symbols);
       this.sessionService.commitChanges(botUserId);
 
       const summary = await this.filterService.calculateFilterSummary(symbols);
