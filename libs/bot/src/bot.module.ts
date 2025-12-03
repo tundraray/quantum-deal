@@ -23,7 +23,6 @@ import { MonthReportService } from './services/month-report.service';
 import { NotificationService } from './services/notification.service';
 import { SubscriptionExpirationService } from './services/subscription-expiration.service';
 import { FeatureFlagService } from './services/feature-flag.service';
-import { UserSettingsService } from './services/user-settings.service';
 import { InstrumentFilterService } from './services/instrument-filter.service';
 import { FilterSessionService } from './services/filter-session.service';
 import { PaymentService } from './services/payment.service';
@@ -76,7 +75,6 @@ import { RenewalAction } from './actions/renewal/renewal.action';
 
     // Feature flags services
     FeatureFlagService,
-    UserSettingsService,
     InstrumentFilterService,
     FilterSessionService,
 
@@ -137,7 +135,6 @@ import { RenewalAction } from './actions/renewal/renewal.action';
 
     // Feature flags services
     FeatureFlagService,
-    UserSettingsService,
     InstrumentFilterService,
     FilterSessionService,
 

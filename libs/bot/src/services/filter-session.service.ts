@@ -49,17 +49,17 @@ export class FilterSessionService {
   /**
    * Initialize a new session for user
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    * @param currentFilters - User's current filters from database
    */
-  initializeSession(userId: number, currentFilters: string[]): void {
+  initializeSession(botUserId: number, currentFilters: string[]): void {
     // Clear any existing session and timeout
-    this.clearSession(userId);
+    this.clearSession(botUserId);
 
     const filterSet = new Set(currentFilters);
 
     const session: FilterSessionState = {
-      userId,
+      userId: botUserId,
       sessionId: uuidv4(),
       originalFilters: new Set(filterSet),
       sessionFilters: new Set(filterSet),
@@ -71,24 +71,24 @@ export class FilterSessionService {
       lastModified: new Date(),
     };
 
-    this.sessions.set(userId, session);
-    this.resetTimeout(userId);
+    this.sessions.set(botUserId, session);
+    this.resetTimeout(botUserId);
 
     this.logger.debug(
-      `Initialized session ${session.sessionId} for user ${userId}`,
+      `Initialized session ${session.sessionId} for user ${botUserId}`,
     );
   }
 
   /**
    * Get session state for user
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    * @returns Session state or null if not found
    */
-  getSession(userId: number): FilterSessionState | null {
-    const session = this.sessions.get(userId);
+  getSession(botUserId: number): FilterSessionState | null {
+    const session = this.sessions.get(botUserId);
     if (session) {
-      this.resetTimeout(userId); // Reset timeout on access
+      this.resetTimeout(botUserId); // Reset timeout on access
       return session;
     }
     return null;
@@ -97,14 +97,18 @@ export class FilterSessionService {
   /**
    * Update navigation state
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    * @param screen - New screen type
    * @param page - Page number (default 0)
    */
-  updateNavigation(userId: number, screen: ScreenType, page: number = 0): void {
-    const session = this.sessions.get(userId);
+  updateNavigation(
+    botUserId: number,
+    screen: ScreenType,
+    page: number = 0,
+  ): void {
+    const session = this.sessions.get(botUserId);
     if (!session) {
-      this.logger.warn(`Session not found for user ${userId}`);
+      this.logger.warn(`Session not found for user ${botUserId}`);
       return;
     }
 
@@ -112,17 +116,17 @@ export class FilterSessionService {
     session.currentPage = page;
     session.lastModified = new Date();
 
-    this.resetTimeout(userId);
+    this.resetTimeout(botUserId);
   }
 
   /**
    * Update breadcrumb trail
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    * @param breadcrumb - New breadcrumb array
    */
-  updateBreadcrumb(userId: number, breadcrumb: string[]): void {
-    const session = this.sessions.get(userId);
+  updateBreadcrumb(botUserId: number, breadcrumb: string[]): void {
+    const session = this.sessions.get(botUserId);
     if (!session) return;
 
     session.breadcrumb = breadcrumb;
@@ -132,13 +136,13 @@ export class FilterSessionService {
   /**
    * Toggle instrument selection
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    * @param symbol - Instrument symbol
    */
-  toggleInstrument(userId: number, symbol: string): void {
-    const session = this.sessions.get(userId);
+  toggleInstrument(botUserId: number, symbol: string): void {
+    const session = this.sessions.get(botUserId);
     if (!session) {
-      this.logger.warn(`Session not found for user ${userId}`);
+      this.logger.warn(`Session not found for user ${botUserId}`);
       return;
     }
 
@@ -154,17 +158,17 @@ export class FilterSessionService {
     );
     session.lastModified = new Date();
 
-    this.resetTimeout(userId);
+    this.resetTimeout(botUserId);
   }
 
   /**
    * Select all instruments in a list
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    * @param symbols - Array of symbols to select
    */
-  selectAll(userId: number, symbols: string[]): void {
-    const session = this.sessions.get(userId);
+  selectAll(botUserId: number, symbols: string[]): void {
+    const session = this.sessions.get(botUserId);
     if (!session) return;
 
     for (const symbol of symbols) {
@@ -177,17 +181,17 @@ export class FilterSessionService {
     );
     session.lastModified = new Date();
 
-    this.resetTimeout(userId);
+    this.resetTimeout(botUserId);
   }
 
   /**
    * Deselect all instruments in a list
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    * @param symbols - Array of symbols to deselect
    */
-  deselectAll(userId: number, symbols: string[]): void {
-    const session = this.sessions.get(userId);
+  deselectAll(botUserId: number, symbols: string[]): void {
+    const session = this.sessions.get(botUserId);
     if (!session) return;
 
     for (const symbol of symbols) {
@@ -200,16 +204,16 @@ export class FilterSessionService {
     );
     session.lastModified = new Date();
 
-    this.resetTimeout(userId);
+    this.resetTimeout(botUserId);
   }
 
   /**
    * Clear all selections (reset to empty = all instruments)
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    */
-  clearAllSelections(userId: number): void {
-    const session = this.sessions.get(userId);
+  clearAllSelections(botUserId: number): void {
+    const session = this.sessions.get(botUserId);
     if (!session) return;
 
     session.sessionFilters.clear();
@@ -219,16 +223,16 @@ export class FilterSessionService {
     );
     session.lastModified = new Date();
 
-    this.resetTimeout(userId);
+    this.resetTimeout(botUserId);
   }
 
   /**
    * Discard changes and restore original filters
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    */
-  discardChanges(userId: number): void {
-    const session = this.sessions.get(userId);
+  discardChanges(botUserId: number): void {
+    const session = this.sessions.get(botUserId);
     if (!session) return;
 
     session.sessionFilters = new Set(session.originalFilters);
@@ -241,10 +245,10 @@ export class FilterSessionService {
    *
    * Called after successful save to database.
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    */
-  commitChanges(userId: number): void {
-    const session = this.sessions.get(userId);
+  commitChanges(botUserId: number): void {
+    const session = this.sessions.get(botUserId);
     if (!session) return;
 
     session.originalFilters = new Set(session.sessionFilters);
@@ -255,28 +259,28 @@ export class FilterSessionService {
   /**
    * Clear session and cancel timeout
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    */
-  clearSession(userId: number): void {
-    this.sessions.delete(userId);
+  clearSession(botUserId: number): void {
+    this.sessions.delete(botUserId);
 
-    const timeout = this.sessionTimeouts.get(userId);
+    const timeout = this.sessionTimeouts.get(botUserId);
     if (timeout) {
       clearTimeout(timeout);
-      this.sessionTimeouts.delete(userId);
+      this.sessionTimeouts.delete(botUserId);
     }
 
-    this.logger.debug(`Cleared session for user ${userId}`);
+    this.logger.debug(`Cleared session for user ${botUserId}`);
   }
 
   /**
    * Check if session exists
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    * @returns true if session exists
    */
-  hasSession(userId: number): boolean {
-    return this.sessions.has(userId);
+  hasSession(botUserId: number): boolean {
+    return this.sessions.has(botUserId);
   }
 
   /**
@@ -289,22 +293,22 @@ export class FilterSessionService {
   /**
    * Reset session timeout
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    */
-  private resetTimeout(userId: number): void {
+  private resetTimeout(botUserId: number): void {
     // Clear existing timeout
-    const existingTimeout = this.sessionTimeouts.get(userId);
+    const existingTimeout = this.sessionTimeouts.get(botUserId);
     if (existingTimeout) {
       clearTimeout(existingTimeout);
     }
 
     // Set new timeout
     const timeout = setTimeout(() => {
-      this.logger.debug(`Session timeout for user ${userId}`);
-      this.clearSession(userId);
+      this.logger.debug(`Session timeout for user ${botUserId}`);
+      this.clearSession(botUserId);
     }, this.SESSION_TIMEOUT_MS);
 
-    this.sessionTimeouts.set(userId, timeout);
+    this.sessionTimeouts.set(botUserId, timeout);
   }
 
   /**

@@ -42,15 +42,16 @@ export class InstrumentFilterService {
    * Returns an array of symbol strings the user has selected.
    * If no filters are configured, returns empty array (meaning all instruments).
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    * @returns Array of selected symbol strings (e.g., ['EURUSD.a', 'BTCUSD.a'])
    */
-  async getUserFilterSymbols(userId: number): Promise<string[]> {
+  async getUserFilterSymbols(botUserId: number): Promise<string[]> {
     try {
-      const settings = await this.userFeaturesRepository.getUserFeatureSettings(
-        userId,
-        FeatureFlag.CUSTOM_USER_FILTERING,
-      );
+      const settings =
+        await this.userFeaturesRepository.getBotUserFeatureSettings(
+          botUserId,
+          FeatureFlag.CUSTOM_USER_FILTERING,
+        );
 
       if (!settings || !settings.settings) {
         return []; // No filters = all instruments
@@ -86,23 +87,28 @@ export class InstrumentFilterService {
    *
    * Stores selected symbols in user_subscription_features.settings.symbols
    *
-   * @param userId - Telegram user ID
+   * @param botUserId - Bot user ID
    * @param symbols - Array of selected symbols (e.g., ['EURUSD.a', 'BTCUSD.a'])
    */
-  async saveUserFilters(userId: number, symbols: string[]): Promise<void> {
+  async saveUserFilters(
+    botUserId: number,
+    symbols: string[],
+    userId,
+  ): Promise<void> {
     try {
       const settings = {
         symbols: symbols.length > 0 ? symbols : [], // Empty array = all instruments
       };
 
-      await this.userFeaturesRepository.upsertUserSettings(
-        userId,
+      await this.userFeaturesRepository.upsertBotUserSettings(
+        botUserId,
         FeatureFlag.CUSTOM_USER_FILTERING,
         settings,
+        userId,
       );
 
       this.logger.log(
-        `Saved filters for user ${userId}: ${symbols.length} instruments`,
+        `Saved filters for user ${botUserId}: ${symbols.length} instruments`,
       );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -118,13 +124,13 @@ export class InstrumentFilterService {
    *
    * @param userId - Telegram user ID
    */
-  async clearUserFilters(userId: number): Promise<void> {
+  async clearUserFilters(botUserId: number): Promise<void> {
     try {
       await this.userFeaturesRepository.deleteUserSettings(
-        userId,
+        botUserId,
         FeatureFlag.CUSTOM_USER_FILTERING,
       );
-      this.logger.log(`Cleared filters for user ${userId}`);
+      this.logger.log(`Cleared filters for user ${botUserId}`);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(
