@@ -285,7 +285,7 @@ export class MultiBotSignalService implements MultiBotSignal {
 
     try {
       const userFeature =
-        await this.userSubscriptionFeaturesRepository.getUserFeatureSettings(
+        await this.userSubscriptionFeaturesRepository.getBotUserFeatureSettings(
           user.botUserId,
           FeatureFlag.CUSTOM_USER_FILTERING,
         );

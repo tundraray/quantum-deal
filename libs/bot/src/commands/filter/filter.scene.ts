@@ -45,8 +45,8 @@ export class FilterScene {
   @SceneEnter()
   async onSceneEnter(@Ctx() ctx: any): Promise<void> {
     const userCtx = ctx as UserContext;
-    const userId = userCtx.from?.id;
-    if (!userId) {
+    const botUserId = userCtx.user?.botUserId;
+    if (!botUserId) {
       const lang = userCtx.user?.lang || 'en';
       await userCtx.reply(this.i18n.t(lang, 'errors.user_not_found'));
       await userCtx.scene.leave();
@@ -63,8 +63,8 @@ export class FilterScene {
     try {
       // Initialize session
       const currentFilters =
-        await this.filterService.getUserFilterSymbols(userId);
-      this.sessionService.initializeSession(userId, currentFilters);
+        await this.filterService.getUserFilterSymbols(botUserId);
+      this.sessionService.initializeSession(botUserId, currentFilters);
 
       // Show main menu
       await this.showMainMenu(userCtx);
@@ -84,8 +84,9 @@ export class FilterScene {
    * Main menu display
    */
   private async showMainMenu(ctx: UserContext): Promise<void> {
-    const userId = ctx.from!.id;
-    const session = this.sessionService.getSession(userId);
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
+    const session = this.sessionService.getSession(botUserId);
     const lang = ctx.user?.lang || 'en';
     if (!session) {
       await ctx.reply(this.i18n.t(lang, 'errors.session_expired'));
@@ -114,7 +115,7 @@ export class FilterScene {
       summary.groupCounts,
     );
 
-    this.sessionService.updateNavigation(userId, 'main');
+    this.sessionService.updateNavigation(botUserId, 'main');
 
     if (ctx.callbackQuery) {
       await ctx.editMessageText(messageText, {
@@ -136,8 +137,8 @@ export class FilterScene {
   @Action(/^.+$/)
   async onAction(@Ctx() ctx: any): Promise<void> {
     const userCtx = ctx as UserContext;
-    const userId = userCtx.from?.id;
-    if (!userId) return;
+    const botUserId = userCtx.user?.botUserId;
+    if (!botUserId) return;
 
     const callbackData = userCtx.callbackQuery?.['data'] as unknown;
     if (typeof callbackData !== 'string') return;
@@ -238,8 +239,9 @@ export class FilterScene {
   }
 
   private async showGroupList(ctx: UserContext, group: string): Promise<void> {
-    const userId = ctx.from!.id;
-    const session = this.sessionService.getSession(userId);
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
+    const session = this.sessionService.getSession(botUserId);
     if (!session) return;
 
     const lang = ctx.user?.lang || 'en';
@@ -271,7 +273,7 @@ export class FilterScene {
       currentPage,
     );
 
-    this.sessionService.updateNavigation(userId, `${group}_list` as any);
+    this.sessionService.updateNavigation(botUserId, `${group}_list` as any);
 
     await ctx.editMessageText(messageText, {
       parse_mode: 'Markdown',
@@ -281,8 +283,9 @@ export class FilterScene {
   }
 
   private async showStocksSubgroups(ctx: UserContext): Promise<void> {
-    const userId = ctx.from!.id;
-    const session = this.sessionService.getSession(userId);
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
+    const session = this.sessionService.getSession(botUserId);
     if (!session) return;
 
     const lang = ctx.user?.lang || 'en';
@@ -312,7 +315,7 @@ export class FilterScene {
       { selected: usSelected, total: usStocks.length },
     );
 
-    this.sessionService.updateNavigation(userId, 'stocks_subgroups');
+    this.sessionService.updateNavigation(botUserId, 'stocks_subgroups');
 
     await ctx.editMessageText(messageText, {
       parse_mode: 'Markdown',
@@ -332,8 +335,9 @@ export class FilterScene {
     ctx: UserContext,
     subgroup: string,
   ): Promise<void> {
-    const userId = ctx.from!.id;
-    const session = this.sessionService.getSession(userId);
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
+    const session = this.sessionService.getSession(botUserId);
     if (!session) return;
 
     const lang = ctx.user?.lang || 'en';
@@ -370,7 +374,7 @@ export class FilterScene {
     );
 
     this.sessionService.updateNavigation(
-      userId,
+      botUserId,
       `${subgroup}_stocks` as any,
       0,
     );
@@ -383,8 +387,9 @@ export class FilterScene {
   }
 
   private async handleSelectAll(ctx: UserContext): Promise<void> {
-    const userId = ctx.from!.id;
-    this.sessionService.clearAllSelections(userId);
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
+    this.sessionService.clearAllSelections(botUserId);
     await this.showMainMenu(ctx);
   }
 
@@ -408,13 +413,14 @@ export class FilterScene {
   }
 
   private async handleConfirmClearFilters(ctx: UserContext): Promise<void> {
-    const userId = ctx.from!.id;
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
     const lang = ctx.user?.lang || 'en';
 
     try {
-      await this.filterService.clearUserFilters(userId);
-      this.sessionService.clearAllSelections(userId);
-      this.sessionService.commitChanges(userId);
+      await this.filterService.clearUserFilters(botUserId);
+      this.sessionService.clearAllSelections(botUserId);
+      this.sessionService.commitChanges(botUserId);
 
       const summary = await this.filterService.calculateFilterSummary([]);
 
@@ -439,9 +445,10 @@ export class FilterScene {
   }
 
   private async handleClose(ctx: UserContext): Promise<void> {
-    const userId = ctx.from!.id;
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
     const lang = ctx.user?.lang || 'en';
-    this.sessionService.clearSession(userId);
+    this.sessionService.clearSession(botUserId);
 
     await ctx.deleteMessage();
     await ctx.answerCbQuery(this.i18n.t(lang, 'messages.menu_closed'));
@@ -452,11 +459,12 @@ export class FilterScene {
     ctx: UserContext,
     symbol: string,
   ): Promise<void> {
-    const userId = ctx.from!.id;
-    const session = this.sessionService.getSession(userId);
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
+    const session = this.sessionService.getSession(botUserId);
     if (!session) return;
 
-    this.sessionService.toggleInstrument(userId, symbol);
+    this.sessionService.toggleInstrument(botUserId, symbol);
 
     // Refresh current screen
     await this.refreshCurrentScreen(ctx);
@@ -466,11 +474,12 @@ export class FilterScene {
     ctx: UserContext,
     group: string,
   ): Promise<void> {
-    const userId = ctx.from!.id;
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
     const instruments = await this.filterService.getInstrumentsByGroup(group);
     const symbols = instruments.map((i) => i.symbol);
 
-    this.sessionService.selectAll(userId, symbols);
+    this.sessionService.selectAll(botUserId, symbols);
     await this.showGroupList(ctx, group);
   }
 
@@ -478,29 +487,32 @@ export class FilterScene {
     ctx: UserContext,
     group: string,
   ): Promise<void> {
-    const userId = ctx.from!.id;
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
     const instruments = await this.filterService.getInstrumentsByGroup(group);
     const symbols = instruments.map((i) => i.symbol);
 
-    this.sessionService.deselectAll(userId, symbols);
+    this.sessionService.deselectAll(botUserId, symbols);
     await this.showGroupList(ctx, group);
   }
 
   private async handleSelectAllStocks(ctx: UserContext): Promise<void> {
-    const userId = ctx.from!.id;
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
     const stocks = await this.filterService.getInstrumentsByGroup('stocks');
     const symbols = stocks.map((i) => i.symbol);
 
-    this.sessionService.selectAll(userId, symbols);
+    this.sessionService.selectAll(botUserId, symbols);
     await this.showStocksSubgroups(ctx);
   }
 
   private async handleDeselectAllStocks(ctx: UserContext): Promise<void> {
-    const userId = ctx.from!.id;
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
     const stocks = await this.filterService.getInstrumentsByGroup('stocks');
     const symbols = stocks.map((i) => i.symbol);
 
-    this.sessionService.deselectAll(userId, symbols);
+    this.sessionService.deselectAll(botUserId, symbols);
     await this.showStocksSubgroups(ctx);
   }
 
@@ -508,11 +520,12 @@ export class FilterScene {
     ctx: UserContext,
     subgroup: string,
   ): Promise<void> {
-    const userId = ctx.from!.id;
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
     const instruments = await this.instrumentsRepository.findBySector(subgroup);
     const symbols = instruments.map((i) => i.symbol);
 
-    this.sessionService.selectAll(userId, symbols);
+    this.sessionService.selectAll(botUserId, symbols);
     await this.showSubgroupList(ctx, subgroup);
   }
 
@@ -520,11 +533,12 @@ export class FilterScene {
     ctx: UserContext,
     subgroup: string,
   ): Promise<void> {
-    const userId = ctx.from!.id;
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
     const instruments = await this.instrumentsRepository.findBySector(subgroup);
     const symbols = instruments.map((i) => i.symbol);
 
-    this.sessionService.deselectAll(userId, symbols);
+    this.sessionService.deselectAll(botUserId, symbols);
     await this.showSubgroupList(ctx, subgroup);
   }
 
@@ -534,8 +548,9 @@ export class FilterScene {
     subgroup: string | undefined,
     page: number,
   ): Promise<void> {
-    const userId = ctx.from!.id;
-    this.sessionService.updateNavigation(userId, undefined as any, page);
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
+    this.sessionService.updateNavigation(botUserId, undefined as any, page);
 
     if (subgroup) {
       await this.showSubgroupList(ctx, subgroup);
@@ -545,15 +560,16 @@ export class FilterScene {
   }
 
   private async handleSave(ctx: UserContext): Promise<void> {
-    const userId = ctx.from!.id;
-    const session = this.sessionService.getSession(userId);
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
+    const session = this.sessionService.getSession(botUserId);
     const lang = ctx.user?.lang || 'en';
     if (!session) return;
 
     try {
       const symbols = Array.from(session.sessionFilters);
-      await this.filterService.saveUserFilters(userId, symbols);
-      this.sessionService.commitChanges(userId);
+      await this.filterService.saveUserFilters(botUserId, symbols, botUserId);
+      this.sessionService.commitChanges(botUserId);
 
       const summary = await this.filterService.calculateFilterSummary(symbols);
 
@@ -578,21 +594,26 @@ export class FilterScene {
   }
 
   private async handleBackToMain(ctx: UserContext): Promise<void> {
-    const userId = ctx.from!.id;
-    this.sessionService.discardChanges(userId);
-    this.sessionService.updateNavigation(userId, 'main', 0);
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
+    const session = this.sessionService.getSession(botUserId);
+    if (!session) return;
+    this.sessionService.discardChanges(botUserId);
+    this.sessionService.updateNavigation(botUserId, 'main', 0);
     await this.showMainMenu(ctx);
   }
 
   private async handleBackToStocks(ctx: UserContext): Promise<void> {
-    const userId = ctx.from!.id;
-    this.sessionService.updateNavigation(userId, 'stocks_subgroups', 0);
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
+    this.sessionService.updateNavigation(botUserId, 'stocks_subgroups', 0);
     await this.showStocksSubgroups(ctx);
   }
 
   private async refreshCurrentScreen(ctx: UserContext): Promise<void> {
-    const userId = ctx.from!.id;
-    const session = this.sessionService.getSession(userId);
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) return;
+    const session = this.sessionService.getSession(botUserId);
     if (!session) return;
 
     const screen = session.currentScreen;

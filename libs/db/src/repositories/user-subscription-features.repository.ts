@@ -275,8 +275,6 @@ export class UserSubscriptionFeaturesRepository extends BaseRepository<
   }
 
   /**
-   * @deprecated Consider using deactivateBotUserSettings(botUserId, featureKey) for soft delete.
-   * Will be removed after migration validation period.
    *
    * Delete user feature settings (hard delete)
    *
@@ -285,18 +283,18 @@ export class UserSubscriptionFeaturesRepository extends BaseRepository<
    *
    * Use case: User clicks "Reset to defaults"
    *
-   * @param userId - The user's Telegram ID
+   * @param botUserId - The bot user ID
    * @param featureKey - The feature to reset
    */
   async deleteUserSettings(
-    userId: number,
+    botUserId: number,
     featureKey: FeatureFlag,
   ): Promise<void> {
     await this.db
       .delete(userSubscriptionFeatures)
       .where(
         and(
-          eq(userSubscriptionFeatures.userId, userId),
+          eq(userSubscriptionFeatures.botUserId, botUserId),
           eq(userSubscriptionFeatures.featureKey, featureKey),
         ),
       );
