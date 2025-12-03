@@ -76,7 +76,7 @@ export class BotRegistryService implements BotRegistry, OnModuleInit {
     // Add static bot if signals are enabled
     if (this.staticBotSignalsEnabled) {
       bots.push({
-        botId: null,
+        botId: 1,
         name: 'QuantumDealBot',
         instance: this.staticBot as unknown as Telegraf<Context>,
         limiter: this.staticBotLimiter,
@@ -117,7 +117,7 @@ export class BotRegistryService implements BotRegistry, OnModuleInit {
     if (botId === null) {
       if (!this.staticBotSignalsEnabled) return undefined;
       return {
-        botId: null,
+        botId: 1,
         name: 'QuantumDealBot',
         instance: this.staticBot as unknown as Telegraf<Context>,
         limiter: this.staticBotLimiter,

@@ -151,7 +151,6 @@ export class SubscriptionsRepository extends BaseRepository<
    */
   async findBySectorForBot(
     sector: string,
-    botId: number | null,
   ): Promise<SubscriptionWithFeatures[]> {
     // Alias for tier-based filtering join
     const sfTier = subscriptionFeatures;
@@ -204,10 +203,6 @@ export class SubscriptionsRepository extends BaseRepository<
         and(
           eq(userSubscriptions.subscriptionId, subscriptions.id),
           eq(userSubscriptions.isActive, true),
-          // Bot-specific filter: match botId or IS NULL for static bot
-          botId === null
-            ? sql`${userSubscriptions.botId} IS NULL`
-            : eq(userSubscriptions.botId, botId),
         ),
       )
       .innerJoin(botUsers, eq(botUsers.id, userSubscriptions.botUserId))
