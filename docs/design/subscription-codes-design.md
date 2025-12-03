@@ -95,7 +95,7 @@ graph TB
 | Framework | NestJS | Dependency injection, module system |
 | Language | TypeScript | Type safety, schema inference |
 | Crypto | Node.js `crypto.randomBytes()` | Secure random code generation |
-| Bot | Telegraf / nestjs-telegraf | Telegram bot integration |
+| Bot | Telegraf / @quantumdeal/telegraf | Telegram bot integration |
 
 ---
 

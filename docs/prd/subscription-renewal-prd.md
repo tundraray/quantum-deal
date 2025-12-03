@@ -413,7 +413,7 @@ interface RenewalInvoicePayload {
 ### Dependencies
 
 - **Telegram Bot API**: sendInvoice, answerPreCheckoutQuery, successful_payment webhook
-- **NestJS-Telegraf**: Scene management, callback handling
+- **@quantumdeal/telegraf**: Scene management, callback handling
 - **Drizzle ORM**: Database operations
 - **Core Infrastructure**: user_subscriptions.extendSubscription()
 

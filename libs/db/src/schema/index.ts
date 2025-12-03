@@ -1,5 +1,7 @@
 // Export all schema tables and types
 export * from './enums';
+export * from './bots';
+export * from './bot-settings';
 export * from './users';
 export * from './managers';
 export * from './orders';
@@ -10,12 +12,16 @@ export * from './user-subscription-features';
 export * from './codes';
 export * from './user-subscriptions';
 export * from './summary';
+export * from './bot-users';
 export * from './instruments';
 export * from './renewal-tariffs';
 export * from './payment-transactions';
 export * from './statistics';
+export * from './bot-messages';
 
 // Export all tables for use with drizzle queries
+export { bots } from './bots';
+export { botSettings } from './bot-settings';
 export { users } from './users';
 export { managers } from './managers';
 export { orders } from './orders';
@@ -30,3 +36,5 @@ export { instruments } from './instruments';
 export { renewalTariffs } from './renewal-tariffs';
 export { paymentTransactions } from './payment-transactions';
 export { monthlyBotStatistics } from './statistics';
+export { botUsers } from './bot-users';
+export { botMessages } from './bot-messages';

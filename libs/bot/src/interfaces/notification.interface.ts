@@ -4,8 +4,9 @@ import { MergedOrder, MessageType } from '@quantumdeal/db/schema';
  * User notification data including subscription and language preferences
  */
 export interface NotificationUser {
-  userId: number; // User ID for feature flag queries
+  botUserId: number; // User ID for feature flag queries
   telegramId: number;
+  botId: number;
   firstName: string | null;
   lastName: string | null;
   username: string | null;
@@ -21,6 +22,7 @@ export interface NotificationUser {
  */
 export interface PreparedMessage {
   telegramId: number;
+  botId: number;
   messageText: string;
   messageType: MessageType;
   order: MergedOrder;
@@ -92,7 +94,8 @@ export enum QueueMessageStatus {
  */
 export interface QueuedMessage {
   id: string;
-  userId: number;
+  telegramId: number;
+  botId: number;
   message: string;
   messageType: QueuedMessageType;
   priority: MessagePriority;

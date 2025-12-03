@@ -45,6 +45,18 @@
       ],
       "@quantumdeal/masterbot/*": [
         "libs/masterbot/src/*"
+      ],
+      "@quantumdeal/partner-bot": [
+        "libs/partner-bot/src"
+      ],
+      "@quantumdeal/partner-bot/*": [
+        "libs/partner-bot/src/*"
+      ],
+      "@quantumdeal/telegraf": [
+        "libs/telegraf/src"
+      ],
+      "@quantumdeal/telegraf/*": [
+        "libs/telegraf/src/*"
       ]
     }
   }

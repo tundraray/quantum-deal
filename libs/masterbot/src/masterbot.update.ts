@@ -7,7 +7,7 @@ import {
   Action,
   InjectBot,
   On,
-} from 'nestjs-telegraf';
+} from '@quantumdeal/telegraf';
 import { randomBytes } from 'crypto';
 
 import {

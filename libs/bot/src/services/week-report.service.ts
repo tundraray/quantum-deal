@@ -59,6 +59,7 @@ interface TradingActivityStats {
 
 interface ClientSubscription {
   readonly telegramId: number;
+  readonly botId: number;
   readonly firstName?: string | null;
   readonly lastName?: string | null;
   readonly username?: string | null;
@@ -76,6 +77,7 @@ interface ClientWeeklyReportData {
   readonly generatedAt: Date;
   readonly client: {
     readonly telegramId: number;
+    readonly botId: number;
     readonly lang?: string | null;
     readonly subscription: {
       readonly id: number;
@@ -319,11 +321,12 @@ export class WeekReportService {
       // Transform to ClientSubscription format
       const clientSubscriptions: ClientSubscription[] = results.map(
         (result) => ({
-          telegramId: result.user.telegramId,
+          telegramId: result.botUser.userId,
+          botId: result.botUser.botId,
           firstName: result.user.firstName,
           lastName: result.user.lastName,
           username: result.user.username,
-          lang: result.user.lang,
+          lang: result.botUser.lang,
           subscriptionId: result.subscription.id,
           subscriptionName: result.subscription.name,
           subscriptionScope: result.subscription.scope,
@@ -368,6 +371,7 @@ export class WeekReportService {
         generatedAt: new Date(),
         client: {
           telegramId: client.telegramId,
+          botId: client.botId,
           lang: client.lang, // Add language to client data
           subscription: {
             id: client.subscriptionId,
@@ -725,6 +729,7 @@ export class WeekReportService {
 
       this.notificationService.addMessage(
         clientReport.client.telegramId,
+        clientReport.client.botId,
         reportMessage,
         {
           messageType: QueuedMessageType.HTML,

@@ -141,6 +141,34 @@
       "when": 1761990200000,
       "tag": "20251101094200_seed_trial_subscription",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1764183921648,
+      "tag": "20251126190521_young_falcon",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1764200000000,
+      "tag": "20251126200000_seed_default_bot",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1764713868317,
+      "tag": "20251202221748_elite_piledriver",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1764721473609,
+      "tag": "20251203002433_fat_clint_barton",
+      "breakpoints": true
     }
   ]
 }

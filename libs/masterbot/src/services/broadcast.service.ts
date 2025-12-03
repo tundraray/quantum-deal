@@ -172,12 +172,13 @@ export class BroadcastService {
     try {
       const batchResult = this.notificationService.addMessages(
         subscribers.map((sub) => {
-          const userLang = sub.user.lang || 'en';
+          const userLang = sub.botUser.lang || 'en';
           const translatedMessage =
             translatedMessages.get(userLang) || messageForTranslation;
 
           return {
-            userId: sub.user.telegramId,
+            telegramId: sub.botUser.userId,
+            botId: sub.botUser.botId,
             message: translatedMessage,
             options: {
               priority: MessagePriority.CRITICAL,
@@ -227,17 +228,17 @@ export class BroadcastService {
    */
   private groupUsersByLanguage(
     subscribers: Array<{
-      user: { telegramId: number; lang: string | null };
+      botUser: { userId: number; lang: string | null };
       userSubscription: any;
     }>,
-  ): Map<string, Array<{ user: any; userSubscription: any }>> {
+  ): Map<string, Array<{ botUser: any; userSubscription: any }>> {
     const grouped = new Map<
       string,
-      Array<{ user: any; userSubscription: any }>
+      Array<{ botUser: any; userSubscription: any }>
     >();
 
     for (const sub of subscribers) {
-      const lang = sub.user.lang || 'en'; // Default to English if no language set
+      const lang = sub.botUser.lang || 'en'; // Default to English if no language set
       const group = grouped.get(lang) || [];
       group.push(sub);
       grouped.set(lang, group);
@@ -267,7 +268,7 @@ export class BroadcastService {
    */
   private async translateMessagesForLanguages(
     originalMessage: string,
-    usersByLang: Map<string, Array<{ user: any; userSubscription: any }>>,
+    usersByLang: Map<string, Array<{ botUser: any; userSubscription: any }>>,
   ): Promise<Map<string, string>> {
     const translatedMessages = new Map<string, string>();
     const languages = Array.from(usersByLang.keys());

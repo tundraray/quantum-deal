@@ -17,9 +17,10 @@ export class TrialService {
 
   /**
    * Check if user is eligible for trial
-   * Eligibility: No subscription history (user_subscriptions table has 0 records)
+   * Eligibility: No subscription history for this specific bot-user
+   * @param botUserId - The bot_users.id (NOT telegramId)
    */
-  async isEligible(userId: number): Promise<boolean> {
+  async isEligible(botUserId: number): Promise<boolean> {
     // Check if TRIAL_ENABLED is true
     const trialEnabled = this.configService.get<boolean>('TRIAL_ENABLED', true);
     if (!trialEnabled) {
@@ -27,27 +28,28 @@ export class TrialService {
       return false;
     }
 
-    // Simple: no subscription history = eligible
+    // Simple: no subscription history for this bot-user = eligible
     const existing =
-      await this.userSubscriptionsRepository.findByUserId(userId);
+      await this.userSubscriptionsRepository.findByBotUserId(botUserId);
     const eligible = existing.length === 0;
 
-    this.logger.debug(`User ${userId} trial eligibility: ${eligible}`);
+    this.logger.debug(`BotUser ${botUserId} trial eligibility: ${eligible}`);
     return eligible;
   }
 
   /**
    * Activate trial subscription for user
    * Creates user_subscription record with configurable expiration (TRIAL_DURATION_DAYS)
+   * @param botUserId - The bot_users.id (NOT telegramId)
    */
-  async activate(userId: number): Promise<{
+  async activate(botUserId: number): Promise<{
     success: boolean;
     expiresAt?: Date;
     error?: string;
   }> {
     try {
       // Double-check eligibility
-      const eligible = await this.isEligible(userId);
+      const eligible = await this.isEligible(botUserId);
       if (!eligible) {
         return { success: false, error: 'Trial already used or not enabled' };
       }
@@ -71,20 +73,24 @@ export class TrialService {
       // Calculate expiration date
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + Number(durationDays));
-      // Create user_subscription record
-      await this.userSubscriptionsRepository.activate(
-        userId,
+
+      // Create user_subscription record with botUserId
+      await this.userSubscriptionsRepository.activateForBotUser(
+        botUserId,
         trialSubscription.id,
         expiresAt,
       );
 
       this.logger.log(
-        `Trial activated for user ${userId}, expires: ${expiresAt.toISOString()}`,
+        `Trial activated for botUser ${botUserId}, expires: ${expiresAt.toISOString()}`,
       );
 
       return { success: true, expiresAt };
     } catch (error) {
-      this.logger.error(`Failed to activate trial for user ${userId}`, error);
+      this.logger.error(
+        `Failed to activate trial for botUser ${botUserId}`,
+        error,
+      );
       return { success: false, error: 'Failed to activate trial' };
     }
   }

@@ -1,5 +1,5 @@
 import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
-import { Command, Update, Ctx, Action } from 'nestjs-telegraf';
+import { Command, Update, Ctx, Action } from '@quantumdeal/telegraf';
 import { deunionize } from 'telegraf';
 import {
   ResponseTimeInterceptor,
@@ -8,7 +8,7 @@ import {
   SplitCommandPipe,
   LLMService,
 } from '@quantumdeal/framework';
-import { UsersRepository } from '@quantumdeal/db';
+import { BotUsersRepository } from '@quantumdeal/db';
 import type { UserContext } from '../../interfaces';
 import { BotCommandsService } from '../../services/bot-commands.service';
 import { langKeyboard } from '../../lang';
@@ -32,7 +32,7 @@ export class LangUpdate {
 
   constructor(
     private readonly llmService: LLMService,
-    private readonly usersRepository: UsersRepository,
+    private readonly botUsersRepository: BotUsersRepository,
     private readonly botCommandsService: BotCommandsService,
   ) {}
 
@@ -179,9 +179,7 @@ export class LangUpdate {
     languageCode: string,
   ): Promise<string> {
     // Update user's language in database
-    await this.usersRepository.update(userId, {
-      lang: languageCode,
-    });
+    await this.botUsersRepository.updateLanguage(userId, 1, languageCode);
 
     this.logger.log(`User ${userId} changed language to ${languageCode}`);
 

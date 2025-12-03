@@ -1,5 +1,5 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import { TelegrafExecutionContext } from 'nestjs-telegraf';
+import { TelegrafExecutionContext } from '@quantumdeal/telegraf';
 import { Context } from '../interfaces/context.interface';
 import { deunionize } from 'telegraf';
 

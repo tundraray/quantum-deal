@@ -15,6 +15,10 @@ import {
   InstrumentsRepository,
   RenewalTariffsRepository,
   PaymentTransactionsRepository,
+  BotsRepository,
+  BotMessagesRepository,
+  BotUsersRepository,
+  BotSettingsRepository,
 } from './repositories';
 
 @Module({
@@ -58,6 +62,10 @@ export class DrizzleModule {}
     InstrumentsRepository,
     RenewalTariffsRepository,
     PaymentTransactionsRepository,
+    BotsRepository,
+    BotMessagesRepository,
+    BotUsersRepository,
+    BotSettingsRepository,
   ],
   exports: [
     // Export the database client for direct access if needed
@@ -76,6 +84,10 @@ export class DrizzleModule {}
     InstrumentsRepository,
     RenewalTariffsRepository,
     PaymentTransactionsRepository,
+    BotsRepository,
+    BotMessagesRepository,
+    BotUsersRepository,
+    BotSettingsRepository,
   ],
 })
 export class DbModule {}

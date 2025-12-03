@@ -112,7 +112,7 @@ Telegram bot users need to see only the commands they have access to, with descr
 - **FeatureFlagService**: Provides `enabledFeatures` set used to determine command visibility
 - **UsersRepository**: Provides user's language preference
 - **Telegram Bot API**: `setMyCommands` method for setting personalized commands
-- **nestjs-telegraf**: Bot framework providing dependency injection and decorators
+- **@quantumdeal/telegraf**: Bot framework providing dependency injection and decorators
 
 ## Design
 
@@ -539,7 +539,7 @@ Not required for this non-critical feature. Command menu updates are fire-and-fo
 
 - PRD: `docs/prd/bot-commands-prd.md`
 - Telegram Bot API: https://core.telegram.org/bots/api#setmycommands
-- nestjs-telegraf: https://github.com/bukhalo/nestjs-telegraf
+- @quantumdeal/telegraf: https://github.com/bukhalo/@quantumdeal/telegraf
 - Implementation: `libs/bot/src/services/bot-commands.service.ts`
 
 ## Update History

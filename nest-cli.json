@@ -42,6 +42,24 @@
       "compilerOptions": {
         "tsConfigPath": "libs/masterbot/tsconfig.lib.json"
       }
+    },
+    "partner-bot": {
+      "type": "library",
+      "root": "libs/partner-bot",
+      "entryFile": "index",
+      "sourceRoot": "libs/partner-bot/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/partner-bot/tsconfig.lib.json"
+      }
+    },
+    "telegraf": {
+      "type": "library",
+      "root": "libs/telegraf",
+      "entryFile": "index",
+      "sourceRoot": "libs/telegraf/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/telegraf/tsconfig.lib.json"
+      }
     }
   }
 }

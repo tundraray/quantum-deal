@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
-import { InjectBot } from 'nestjs-telegraf';
+import { InjectBot } from '@quantumdeal/telegraf';
 import { Telegraf } from 'telegraf';
 import type { UserContext } from './interfaces';
 import { MASTERBOT_BOT_NAME } from './constants';

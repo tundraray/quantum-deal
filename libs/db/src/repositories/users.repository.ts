@@ -17,15 +17,25 @@ export class UsersRepository extends BaseRepository<User, NewUser, number> {
     return this.findOneBy(eq(this.table.telegramId, telegramId));
   }
 
-  public deactivateUser(telegramId: number) {
-    return this.update(telegramId, { isActive: false });
-  }
+  /**
+   * Creates a new user or updates existing one on conflict
+   * Updates profile fields (username, firstName, lastName, isPremium)
+   */
+  public async upsert(data: NewUser): Promise<User> {
+    const result = await this.db
+      .insert(this.table)
+      .values(data)
+      .onConflictDoUpdate({
+        target: this.table.telegramId,
+        set: {
+          username: data.username,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          isPremium: data.isPremium,
+        },
+      })
+      .returning();
 
-  public activateUser(telegramId: number) {
-    return this.update(telegramId, { isActive: true });
-  }
-
-  public findActiveUsers() {
-    return this.findBy(eq(this.table.isActive, true));
+    return result[0];
   }
 }

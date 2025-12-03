@@ -43,19 +43,6 @@ export class MasterbotService {
       ]);
 
       const currentDate = new Date();
-      const activeUsers = allUsers.filter(
-        (user) =>
-          user.subscribeExpirationDate &&
-          new Date(user.subscribeExpirationDate) > currentDate,
-      );
-
-      const expiredUsers = allUsers.filter(
-        (user) =>
-          user.subscribeExpirationDate &&
-          new Date(user.subscribeExpirationDate) <= currentDate,
-      );
-
-      const blockedUsers = allUsers.filter((user) => !user.isActive);
 
       // Get recent users (last 7 days)
       const sevenDaysAgo = new Date(
@@ -73,9 +60,9 @@ export class MasterbotService {
 
       return {
         totalUsers: allUsers.length,
-        activeSubscriptions: activeUsers.length,
-        expiredSubscriptions: expiredUsers.length,
-        blockedUsers: blockedUsers.length,
+        activeSubscriptions: 0,
+        expiredSubscriptions: 0,
+        blockedUsers: 0,
         totalSubscriptions: allSubscriptions.length,
         recentUsers,
         lastUpdated: new Date(),

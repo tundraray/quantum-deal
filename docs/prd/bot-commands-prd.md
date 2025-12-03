@@ -273,7 +273,7 @@ flowchart TB
 ### Dependencies
 
 - **Telegram Bot API**: `setMyCommands` method with scope parameter
-- **nestjs-telegraf**: Bot framework with dependency injection
+- **@quantumdeal/telegraf**: Bot framework with dependency injection
 - **FeatureFlagService**: Provides user's enabled feature set
 - **User Repository**: Provides user language preference
 

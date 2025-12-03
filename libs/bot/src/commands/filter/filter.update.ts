@@ -1,5 +1,5 @@
 import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
-import { Command, Update, Ctx } from 'nestjs-telegraf';
+import { Command, Update, Ctx } from '@quantumdeal/telegraf';
 import {
   ResponseTimeInterceptor,
   TelegrafExceptionFilter,

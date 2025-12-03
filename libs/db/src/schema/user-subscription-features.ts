@@ -7,8 +7,10 @@ import {
   boolean,
   timestamp,
   unique,
+  index,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
+import { botUsers } from './bot-users';
 
 /**
  * User Subscription Features Settings Type
@@ -44,6 +46,17 @@ export const userSubscriptionFeatures = pgTable(
   {
     id: serial('id').primaryKey(),
 
+    // NEW: Primary FK to bot-specific user context
+    // References bot_users.id (auto-generated internal ID, NOT telegramId)
+    botUserId: bigint('bot_user_id', { mode: 'number' }).references(
+      () => botUsers.id,
+      { onDelete: 'cascade' },
+    ),
+
+    /**
+     * @deprecated Use botUserId instead. References users.telegramId.
+     * Will be removed in future migration after validation period.
+     */
     userId: bigint('user_id', { mode: 'number' })
       .notNull()
       .references(() => users.telegramId, { onDelete: 'cascade' }),
@@ -73,6 +86,10 @@ export const userSubscriptionFeatures = pgTable(
     uniqueUserFeature: unique('unique_user_feature').on(
       table.userId,
       table.featureKey,
+    ),
+    // Index for botUserId queries
+    idxBotUser: index('idx_user_subscription_features_bot_user').on(
+      table.botUserId,
     ),
   }),
 );

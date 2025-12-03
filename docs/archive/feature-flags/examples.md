@@ -67,7 +67,7 @@ async handleFilter(@Ctx() ctx: UserContext) {
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { Command, Ctx } from 'nestjs-telegraf';
+import { Command, Ctx } from '@quantumdeal/telegraf';
 import { RequireFeature } from '@quantumdeal/bot/decorators';
 import { FeatureFlag } from '@quantumdeal/db/schema';
 import { UserContext } from '@quantumdeal/bot/interfaces/user-context.interface';
@@ -104,7 +104,7 @@ export class SignalsCommands {
 
 ```typescript
 import { Injectable } from '@nestjs/common';
-import { Command, Ctx } from 'nestjs-telegraf';
+import { Command, Ctx } from '@quantumdeal/telegraf';
 import { hasFeature } from '@quantumdeal/bot/interfaces/user.dto';
 import { FeatureFlag } from '@quantumdeal/db/schema';
 

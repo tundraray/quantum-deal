@@ -119,7 +119,7 @@ flowchart TB
         START["/start Button"]
     end
 
-    subgraph BotLayer["Bot Layer (NestJS-Telegraf)"]
+    subgraph BotLayer["Bot Layer (@quantumdeal/telegraf)"]
         UPDATE["RenewUpdate"]
         SCENE["RenewalScene"]
         ACTION["RenewalAction"]
@@ -691,7 +691,7 @@ interface UserContext extends Context {
 - Core Infrastructure: `docs/prd/subscription-core-prd.md`
 - Signals PRD: `docs/prd/subscription-signals-prd.md`
 - [Telegram Stars Documentation](https://core.telegram.org/bots/api#payments)
-- [NestJS-Telegraf Scenes](https://github.com/bukhalo/nestjs-telegraf)
+- [@quantumdeal/telegraf Scenes](https://github.com/bukhalo/@quantumdeal/telegraf)
 
 ## Update History
 

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Scene, SceneEnter, Action, Ctx } from 'nestjs-telegraf';
+import { Scene, SceneEnter, Action, Ctx } from '@quantumdeal/telegraf';
 import { FILTER_SCENE_ID } from '../../constants';
 import type { UserContext } from '../../interfaces';
 import { InstrumentFilterService } from '../../services/instrument-filter.service';

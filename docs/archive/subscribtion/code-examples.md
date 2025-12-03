@@ -200,7 +200,7 @@ export class SubscriptionManagementService {
 ```typescript
 import { Injectable, Logger, InternalServerErrorException, OnModuleInit } from '@nestjs/common';
 import { CodesRepository } from '@quantumdeal/db';
-import { InjectBot } from 'nestjs-telegraf';
+import { InjectBot } from '@quantumdeal/telegraf';
 import { Telegraf } from 'telegraf';
 import { randomBytes } from 'crypto';
 import { BotName } from '@quantumdeal/bot';
@@ -1131,7 +1131,7 @@ import {
   Action,
   InjectBot,
   On,
-} from 'nestjs-telegraf';
+} from '@quantumdeal/telegraf';
 import {
   ResponseTimeInterceptor,
   TelegrafExceptionFilter,

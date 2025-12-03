@@ -1,12 +1,14 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { Telegraf, Context as TelegrafContext } from 'telegraf';
-import { InjectBot } from 'nestjs-telegraf';
+import { InjectBot } from '@quantumdeal/telegraf';
 import {
   PaymentTransactionsRepository,
   RenewalTariffsRepository,
   UserSubscriptionsRepository,
   SubscriptionsRepository,
   UsersRepository,
+  BotUsersRepository,
+  BotsRepository,
 } from '@quantumdeal/db';
 import { PaymentState } from '@quantumdeal/db/schema';
 import { getRenewalMessage } from '../commands/renew/renewal.i18n';
@@ -38,6 +40,9 @@ export interface RenewalInvoicePayload {
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
 
+  /** Cached bot ID for QuantumDealBot (resolved lazily) */
+  private cachedBotId: number | null = null;
+
   constructor(
     @InjectBot('QuantumDealBot')
     private readonly bot: Telegraf<TelegrafContext>,
@@ -46,6 +51,8 @@ export class PaymentService {
     private readonly userSubscriptionsRepo: UserSubscriptionsRepository,
     private readonly subscriptionsRepo: SubscriptionsRepository,
     private readonly usersRepo: UsersRepository,
+    private readonly botUsersRepo: BotUsersRepository,
+    private readonly botsRepo: BotsRepository,
   ) {}
 
   /**
@@ -113,10 +120,9 @@ export class PaymentService {
       timestamp: Date.now(),
     };
 
-    // Get subscription and user info for invoice
+    // Get subscription and user lang for invoice
     const subscription = await this.subscriptionsRepo.findById(subscriptionId);
-    const user = await this.usersRepo.findById(userId);
-    const userLang = user?.lang || 'en';
+    const userLang = await this.resolveUserLang(userId);
 
     // Send invoice to user
     try {
@@ -330,6 +336,39 @@ export class PaymentService {
       );
 
       throw error;
+    }
+  }
+
+  /**
+   * Resolve user language for QuantumDealBot
+   * Uses botUsersRepository to get the language from bot_users table
+   *
+   * @param userId - User's Telegram ID
+   * @returns User's language preference or 'en' as default
+   */
+  private async resolveUserLang(userId: number): Promise<string> {
+    try {
+      // Resolve the bot ID for QuantumDealBot (cached)
+      if (this.cachedBotId === null) {
+        const bot = await this.botsRepo.findByName('QuantumDealBot');
+        this.cachedBotId = bot?.id ?? null;
+      }
+
+      if (this.cachedBotId !== null) {
+        return this.botUsersRepo.resolveLanguage(
+          userId,
+          this.cachedBotId,
+          'en',
+        );
+      }
+
+      return 'en';
+    } catch (error) {
+      this.logger.warn(
+        `Failed to resolve user language for ${userId}, defaulting to 'en'`,
+        error,
+      );
+      return 'en';
     }
   }
 }

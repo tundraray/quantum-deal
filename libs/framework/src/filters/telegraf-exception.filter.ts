@@ -1,5 +1,5 @@
 import { ArgumentsHost, Catch, ExceptionFilter } from '@nestjs/common';
-import { TelegrafArgumentsHost } from 'nestjs-telegraf';
+import { TelegrafArgumentsHost } from '@quantumdeal/telegraf';
 import { Context } from '../interfaces/context.interface';
 import { SentryService } from '../sentry/sentry.service';
 

@@ -4,8 +4,8 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
-import { InjectBot } from 'nestjs-telegraf';
-import { Telegraf } from 'telegraf';
+import { InjectBot } from '@quantumdeal/telegraf';
+import { Telegraf, Context } from 'telegraf';
 import Bottleneck from 'bottleneck';
 import { v4 as uuidv4 } from 'uuid';
 import * as Sentry from '@sentry/nestjs';
@@ -20,7 +20,15 @@ import {
   BatchSendResult,
 } from '../interfaces/notification.interface';
 import type { UserContext } from '../interfaces';
-import { UsersRepository } from '@quantumdeal/db';
+import { BotsRepository, BotUsersRepository } from '@quantumdeal/db';
+import { DynamicTelegrafService } from '@quantumdeal/telegraf';
+
+/**
+ * Type alias for bot instances that can send messages.
+ * Works with both static bot (Telegraf<UserContext>) and dynamic bots (Telegraf<Context>).
+ * Both have compatible .telegram.sendMessage() methods.
+ */
+type TelegrafInstance = Telegraf<UserContext> | Telegraf<Context>;
 
 /**
  * Production-ready notification service with rate limiting
@@ -53,7 +61,9 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @InjectBot('QuantumDealBot')
     private readonly bot: Telegraf<UserContext>,
-    private readonly usersRepository: UsersRepository,
+    private readonly dynamicTelegrafService: DynamicTelegrafService,
+    private readonly botsRepository: BotsRepository,
+    private readonly botUsersRepository: BotUsersRepository,
   ) {}
 
   onModuleInit() {
@@ -72,7 +82,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
    * Schedule a single message directly with Bottleneck
    */
   addMessage(
-    userId: number,
+    telegramId: number,
+    botId: number,
     message: string,
     options: MessageOptions = {},
   ): string {
@@ -80,7 +91,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       const messageId = uuidv4();
       const queuedMessage: QueuedMessage = {
         id: messageId,
-        userId,
+        telegramId,
+        botId,
         message,
         messageType: options.messageType ?? QueuedMessageType.TEXT,
         priority: options.priority ?? MessagePriority.NORMAL,
@@ -105,7 +117,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       this.messageStats.totalScheduled++;
 
       this.logger.debug(
-        `Message scheduled: ${options.messageType ?? QueuedMessageType.TEXT} for user ${userId}`,
+        `Message scheduled: ${options.messageType ?? QueuedMessageType.TEXT} for user ${telegramId}`,
       );
 
       // Track message scheduling in Sentry
@@ -113,7 +125,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
         message: 'Message scheduled with Bottleneck',
         data: {
           messageId,
-          userId,
+          telegramId,
           priority: queuedMessage.priority,
           messageType: queuedMessage.messageType,
         },
@@ -124,7 +136,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.logger.error('Error scheduling message', error);
       Sentry.captureException(error, {
-        tags: { userId, service: 'notification' },
+        tags: { telegramId, botId, service: 'notification' },
       });
       throw error;
     }
@@ -135,7 +147,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
    */
   addMessages(
     messages: Array<{
-      userId: number;
+      telegramId: number;
+      botId: number;
       message: string;
       options?: MessageOptions;
     }>,
@@ -150,14 +163,19 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
 
     for (const msg of messages) {
       try {
-        const messageId = this.addMessage(msg.userId, msg.message, msg.options);
+        const messageId = this.addMessage(
+          msg.telegramId,
+          msg.botId,
+          msg.message,
+          msg.options,
+        );
         result.queuedCount++;
         result.queuedIds.push(messageId);
       } catch (error) {
         result.errorCount++;
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error';
-        result.errors.push(`User ${msg.userId}: ${errorMessage}`);
+        result.errors.push(`User ${msg.telegramId}: ${errorMessage}`);
       }
     }
 
@@ -165,6 +183,81 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       `Batch queued: ${result.queuedCount} messages, ${result.errorCount} errors`,
     );
     return result;
+  }
+
+  /**
+   * Schedule a message using a specific bot instance and limiter.
+   * Used by MultiBotSignalService for per-bot signal delivery (ADR-007).
+   *
+   * NOTE: This method coexists with addMessage() - it does NOT replace it.
+   * addMessage() continues to use the injected static bot.
+   * sendWithBot() uses the provided bot parameter.
+   *
+   * @param limiter - Per-bot Bottleneck rate limiter
+   * @param telegramId - Telegram user ID
+   * @param message - Message content
+   * @param options - Message options (type, priority, retries)
+   * @returns Message ID for tracking
+   */
+  sendWithBot(
+    limiter: Bottleneck,
+    telegramId: number,
+    botId: number,
+    message: string,
+    options: MessageOptions = {},
+  ): string {
+    try {
+      const messageId = uuidv4();
+      const queuedMessage: QueuedMessage = {
+        id: messageId,
+        telegramId,
+        botId,
+        message,
+        messageType: options.messageType ?? QueuedMessageType.TEXT,
+        priority: options.priority ?? MessagePriority.NORMAL,
+        status: QueueMessageStatus.PENDING,
+        retryCount: 0,
+        maxRetries: options.maxRetries ?? 3,
+        createdAt: new Date(),
+        scheduledAt: options.scheduledAt,
+        metadata: options.metadata,
+        buttons: options.buttons,
+      };
+
+      // Schedule with provided limiter (not internal limiter)
+      const bottleneckPriority = this.convertToBotleneckPriority(
+        queuedMessage.priority,
+      );
+
+      limiter
+        .schedule({ priority: bottleneckPriority }, () =>
+          this.processMessageWithBot(queuedMessage),
+        )
+        .catch((error) => {
+          this.logger.error(`Failed to schedule message ${messageId}:`, error);
+          Sentry.captureException(error, {
+            tags: {
+              service: 'notification',
+              messageId,
+              userId: telegramId.toString(),
+            },
+          });
+        });
+
+      this.messageStats.totalScheduled++;
+
+      this.logger.debug(
+        `Message scheduled via external bot for user ${telegramId}`,
+      );
+
+      return messageId;
+    } catch (error) {
+      this.logger.error('Error scheduling message with bot', error);
+      Sentry.captureException(error, {
+        tags: { userId: telegramId, service: 'notification' },
+      });
+      throw error;
+    }
   }
 
   /**
@@ -201,7 +294,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
           tags: {
             service: 'notification',
             messageId: message.id,
-            userId: message.userId.toString(),
+            telegramId: message.telegramId,
+            botId: message.botId,
           },
         });
       });
@@ -222,7 +316,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       this.messageStats.successCount++;
     } catch (error) {
       this.logger.error(
-        `Error sending message ${message.id} to user ${message.userId}:`,
+        `Error sending message ${message.id} to user ${message.telegramId}:`,
         error,
       );
 
@@ -256,7 +350,10 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
         this.messageStats.failureCount++;
 
         if (isPermanentError) {
-          await this.usersRepository.deactivateUser(message.userId);
+          await this.botUsersRepository.deactivate(
+            message.telegramId,
+            message.botId,
+          );
           this.logger.warn(
             `Message ${message.id} failed with permanent error (no retry): ${errorMessage}`,
           );
@@ -271,7 +368,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       Sentry.captureException(error, {
         tags: {
           service: 'notification',
-          userId: message.userId.toString(),
+          telegramId: message.telegramId,
+          botId: message.botId,
           messageId: message.id,
         },
         extra: {
@@ -438,7 +536,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       messageText = telegramifyMarkdown(messageText, 'remove');
     }
 
-    await this.bot.telegram.sendMessage(message.userId, messageText, {
+    await this.bot.telegram.sendMessage(message.telegramId, messageText, {
       parse_mode: parseMode,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       reply_markup:
@@ -448,5 +546,107 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
             } as any)
           : undefined,
     });
+  }
+
+  /**
+   * Process a message with a specific bot instance.
+   * Includes error handling and stats tracking for per-bot delivery.
+   * Used by sendWithBot() for multi-bot signal broadcasting (ADR-007).
+   */
+  private async processMessageWithBot(message: QueuedMessage): Promise<void> {
+    try {
+      message.status = QueueMessageStatus.PROCESSING;
+      message.processedAt = new Date();
+
+      await this.sendTelegramMessageWithBot(message);
+
+      message.status = QueueMessageStatus.SENT;
+      this.messageStats.successCount++;
+    } catch (error) {
+      this.logger.error(
+        `Error sending message ${message.id} to user ${message.telegramId}:`,
+        error,
+      );
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      const isPermanentError = this.isPermanentError(errorMessage);
+
+      if (!isPermanentError && message.retryCount < message.maxRetries) {
+        message.retryCount++;
+        message.status = QueueMessageStatus.RETRY;
+        this.messageStats.retryCount++;
+        // Rethrow for Bottleneck retry handling
+        throw error;
+      } else {
+        message.status = QueueMessageStatus.FAILED;
+        message.error = errorMessage;
+        this.messageStats.failureCount++;
+
+        if (isPermanentError) {
+          await this.botUsersRepository.deactivate(
+            message.telegramId,
+            message.botId,
+          );
+        }
+
+        Sentry.captureException(error, {
+          tags: {
+            service: 'notification',
+            telegramId: message.telegramId,
+            botId: message.botId,
+            messageId: message.id,
+          },
+        });
+
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Send message via specific Telegram bot instance.
+   * Used by processMessageWithBot() for per-bot delivery (ADR-007).
+   */
+  private async sendTelegramMessageWithBot(
+    message: QueuedMessage,
+  ): Promise<void> {
+    let messageText = message.message;
+    let parseMode: 'HTML' | 'MarkdownV2' | undefined;
+
+    if (message.messageType === QueuedMessageType.HTML) {
+      parseMode = 'HTML';
+    } else if (message.messageType === QueuedMessageType.MARKDOWN) {
+      parseMode = 'MarkdownV2';
+      messageText = telegramifyMarkdown(messageText, 'remove');
+    }
+
+    const botInstance = await this.getBot(message.botId);
+
+    await botInstance.telegram.sendMessage(message.telegramId, messageText, {
+      parse_mode: parseMode,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      reply_markup:
+        message.buttons && message.buttons.length > 0
+          ? ({
+              inline_keyboard: message.buttons,
+            } as any)
+          : undefined,
+    });
+  }
+
+  private async getBot(botId: number): Promise<TelegrafInstance> {
+    const bot = await this.botsRepository.findById(botId);
+    if (!bot) {
+      throw new Error(`Bot with id ${botId} not found`);
+    }
+    if (!bot.isDynamic) {
+      return this.bot;
+    }
+    const dynamicBot = this.dynamicTelegrafService.getBot(bot.id);
+    if (!dynamicBot) {
+      throw new Error(`Bot with id ${botId} not found`);
+    }
+    return dynamicBot;
   }
 }
