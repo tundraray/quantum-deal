@@ -151,6 +151,7 @@ export class SubscriptionsRepository extends BaseRepository<
    */
   async findBySectorForBot(
     sector: string,
+    botId: number,
   ): Promise<SubscriptionWithFeatures[]> {
     // Alias for tier-based filtering join
     const sfTier = subscriptionFeatures;
@@ -219,6 +220,7 @@ export class SubscriptionsRepository extends BaseRepository<
           eq(subscriptions.isActive, true),
           // Only active, non-expired subscriptions
           sql`${userSubscriptions.expiresAt} > NOW()`,
+          eq(botUsers.botId, botId),
         ),
       );
 

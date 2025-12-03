@@ -143,7 +143,10 @@ export class MultiBotSignalService implements MultiBotSignal {
     try {
       // Step 1: Get users subscribed to this specific bot
       const subscriptions =
-        await this.subscriptionsRepository.findBySectorForBot(sector);
+        await this.subscriptionsRepository.findBySectorForBot(
+          sector,
+          botId ?? 1,
+        );
 
       if (subscriptions.length === 0) {
         this.logger.debug(
