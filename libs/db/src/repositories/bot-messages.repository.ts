@@ -209,6 +209,11 @@ export class BotMessagesRepository extends BaseRepository<
       },
     };
 
+    this.logger.error('Hardcoded fallback message', {
+      type,
+      lang,
+    });
+
     return (
       fallbacks[type]?.[lang] ??
       fallbacks[type]?.['en'] ??

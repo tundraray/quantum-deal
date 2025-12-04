@@ -1,5 +1,5 @@
 -- Migration: Partner Bot Messages
--- Description: Adds 48 messages for partner bot flow (6 types × 8 languages)
+-- Description: Adds 56 messages for partner bot flow (7 types × 8 languages)
 -- Author: System
 -- Date: 2025-12-02
 -- Task Reference: 20251202-feature-partner-bot-flow-task-02.md
@@ -17,10 +17,11 @@
 --   3. partner_verification_failed - Failed to verify channel membership
 --   4. partner_trial_activated - Trial successfully activated
 --   5. partner_trial_expired - Trial period has expired
---   6. partner_coming_soon - Feature not yet available
+--   6. partner_trial_status - Current status of the trial
+--   7. partner_coming_soon - Feature not yet available
 --
 -- Languages: ru, en, uk, hi, fr, kk, uz, tg (8 total)
--- Total: 48 messages (6 types × 8 languages)
+-- Total: 56 messages (7 types × 8 languages)
 
 -- ==========================================
 -- MESSAGE TYPE 1: partner_welcome
@@ -109,7 +110,21 @@ INSERT INTO messages (type, lang, message) VALUES
 ('partner_trial_expired', 'tg', 'Давраи санҷиши шумо дар {expiryDate} ба анҷом расид. Барои давом додани дастрасӣ ба канал, лутфан обунаро харед.');
 
 -- ==========================================
--- MESSAGE TYPE 6: partner_coming_soon
+-- MESSAGE TYPE 6: partner_trial_status
+-- ==========================================
+
+INSERT INTO messages (type, lang, message) VALUES
+('partner_trial_status', 'ru', 'Ваш пробный период активен до {expiryDate}. Осталось дней: {daysRemaining}.'),
+('partner_trial_status', 'en', 'Your trial period is active until {expiryDate}. Days remaining: {daysRemaining}.'),
+('partner_trial_status', 'uk', 'Ваш пробний період активний до {expiryDate}. Залишилось днів: {daysRemaining}.'),
+('partner_trial_status', 'hi', 'आपकी ट्रायल अवधि {expiryDate} तक सक्रिय है। शेष दिन: {daysRemaining}।'),
+('partner_trial_status', 'fr', 'Votre période d''essai est active jusqu''au {expiryDate}. Jours restants: {daysRemaining}.'),
+('partner_trial_status', 'kk', 'Сіздің сынақ кезеңіңіз {expiryDate} дейін белсенді. Қалған күндер: {daysRemaining}.'),
+('partner_trial_status', 'uz', 'Sizning sinov davringiz {expiryDate} gacha faol. Qolgan kunlar: {daysRemaining}.'),
+('partner_trial_status', 'tg', 'Давраи санҷиши шумо то {expiryDate} фаъол аст. Рӯзҳои боқимонда: {daysRemaining}.');
+
+-- ==========================================
+-- MESSAGE TYPE 7: partner_coming_soon
 -- ==========================================
 
 INSERT INTO messages (type, lang, message) VALUES
@@ -126,7 +141,7 @@ INSERT INTO messages (type, lang, message) VALUES
 -- VERIFICATION
 -- ==========================================
 
--- Verify that exactly 48 messages were inserted
+-- Verify that exactly 56 messages were inserted
 DO $$
 DECLARE
   v_count integer;
@@ -139,19 +154,20 @@ BEGIN
     'partner_verification_failed',
     'partner_trial_activated',
     'partner_trial_expired',
+    'partner_trial_status',
     'partner_coming_soon'
   );
 
-  IF v_count >= 48 THEN
+  IF v_count >= 56 THEN
     RAISE NOTICE '========================================';
     RAISE NOTICE 'Partner bot messages seed completed';
     RAISE NOTICE '========================================';
     RAISE NOTICE 'Total partner messages: %', v_count;
-    RAISE NOTICE 'Message types: 6 (partner_welcome, partner_channel_prompt, partner_verification_failed, partner_trial_activated, partner_trial_expired, partner_coming_soon)';
+    RAISE NOTICE 'Message types: 7 (partner_welcome, partner_channel_prompt, partner_verification_failed, partner_trial_activated, partner_trial_expired, partner_trial_status, partner_coming_soon)';
     RAISE NOTICE 'Languages: 8 (ru, en, uk, hi, fr, kk, uz, tg)';
     RAISE NOTICE '========================================';
   ELSE
-    RAISE WARNING 'Expected 48 partner messages, but found only %', v_count;
+    RAISE WARNING 'Expected 56 partner messages, but found only %', v_count;
   END IF;
 END $$;
 
@@ -166,5 +182,6 @@ END $$;
 --   'partner_verification_failed',
 --   'partner_trial_activated',
 --   'partner_trial_expired',
+--   'partner_trial_status',
 --   'partner_coming_soon'
 -- );
