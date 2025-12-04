@@ -1,5 +1,5 @@
 -- Migration: Partner Bot Messages
--- Description: Adds 56 messages for partner bot flow (7 types × 8 languages)
+-- Description: Adds 80 messages for partner bot flow (10 types × 8 languages)
 -- Author: System
 -- Date: 2025-12-02
 -- Task Reference: 20251202-feature-partner-bot-flow-task-02.md
@@ -19,9 +19,12 @@
 --   5. partner_trial_expired - Trial period has expired
 --   6. partner_trial_status - Current status of the trial
 --   7. partner_coming_soon - Feature not yet available
+--   8. lang_select_prompt - Language selection prompt
+--   9. lang_changed - Language changed confirmation
+--  10. change_language_button - Change language button text
 --
 -- Languages: ru, en, uk, hi, fr, kk, uz, tg (8 total)
--- Total: 56 messages (7 types × 8 languages)
+-- Total: 80 messages (10 types × 8 languages)
 
 -- ==========================================
 -- MESSAGE TYPE 1: partner_welcome
@@ -138,10 +141,52 @@ INSERT INTO messages (type, lang, message) VALUES
 ('partner_coming_soon', 'tg', 'Ин хусусият ба наздикӣ дастрас мешавад. Барои навсозиҳо мунтазир шавед!');
 
 -- ==========================================
+-- MESSAGE TYPE 8: lang_select_prompt
+-- ==========================================
+
+INSERT INTO messages (type, lang, message) VALUES
+('lang_select_prompt', 'ru', 'Выберите язык интерфейса:'),
+('lang_select_prompt', 'en', 'Select interface language:'),
+('lang_select_prompt', 'uk', 'Виберіть мову інтерфейсу:'),
+('lang_select_prompt', 'hi', 'इंटरफ़ेस भाषा चुनें:'),
+('lang_select_prompt', 'fr', 'Sélectionnez la langue de l''interface:'),
+('lang_select_prompt', 'kk', 'Интерфейс тілін таңдаңыз:'),
+('lang_select_prompt', 'uz', 'Interfeys tilini tanlang:'),
+('lang_select_prompt', 'tg', 'Забони интерфейсро интихоб кунед:');
+
+-- ==========================================
+-- MESSAGE TYPE 9: lang_changed
+-- ==========================================
+
+INSERT INTO messages (type, lang, message) VALUES
+('lang_changed', 'ru', 'Язык успешно изменён на русский.'),
+('lang_changed', 'en', 'Language successfully changed to English.'),
+('lang_changed', 'uk', 'Мову успішно змінено на українську.'),
+('lang_changed', 'hi', 'भाषा सफलतापूर्वक हिंदी में बदल दी गई।'),
+('lang_changed', 'fr', 'Langue changée avec succès en français.'),
+('lang_changed', 'kk', 'Тіл қазақ тіліне сәтті өзгертілді.'),
+('lang_changed', 'uz', 'Til muvaffaqiyatli o''zbek tiliga o''zgartirildi.'),
+('lang_changed', 'tg', 'Забон бо муваффақият ба тоҷикӣ иваз карда шуд.');
+
+-- ==========================================
+-- MESSAGE TYPE 10: change_language_button
+-- ==========================================
+
+INSERT INTO messages (type, lang, message) VALUES
+('change_language_button', 'ru', '🌐 Сменить язык'),
+('change_language_button', 'en', '🌐 Change language'),
+('change_language_button', 'uk', '🌐 Змінити мову'),
+('change_language_button', 'hi', '🌐 भाषा बदलें'),
+('change_language_button', 'fr', '🌐 Changer de langue'),
+('change_language_button', 'kk', '🌐 Тілді өзгерту'),
+('change_language_button', 'uz', '🌐 Tilni o''zgartirish'),
+('change_language_button', 'tg', '🌐 Иваз кардани забон');
+
+-- ==========================================
 -- VERIFICATION
 -- ==========================================
 
--- Verify that exactly 56 messages were inserted
+-- Verify that exactly 80 messages were inserted (56 + 24 new)
 DO $$
 DECLARE
   v_count integer;
@@ -155,19 +200,22 @@ BEGIN
     'partner_trial_activated',
     'partner_trial_expired',
     'partner_trial_status',
-    'partner_coming_soon'
+    'partner_coming_soon',
+    'lang_select_prompt',
+    'lang_changed',
+    'change_language_button'
   );
 
-  IF v_count >= 56 THEN
+  IF v_count >= 80 THEN
     RAISE NOTICE '========================================';
     RAISE NOTICE 'Partner bot messages seed completed';
     RAISE NOTICE '========================================';
     RAISE NOTICE 'Total partner messages: %', v_count;
-    RAISE NOTICE 'Message types: 7 (partner_welcome, partner_channel_prompt, partner_verification_failed, partner_trial_activated, partner_trial_expired, partner_trial_status, partner_coming_soon)';
+    RAISE NOTICE 'Message types: 10 (partner_welcome, partner_channel_prompt, partner_verification_failed, partner_trial_activated, partner_trial_expired, partner_trial_status, partner_coming_soon, lang_select_prompt, lang_changed, change_language_button)';
     RAISE NOTICE 'Languages: 8 (ru, en, uk, hi, fr, kk, uz, tg)';
     RAISE NOTICE '========================================';
   ELSE
-    RAISE WARNING 'Expected 56 partner messages, but found only %', v_count;
+    RAISE WARNING 'Expected 80 partner messages, but found only %', v_count;
   END IF;
 END $$;
 
@@ -183,5 +231,8 @@ END $$;
 --   'partner_trial_activated',
 --   'partner_trial_expired',
 --   'partner_trial_status',
---   'partner_coming_soon'
+--   'partner_coming_soon',
+--   'lang_select_prompt',
+--   'lang_changed',
+--   'change_language_button'
 -- );

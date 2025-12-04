@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Update, Command, Ctx, RequiresFeature } from '@quantumdeal/telegraf';
+import { Markup } from 'telegraf';
 import {
   BotMessagesRepository,
   BotUsersRepository,
@@ -131,8 +132,22 @@ export class StartCommandUpdate {
         lang,
       );
 
-      // Send welcome message
-      await ctx.reply(welcomeMessage);
+      // Get change language button text
+      const changeLangButtonText =
+        await this.botMessagesRepository.resolveMessage(
+          botId,
+          'change_language_button',
+          lang,
+        );
+
+      // Send welcome message with change language button
+      await ctx.reply(welcomeMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [Markup.button.callback(changeLangButtonText, 'change_lang')],
+          ],
+        },
+      });
 
       // Initialize verification state
       await this.botUsersRepository.updateState(userId, botId, {
@@ -245,6 +260,18 @@ export class StartCommandUpdate {
       .replace('{daysRemaining}', daysRemaining.toString())
       .replace('{expiryDate}', expiryDateStr);
 
+    // Get change language button text
+    let changeLangButtonText = '🌐 Change language';
+    try {
+      changeLangButtonText = await this.botMessagesRepository.resolveMessage(
+        botId ?? 0,
+        'change_language_button',
+        lang,
+      );
+    } catch {
+      // Use fallback text
+    }
+
     this.logger.log({
       message: 'Showing trial status',
       userId,
@@ -253,7 +280,7 @@ export class StartCommandUpdate {
       displayText,
     });
 
-    // Send message with inline keyboard button
+    // Send message with inline keyboard buttons
     await ctx.reply(messageContent, {
       reply_markup: {
         inline_keyboard: [
@@ -263,6 +290,7 @@ export class StartCommandUpdate {
               callback_data: 'partner_trial_status',
             },
           ],
+          [Markup.button.callback(changeLangButtonText, 'change_lang')],
         ],
       },
     });

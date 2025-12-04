@@ -13,6 +13,7 @@ import { TrialUIAction } from './actions/trial-ui.action';
 
 // Commands
 import { StartCommandUpdate } from './commands/start/start.update';
+import { LangUpdate } from './commands/lang/lang.update';
 
 /**
  * PartnerBotModule
@@ -41,6 +42,7 @@ import { StartCommandUpdate } from './commands/start/start.update';
 
     // Commands
     StartCommandUpdate,
+    LangUpdate,
   ],
   exports: [
     // Export PartnerFlowService for potential external usage
