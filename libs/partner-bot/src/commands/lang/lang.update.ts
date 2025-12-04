@@ -11,15 +11,20 @@ import {
   Action,
   RequiresFeature,
 } from '@quantumdeal/telegraf';
-import { deunionize } from 'telegraf';
+import { Markup, deunionize } from 'telegraf';
 import {
   ResponseTimeInterceptor,
   TelegrafExceptionFilter,
   CallbackQueryData,
   SplitCommandPipe,
 } from '@quantumdeal/framework';
-import { BotMessagesRepository, BotUsersRepository } from '@quantumdeal/db';
-import { langKeyboard, langs } from '@quantumdeal/bot';
+import {
+  BotMessagesRepository,
+  BotUsersRepository,
+  BotSettingsRepository,
+  DEFAULT_LANGS,
+  type LangOption,
+} from '@quantumdeal/db';
 import type { PartnerBotContext } from '../../interfaces';
 import { PARTNER_FLOW_FEATURE_KEY } from '../../constants';
 
@@ -47,6 +52,7 @@ export class LangUpdate {
   constructor(
     private readonly botMessagesRepository: BotMessagesRepository,
     private readonly botUsersRepository: BotUsersRepository,
+    private readonly botSettingsRepository: BotSettingsRepository,
   ) {}
 
   /**
@@ -97,12 +103,15 @@ export class LangUpdate {
           )
         : defaultLang;
 
+      // Get langs from bot settings or use defaults
+      const langs = await this.getBotLangs(botId);
+
       // Get message from database
       const selectMessage = await this.getLanguageSelectionMessage(botId, lang);
 
       await ctx.reply(selectMessage, {
         parse_mode: 'Markdown',
-        ...langKeyboard(2),
+        ...this.buildLangKeyboard(langs, 2),
       });
     } catch (error) {
       this.logger.error('Error in showing language selection', error);
@@ -141,7 +150,8 @@ export class LangUpdate {
     const userId = ctx.from.id;
     const botId = ctx.botId;
 
-    // Validate language code
+    // Get langs from bot settings and validate language code
+    const langs = await this.getBotLangs(botId);
     const validLang = langs.find((l) => l.code === languageCode);
     if (!validLang) {
       this.logger.warn({ message: 'Invalid language code', languageCode });
@@ -241,5 +251,45 @@ export class LangUpdate {
       botId ?? 1,
       languageCode,
     );
+  }
+
+  /**
+   * Get language options for the bot from settings
+   *
+   * @param botId - Bot ID (optional)
+   * @returns Array of language options from bot settings or defaults
+   */
+  private async getBotLangs(botId: number | undefined): Promise<LangOption[]> {
+    if (!botId) {
+      return DEFAULT_LANGS;
+    }
+
+    try {
+      const settingsRecord =
+        await this.botSettingsRepository.findByBotId(botId);
+      return settingsRecord?.settings?.langs ?? DEFAULT_LANGS;
+    } catch (error) {
+      this.logger.error('Error getting bot langs from settings', error);
+      return DEFAULT_LANGS;
+    }
+  }
+
+  /**
+   * Build inline keyboard for language selection
+   *
+   * @param langs - Array of language options
+   * @param cols - Number of columns (default: 2)
+   * @returns Telegraf inline keyboard markup
+   */
+  private buildLangKeyboard(langs: LangOption[], cols = 2) {
+    const rows: ReturnType<typeof Markup.button.callback>[][] = [];
+    for (let i = 0; i < langs.length; i += cols) {
+      rows.push(
+        langs
+          .slice(i, i + cols)
+          .map((l) => Markup.button.callback(l.label, `/lang ${l.code}`)),
+      );
+    }
+    return Markup.inlineKeyboard(rows);
   }
 }
