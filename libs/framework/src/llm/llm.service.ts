@@ -465,7 +465,7 @@ export class LLMService {
   /**
    * Get citations from Gemini API response
    */
-  private getCitations(response: any, resolvedUrls: UrlSegment[]): Citation[] {
+  private getCitations(_response: any, resolvedUrls: UrlSegment[]): Citation[] {
     const citations: Citation[] = [];
 
     // Group resolved URLs by their original URL
@@ -485,24 +485,6 @@ export class LLMService {
     });
 
     return citations;
-  }
-
-  /**
-   * Insert citation markers into the text
-   */
-  private insertCitationMarkers(text: string, citations: Citation[]): string {
-    let modifiedText = text;
-
-    citations.forEach((citation) => {
-      citation.segments.forEach((segment) => {
-        // Simple insertion of citation markers
-        if (!modifiedText.includes(segment.short_url)) {
-          modifiedText += ` ${segment.short_url}`;
-        }
-      });
-    });
-
-    return modifiedText;
   }
 
   /**

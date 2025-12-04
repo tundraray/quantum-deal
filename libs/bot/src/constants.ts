@@ -1,10 +1,4 @@
-export const HELLO_SCENE_ID = 'HELLO_SCENE_ID';
-
-export const WIZARD_SCENE_ID = 'WIZARD_SCENE_ID';
-
 export const FILTER_SCENE_ID = 'INSTRUMENT_FILTER_SCENE';
-
-export const RENEWAL_SCENE_ID = 'renewal';
 
 export const BotName: string = 'QuantumDealBot';
 

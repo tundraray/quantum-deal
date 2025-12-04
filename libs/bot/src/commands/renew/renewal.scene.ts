@@ -6,7 +6,6 @@ import { PaymentService } from '../../services/payment.service';
 import {
   RenewalTariffsRepository,
   UserSubscriptionsRepository,
-  SubscriptionsRepository,
 } from '@quantumdeal/db';
 import { getRenewalMessage, formatDays } from './renewal.i18n';
 
@@ -29,7 +28,6 @@ export class RenewalScene {
     private readonly paymentService: PaymentService,
     private readonly renewalTariffsRepo: RenewalTariffsRepository,
     private readonly userSubscriptionsRepo: UserSubscriptionsRepository,
-    private readonly subscriptionsRepo: SubscriptionsRepository,
   ) {}
 
   /**

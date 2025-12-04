@@ -165,7 +165,6 @@ export class MultiBotSignalService implements MultiBotSignal {
         username: sub.userUsername,
         lang: sub.userLang,
         subscriptionId: sub.subscriptionId,
-        subscriptionScope: null,
         subscriptionExpirationDate: sub.userSubscriptionEndDate,
         hasCustomFiltering: sub.hasCustomFiltering,
       }));

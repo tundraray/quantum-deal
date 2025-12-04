@@ -9,17 +9,7 @@ export type {
   UserWithSubscriptions,
   ActiveSubscriptionDto,
 } from '@quantumdeal/bot/interfaces';
-export {
-  hasActiveSubscriptions,
-  hasSubscriptionType,
-  getActiveSubscriptionByType,
-  hasSignalsSubscription,
-  hasBroadcastSubscription,
-  hasFeature,
-  getFeatureConfig,
-  hasAllFeatures,
-  hasAnyFeature,
-} from '@quantumdeal/bot/interfaces';
+export { hasFeature } from '@quantumdeal/bot/interfaces';
 
 /**
  * Extended context interface for partner bot handlers with botId and botUser.

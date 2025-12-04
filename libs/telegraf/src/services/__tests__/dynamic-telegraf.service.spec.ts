@@ -23,9 +23,8 @@ const mockBotCatch = jest.fn();
 const mockBotHandleUpdate = jest.fn();
 
 jest.mock('telegraf', () => {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const originalModule = jest.requireActual('telegraf');
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+
   return {
     ...originalModule,
     Telegraf: jest.fn().mockImplementation(() => ({

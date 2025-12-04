@@ -163,7 +163,6 @@ export class SubscriptionManagementService {
       id: subscription.id,
       name: subscription.name,
       type: subscription.type,
-      scope: subscription.scope,
       isActive: subscription.isActive,
       createdAt: subscription.createdAt,
       updatedAt: subscription.updatedAt,

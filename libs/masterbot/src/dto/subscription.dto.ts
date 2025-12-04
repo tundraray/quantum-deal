@@ -3,7 +3,6 @@ import {
   IsBoolean,
   IsNumber,
   IsOptional,
-  IsArray,
   MinLength,
   MaxLength,
 } from 'class-validator';
@@ -24,11 +23,6 @@ export class SubscriptionDto {
 
   @IsString()
   type: string;
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  scope?: string[] | null;
 
   @IsBoolean()
   isActive: boolean;

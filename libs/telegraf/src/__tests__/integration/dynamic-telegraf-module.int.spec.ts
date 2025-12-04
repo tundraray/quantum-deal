@@ -4,7 +4,7 @@
 // Implementation Timing: Created alongside feature implementation
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, Injectable, Module } from '@nestjs/common';
+import { INestApplication, Injectable } from '@nestjs/common';
 import {
   TelegrafModule,
   DynamicTelegrafService,
@@ -85,10 +85,6 @@ class MockBotConfigProvider implements BotConfigurationProvider {
     return this.configs;
   }
 }
-
-// Mock module for shared handlers
-@Module({})
-class MockSharedHandlersModule {}
 
 describe('DynamicTelegrafModule Integration Tests', () => {
   let app: INestApplication;

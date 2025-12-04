@@ -125,7 +125,7 @@ describe('NotificationService', () => {
     it('AC-009: should schedule message with provided limiter', async () => {
       // Arrange
       const mockLimiter = createMockLimiter();
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
       const scheduleSpy = jest.spyOn(mockLimiter, 'schedule');
 
       // Act
@@ -134,7 +134,6 @@ describe('NotificationService', () => {
       // Assert
       expect(scheduleSpy).toHaveBeenCalled();
       expect(scheduleSpy).toHaveBeenCalledWith(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         expect.objectContaining({ priority: expect.any(Number) }),
         expect.any(Function),
       );
@@ -152,7 +151,7 @@ describe('NotificationService', () => {
       await flushPromises();
 
       // Assert - should use static bot (mockBot) since isDynamic is false
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
         123456,
         'Test message',
@@ -298,7 +297,7 @@ describe('NotificationService', () => {
       await flushPromises();
 
       // Assert - Verify the message was sent with MarkdownV2 parse mode
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
         123456,
         '**Bold text**', // telegramify-markdown mock returns text as-is
@@ -322,7 +321,7 @@ describe('NotificationService', () => {
       await flushPromises();
 
       // Assert
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
         123456,
         '<b>Bold text</b>',
@@ -397,7 +396,7 @@ describe('NotificationService', () => {
       await flushPromises();
 
       // Verify it uses the internal (static) bot
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
         123456,
         'Test message via addMessage',

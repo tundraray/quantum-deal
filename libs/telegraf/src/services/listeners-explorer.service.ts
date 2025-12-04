@@ -1,5 +1,5 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
-import { DiscoveryService, ModuleRef, ModulesContainer } from '@nestjs/core';
+import { ModuleRef, ModulesContainer } from '@nestjs/core';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import { MetadataScanner } from '@nestjs/core/metadata-scanner';
 import { Module } from '@nestjs/core/injector/module';
@@ -36,7 +36,6 @@ export class ListenersExplorerService
     @Inject(TELEGRAF_BOT_NAME)
     private readonly botName: string,
     private readonly moduleRef: ModuleRef,
-    private readonly discoveryService: DiscoveryService,
     private readonly metadataAccessor: MetadataAccessorService,
     private readonly metadataScanner: MetadataScanner,
     private readonly modulesContainer: ModulesContainer,
@@ -114,19 +113,15 @@ export class ListenersExplorerService
       }
       sceneIds.push(sceneId);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const scene: Scenes.BaseScene<any> | Scenes.WizardScene<any> =
         type === 'base'
-          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            new Scenes.BaseScene<any>(sceneId, options || ({} as any))
-          : // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            new Scenes.WizardScene<any>(sceneId, options || ({} as any));
+          ? new Scenes.BaseScene<any>(sceneId, options || ({} as any))
+          : new Scenes.WizardScene<any>(sceneId, options || ({} as any));
       this.stage.register(scene);
 
       if (type === 'base') {
         this.registerListeners(scene, wrapper);
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         this.registerWizardListeners(scene as Scenes.WizardScene<any>, wrapper);
       }
     });
@@ -189,7 +184,6 @@ export class ListenersExplorerService
   }
 
   private registerWizardListeners(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     wizard: Scenes.WizardScene<any>,
     wrapper: InstanceWrapper<unknown>,
   ): void {

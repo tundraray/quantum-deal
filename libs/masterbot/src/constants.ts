@@ -43,8 +43,3 @@ export const MASTERBOT_CONSTANTS = {
     MENU_MAIN: 'menu_main',
   },
 } as const;
-
-/**
- * Statistics refresh intervals (in milliseconds)
- */
-export const STATS_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes

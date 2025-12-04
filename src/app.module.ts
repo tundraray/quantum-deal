@@ -16,7 +16,7 @@ import { session } from 'telegraf';
 import { WebhookService } from './webhook.service';
 import { PartnerBotModule } from '@quantumdeal/partner-bot';
 
-export const sessionMiddleware = session();
+const sessionMiddleware = session();
 @Module({
   imports: [
     ConfigModule.forRoot({

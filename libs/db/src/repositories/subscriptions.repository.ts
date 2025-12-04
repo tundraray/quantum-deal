@@ -352,7 +352,6 @@ export class SubscriptionsRepository extends BaseRepository<
       .select({
         id: subscriptions.id,
         name: subscriptions.name,
-        scope: subscriptions.scope,
         type: subscriptions.type,
         isActive: subscriptions.isActive,
         isHidden: subscriptions.isHidden,

@@ -25,7 +25,7 @@ const upgradeToVipTranslations: Record<string, string> = {
  * @param lang - User's language code (ru, en, uk, hi, fr, kk, uz, tg)
  * @returns Localized button text
  */
-export function getUpgradeToVipButtonText(lang: string): string {
+function getUpgradeToVipButtonText(lang: string): string {
   return upgradeToVipTranslations[lang] || upgradeToVipTranslations['en'];
 }
 

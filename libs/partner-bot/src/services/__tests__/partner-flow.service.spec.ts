@@ -8,7 +8,6 @@ import type { BotCommandsService } from '@quantumdeal/bot';
 import type { DynamicTelegrafService } from '@quantumdeal/telegraf';
 import { PartnerFlowService } from '../partner-flow.service';
 import type { ChannelVerifierService } from '../channel-verifier.service';
-import type { VerificationResult } from '../../types/partner-settings';
 
 describe('PartnerFlowService', () => {
   let service: PartnerFlowService;
