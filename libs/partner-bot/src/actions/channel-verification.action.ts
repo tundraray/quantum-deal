@@ -63,9 +63,7 @@ export class ChannelVerificationAction {
     const botUserId = ctx.user?.botUserId;
     const telegramId = ctx.from?.id;
     const botId = ctx.botId;
-    console.log('botUserId', botUserId);
-    console.log('telegramId', telegramId);
-    console.log('botId', botId);
+
     if (!botUserId || !telegramId) {
       this.logger.warn('Missing user context in verification callback');
       await ctx.answerCbQuery?.();

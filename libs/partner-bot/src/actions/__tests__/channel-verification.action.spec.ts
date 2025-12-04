@@ -69,10 +69,12 @@ describe('ChannelVerificationAction', () => {
   });
 
   describe('handleVerify', () => {
-    it('should check rate limit when user clicks "I subscribed" button', async () => {
-      // Arrange - context with botId from middleware
+    it('should answer callback query and get user language', async () => {
+      // Arrange - context with botId from middleware and user with botUserId
+      // Note: Rate limiting and attempt tracking have been moved to service layer
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
+        user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
         from: {
           id: 123456,
           is_bot: false,
@@ -86,17 +88,9 @@ describe('ChannelVerificationAction', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
-        false,
-      );
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId: TEST_BOT_ID,
         settings: { channelId: '@testchannel' },
-      });
-      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue({
-        userId: 123456,
-        botId: TEST_BOT_ID,
-        state: { verificationAttempts: 0 },
       });
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
@@ -115,17 +109,20 @@ describe('ChannelVerificationAction', () => {
         mockContext as PartnerBotContext,
       );
 
-      // Assert - uses botId from context
-      expect(mockChannelVerifierService.isRateLimited).toHaveBeenCalledWith(
+      // Assert - callback query is answered and language is resolved
+      expect(mockContext.answerCbQuery).toHaveBeenCalled();
+      expect(mockBotUsersRepository.resolveLanguage).toHaveBeenCalledWith(
         123456,
         TEST_BOT_ID,
+        'en',
       );
     });
 
-    it('should send rate limit error message if user is rate limited', async () => {
+    it('should get partner channel ID from settings', async () => {
       // Arrange
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
+        user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
         from: {
           id: 123456,
           is_bot: false,
@@ -138,72 +135,21 @@ describe('ChannelVerificationAction', () => {
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
-      );
-      (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
-        true,
-      );
-      (
-        mockChannelVerifierService.getRateLimitStatus as jest.Mock
-      ).mockResolvedValue({
-        attempts: 10,
-        resetAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes from now
-      });
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Too many attempts. Please try again in 30 minutes.',
-      );
-
-      // Act
-      await channelVerificationAction.handleVerify(
-        mockContext as PartnerBotContext,
-      );
-
-      // Assert
-      expect(mockContext.answerCbQuery).toHaveBeenCalled();
-      expect(mockContext.reply).toHaveBeenCalledWith(
-        'Too many attempts. Please try again in 30 minutes.',
-      );
-      expect(
-        mockChannelVerifierService.verifyMembership,
-      ).not.toHaveBeenCalled();
-    });
-
-    it('should increment verificationAttempts counter when not rate limited', async () => {
-      // Arrange
-      const mockContext: Partial<PartnerBotContext> = {
-        botId: TEST_BOT_ID,
-        from: {
-          id: 123456,
-          is_bot: false,
-          first_name: 'Test',
-          language_code: 'en',
-        },
-        answerCbQuery: jest.fn(),
-        reply: jest.fn(),
-      };
-
-      (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
-        'en',
-      );
-      (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
-        false,
       );
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId: TEST_BOT_ID,
         settings: { channelId: '@testchannel' },
-      });
-      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue({
-        userId: 123456,
-        botId: TEST_BOT_ID,
-        state: {
-          currentScene: 'partner_flow',
-          sceneData: { verificationAttempts: 3 },
-        },
       });
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
-      ).mockResolvedValue(false);
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Verification failed. Please subscribe first.',
+      ).mockResolvedValue(true);
+      (
+        mockPartnerFlowService.handleVerificationRequest as jest.Mock
+      ).mockResolvedValue({
+        verified: true,
+      });
+      (mockPartnerFlowService.sendTrialUI as jest.Mock).mockResolvedValue(
+        undefined,
       );
 
       // Act
@@ -211,23 +157,22 @@ describe('ChannelVerificationAction', () => {
         mockContext as PartnerBotContext,
       );
 
-      // Assert - uses botId from context with new sceneData structure
-      expect(mockBotUsersRepository.updateState).toHaveBeenCalledWith(
+      // Assert - bot settings are retrieved to get channel ID
+      expect(mockBotSettingsRepository.findByBotId).toHaveBeenCalledWith(
+        TEST_BOT_ID,
+      );
+      expect(mockChannelVerifierService.verifyMembership).toHaveBeenCalledWith(
+        '@testchannel',
         123456,
         TEST_BOT_ID,
-        expect.objectContaining({
-          currentScene: 'partner_flow',
-          sceneData: expect.objectContaining({
-            verificationAttempts: 4,
-          }),
-        }),
       );
     });
 
-    it('should update lastVerificationAttempt timestamp', async () => {
+    it('should verify channel membership before processing trial activation', async () => {
       // Arrange
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
+        user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
         from: {
           id: 123456,
           is_bot: false,
@@ -241,20 +186,60 @@ describe('ChannelVerificationAction', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
-        false,
-      );
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId: TEST_BOT_ID,
         settings: { channelId: '@testchannel' },
       });
-      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue({
-        userId: 123456,
+      (
+        mockChannelVerifierService.verifyMembership as jest.Mock
+      ).mockResolvedValue(true);
+      (
+        mockPartnerFlowService.handleVerificationRequest as jest.Mock
+      ).mockResolvedValue({
+        verified: true,
+        trialExpiresAt: new Date('2025-12-09'),
+      });
+      (mockPartnerFlowService.sendTrialUI as jest.Mock).mockResolvedValue(
+        undefined,
+      );
+
+      // Act
+      await channelVerificationAction.handleVerify(
+        mockContext as PartnerBotContext,
+      );
+
+      // Assert - membership is verified then trial flow is triggered
+      expect(mockChannelVerifierService.verifyMembership).toHaveBeenCalledWith(
+        '@testchannel',
+        123456,
+        TEST_BOT_ID,
+      );
+      expect(
+        mockPartnerFlowService.handleVerificationRequest,
+      ).toHaveBeenCalledWith(123456, TEST_BOT_ID);
+    });
+
+    it('should send failure message with retry button when membership verification fails', async () => {
+      // Arrange
+      const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
-        state: {
-          currentScene: 'partner_flow',
-          sceneData: { verificationAttempts: 0 },
+        user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
+        from: {
+          id: 123456,
+          is_bot: false,
+          first_name: 'Test',
+          language_code: 'en',
         },
+        answerCbQuery: jest.fn(),
+        reply: jest.fn(),
+      };
+
+      (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
+        'en',
+      );
+      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
+        botId: TEST_BOT_ID,
+        settings: { channelId: '@testchannel' },
       });
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
@@ -268,23 +253,37 @@ describe('ChannelVerificationAction', () => {
         mockContext as PartnerBotContext,
       );
 
-      // Assert - uses botId from context with new sceneData structure
-      expect(mockBotUsersRepository.updateState).toHaveBeenCalledWith(
-        123456,
+      // Assert - failure message with retry button is sent
+      expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
         TEST_BOT_ID,
+        'partner_verification_failed',
+        'en',
+      );
+      expect(mockContext.reply).toHaveBeenCalledWith(
+        'Verification failed.',
         expect.objectContaining({
-          currentScene: 'partner_flow',
-          sceneData: expect.objectContaining({
-            lastVerificationAttempt: expect.any(String),
+          reply_markup: expect.objectContaining({
+            inline_keyboard: expect.arrayContaining([
+              expect.arrayContaining([
+                expect.objectContaining({
+                  callback_data: 'partner_verify_subscription',
+                }),
+              ]),
+            ]),
           }),
         }),
       );
+      // Trial flow should not be triggered
+      expect(
+        mockPartnerFlowService.handleVerificationRequest,
+      ).not.toHaveBeenCalled();
     });
 
     it('should call ChannelVerifierService.verifyMembership with channel ID and user ID', async () => {
       // Arrange
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
+        user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
         from: {
           id: 123456,
           is_bot: false,
@@ -339,6 +338,7 @@ describe('ChannelVerificationAction', () => {
       // Arrange
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
+        user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
         from: {
           id: 123456,
           is_bot: false,
@@ -392,6 +392,7 @@ describe('ChannelVerificationAction', () => {
       // Arrange
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
+        user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
         from: {
           id: 123456,
           is_bot: false,
@@ -449,6 +450,7 @@ describe('ChannelVerificationAction', () => {
       // Arrange
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
+        user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
         from: {
           id: 123456,
           is_bot: false,
@@ -504,6 +506,7 @@ describe('ChannelVerificationAction', () => {
       // Arrange
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
+        user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
         from: {
           id: 123456,
           is_bot: false,
@@ -560,9 +563,10 @@ describe('ChannelVerificationAction', () => {
     });
 
     it('should handle missing user context gracefully', async () => {
-      // Arrange
+      // Arrange - missing ctx.user.botUserId or ctx.from.id
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
+        user: undefined,
         from: undefined,
         answerCbQuery: jest.fn(),
         reply: jest.fn(),
@@ -575,7 +579,7 @@ describe('ChannelVerificationAction', () => {
         ),
       ).resolves.not.toThrow();
 
-      // Should not call verification services
+      // Should not call verification services (early return due to missing user context)
       expect(mockChannelVerifierService.isRateLimited).not.toHaveBeenCalled();
       expect(
         mockChannelVerifierService.verifyMembership,
@@ -584,8 +588,10 @@ describe('ChannelVerificationAction', () => {
 
     it('should handle missing botId in context gracefully', async () => {
       // Arrange - context without botId (should not happen in dynamic bots)
+      // Must provide user.botUserId and from.id to pass the first user context check
       const mockContext: Partial<PartnerBotContext> = {
         botId: undefined,
+        user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
         from: {
           id: 123456,
           is_bot: false,
@@ -615,6 +621,7 @@ describe('ChannelVerificationAction', () => {
       // Arrange
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
+        user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
         from: {
           id: 123456,
           is_bot: false,

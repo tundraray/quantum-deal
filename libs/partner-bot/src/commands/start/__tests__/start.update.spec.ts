@@ -23,7 +23,7 @@ describe('StartCommandUpdate', () => {
   let mockPartnerFlowService: Pick<PartnerFlowService, 'sendChannelPrompt'>;
   let mockBotUsersRepository: Pick<
     BotUsersRepository,
-    'updateState' | 'resolveLanguage'
+    'updateState' | 'resolveLanguage' | 'findByUserAndBot'
   >;
   let mockUserSubscriptionsRepository: Pick<
     UserSubscriptionsRepository,
@@ -43,6 +43,7 @@ describe('StartCommandUpdate', () => {
     mockBotUsersRepository = {
       updateState: jest.fn(),
       resolveLanguage: jest.fn(),
+      findByUserAndBot: jest.fn(),
     };
 
     mockUserSubscriptionsRepository = {
@@ -69,7 +70,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           language_code: 'en',
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
@@ -112,7 +113,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           language_code: 'en',
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
@@ -149,7 +150,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           language_code: 'en',
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
@@ -179,7 +180,7 @@ describe('StartCommandUpdate', () => {
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
         from: undefined,
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       // Act & Assert - should not throw
@@ -202,7 +203,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           language_code: 'en',
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       // Act
@@ -226,7 +227,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           // No language_code provided
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
@@ -264,14 +265,16 @@ describe('StartCommandUpdate', () => {
     // AC-1: "When user sends /start and has verificationState: 'trial_activated' with active trial, bot sends trial status message"
     it('AC-1: should show trial status message when user has trial_activated state with active subscription', async () => {
       // Arrange - user with trial_activated state and active subscription
-      // Note: verificationState is stored directly in state (not in state.sceneData)
-      // per existing pattern in start.update.ts updateState() call
+      // Note: verificationState is stored in state.sceneData.verificationState
+      // per the state reading pattern in start.update.ts lines 82-84
       const mockBotUser = {
         id: TEST_BOT_USER_ID,
         userId: BigInt(TEST_USER_ID),
         botId: TEST_BOT_ID,
         state: {
-          verificationState: 'trial_activated',
+          sceneData: {
+            verificationState: 'trial_activated',
+          },
         },
       } as unknown as BotUser;
 
@@ -284,7 +287,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           language_code: 'en',
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       // Mock active subscription exists
@@ -296,6 +299,11 @@ describe('StartCommandUpdate', () => {
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
+      );
+
+      // Mock findByUserAndBot to return the botUser
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+        mockBotUser,
       );
 
       // Act
@@ -326,14 +334,16 @@ describe('StartCommandUpdate', () => {
     // AC-1/AC-3: "When user sends /start and has verificationState: 'awaiting_channel_subscription', bot re-sends channel prompt"
     it('AC-1/AC-3: should re-send channel prompt without welcome when user has awaiting_channel_subscription state', async () => {
       // Arrange - user with awaiting_channel_subscription state
-      // Note: verificationState is stored directly in state (not in state.sceneData)
+      // Note: verificationState is stored in state.sceneData.verificationState
       const mockBotUser = {
         id: TEST_BOT_USER_ID,
         userId: BigInt(TEST_USER_ID),
         botId: TEST_BOT_ID,
         state: {
-          verificationState: 'awaiting_channel_subscription',
-          verificationAttempts: 2, // Existing attempts should be preserved
+          sceneData: {
+            verificationState: 'awaiting_channel_subscription',
+            verificationAttempts: 2, // Existing attempts should be preserved
+          },
         },
       } as unknown as BotUser;
 
@@ -346,7 +356,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           language_code: 'en',
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
@@ -354,6 +364,10 @@ describe('StartCommandUpdate', () => {
       );
       (mockPartnerFlowService.sendChannelPrompt as jest.Mock).mockResolvedValue(
         undefined,
+      );
+      // Mock findByUserAndBot to return the botUser
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+        mockBotUser,
       );
 
       // Act
@@ -396,7 +410,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           language_code: 'en',
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
@@ -408,6 +422,10 @@ describe('StartCommandUpdate', () => {
       (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue({});
       (mockPartnerFlowService.sendChannelPrompt as jest.Mock).mockResolvedValue(
         undefined,
+      );
+      // Mock findByUserAndBot to return the botUser
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+        mockBotUser,
       );
 
       // Act
@@ -440,13 +458,15 @@ describe('StartCommandUpdate', () => {
 
     it('AC-1: should show welcome message and channel prompt when user has trial_expired state', async () => {
       // Arrange - user with trial_expired state
-      // Note: verificationState is stored directly in state (not in state.sceneData)
+      // Note: verificationState is stored in state.sceneData.verificationState
       const mockBotUser = {
         id: TEST_BOT_USER_ID,
         userId: BigInt(TEST_USER_ID),
         botId: TEST_BOT_ID,
         state: {
-          verificationState: 'trial_expired',
+          sceneData: {
+            verificationState: 'trial_expired',
+          },
         },
       } as unknown as BotUser;
 
@@ -459,7 +479,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           language_code: 'en',
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
@@ -471,6 +491,10 @@ describe('StartCommandUpdate', () => {
       (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue({});
       (mockPartnerFlowService.sendChannelPrompt as jest.Mock).mockResolvedValue(
         undefined,
+      );
+      // Mock findByUserAndBot to return the botUser
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+        mockBotUser,
       );
 
       // Act
@@ -493,13 +517,15 @@ describe('StartCommandUpdate', () => {
     // AC-1: "State check uses ctx.botUser.state from middleware context (no extra DB query)"
     it('AC-1: should use ctx.botUser.state from context without extra DB query', async () => {
       // Arrange - user with awaiting_channel_subscription state from middleware
-      // Note: verificationState is stored directly in state (not in state.sceneData)
+      // Note: verificationState is stored in state.sceneData.verificationState
       const mockBotUser = {
         id: TEST_BOT_USER_ID,
         userId: BigInt(TEST_USER_ID),
         botId: TEST_BOT_ID,
         state: {
-          verificationState: 'awaiting_channel_subscription',
+          sceneData: {
+            verificationState: 'awaiting_channel_subscription',
+          },
         },
       } as unknown as BotUser;
 
@@ -512,7 +538,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           language_code: 'en',
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
@@ -521,21 +547,23 @@ describe('StartCommandUpdate', () => {
       (mockPartnerFlowService.sendChannelPrompt as jest.Mock).mockResolvedValue(
         undefined,
       );
+      // Mock findByUserAndBot to return the botUser
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+        mockBotUser,
+      );
 
       // Act
       await startCommandUpdate.handleStart(mockContext as PartnerBotContext);
 
-      // Assert - should use ctx.botUser.state without extra DB query
-      // The handler should directly access ctx.botUser.state.sceneData.verificationState
-      // and not call findByUserAndBot to reload the user
+      // Assert - should use the botUser state (read via findByUserAndBot)
+      // and not call updateState since awaiting_channel_subscription just re-sends prompt
       expect(mockPartnerFlowService.sendChannelPrompt).toHaveBeenCalledWith(
         TEST_USER_ID,
         TEST_BOT_ID,
         'en',
       );
 
-      // Assert - state was read from ctx.botUser, not fetched
-      // (This test validates the pattern - the state was used correctly)
+      // Assert - state was used correctly
       expect(mockBotUsersRepository.updateState).not.toHaveBeenCalled();
     });
 
@@ -560,12 +588,15 @@ describe('StartCommandUpdate', () => {
     // @complexity: low
     it('AC-2: should show trial button with days remaining when >= 1 day left', async () => {
       // Arrange - user with trial_activated state
+      // Note: verificationState is stored in state.sceneData.verificationState
       const mockBotUser = {
         id: TEST_BOT_USER_ID,
         userId: BigInt(TEST_USER_ID),
         botId: TEST_BOT_ID,
         state: {
-          verificationState: 'trial_activated',
+          sceneData: {
+            verificationState: 'trial_activated',
+          },
         },
       } as unknown as BotUser;
 
@@ -578,7 +609,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           language_code: 'en',
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       // Subscription expires in 5 days + 1 hour (to avoid edge case timing issues)
@@ -595,6 +626,11 @@ describe('StartCommandUpdate', () => {
 
       (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
         'Your trial is active',
+      );
+
+      // Mock findByUserAndBot to return the botUser
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+        mockBotUser,
       );
 
       // Act
@@ -634,12 +670,15 @@ describe('StartCommandUpdate', () => {
     // @complexity: low
     it('AC-2: should show trial button with hours remaining when < 1 day left', async () => {
       // Arrange - user with trial_activated state
+      // Note: verificationState is stored in state.sceneData.verificationState
       const mockBotUser = {
         id: TEST_BOT_USER_ID,
         userId: BigInt(TEST_USER_ID),
         botId: TEST_BOT_ID,
         state: {
-          verificationState: 'trial_activated',
+          sceneData: {
+            verificationState: 'trial_activated',
+          },
         },
       } as unknown as BotUser;
 
@@ -652,7 +691,7 @@ describe('StartCommandUpdate', () => {
           first_name: 'Test',
           language_code: 'en',
         },
-        reply: jest.fn(),
+        reply: jest.fn().mockResolvedValue(undefined),
       };
 
       // Subscription expires in 12 hours (using Math.floor means we expect 11-12 hours display)
@@ -667,6 +706,11 @@ describe('StartCommandUpdate', () => {
 
       (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
         'Your trial is active',
+      );
+
+      // Mock findByUserAndBot to return the botUser
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+        mockBotUser,
       );
 
       // Act

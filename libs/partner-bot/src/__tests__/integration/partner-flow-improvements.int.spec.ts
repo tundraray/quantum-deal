@@ -266,12 +266,15 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
   // @complexity: high
   it('AC-1: /start with trial_activated state shows trial status message instead of welcome flow', async () => {
     // Arrange - user with trial_activated state and active subscription
+    // State structure must match what start.update.ts reads: state.sceneData.verificationState
     const mockBotUser = {
       id: TEST_BOT_USER_ID,
       userId: TEST_USER_ID,
       botId: TEST_BOT_ID,
       state: {
-        verificationState: 'trial_activated',
+        sceneData: {
+          verificationState: 'trial_activated',
+        },
       },
     };
 
@@ -287,6 +290,11 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
       },
       reply: jest.fn(),
     };
+
+    // Mock findByUserAndBot to return botUser with correct state structure
+    (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+      mockBotUser,
+    );
 
     // Mock active subscription exists (expires in 5 days)
     const expiresAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
@@ -350,13 +358,16 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
   // @complexity: medium
   it('AC-1/AC-3: /start with awaiting_channel_subscription state re-sends channel prompt without welcome', async () => {
     // Arrange - user with awaiting_channel_subscription state and existing attempts
+    // State structure must match what start.update.ts reads: state.sceneData.verificationState
     const mockBotUser = {
       id: TEST_BOT_USER_ID,
       userId: TEST_USER_ID,
       botId: TEST_BOT_ID,
       state: {
-        verificationState: 'awaiting_channel_subscription',
-        verificationAttempts: 2, // Existing attempts should be preserved
+        sceneData: {
+          verificationState: 'awaiting_channel_subscription',
+          verificationAttempts: 2, // Existing attempts should be preserved
+        },
       },
     };
 
@@ -372,6 +383,11 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
       },
       reply: jest.fn(),
     };
+
+    // Mock findByUserAndBot to return botUser with correct state structure
+    (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+      mockBotUser,
+    );
 
     // Language resolution
     (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
@@ -443,6 +459,11 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
       reply: jest.fn(),
     };
 
+    // Mock findByUserAndBot to return botUser with no state
+    (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+      mockBotUser,
+    );
+
     // Language resolution
     (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
       'en',
@@ -498,13 +519,16 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
   // @complexity: medium
   it('AC-6: ctx.botUser available in handlers with correct id (botUserId) and state', async () => {
     // Arrange - user with trial_activated state (to test state access)
+    // State structure must match what start.update.ts reads: state.sceneData.verificationState
     const mockBotUser = {
       id: TEST_BOT_USER_ID, // bot_users.id (small integer, e.g., 42)
       userId: TEST_USER_ID, // telegramId (large number, e.g., 123456789)
       botId: TEST_BOT_ID,
       state: {
-        verificationState: 'trial_activated',
-        trialActivatedAt: '2025-01-01T00:00:00Z',
+        sceneData: {
+          verificationState: 'trial_activated',
+          trialActivatedAt: '2025-01-01T00:00:00Z',
+        },
       },
     };
 
@@ -520,6 +544,11 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
       },
       reply: jest.fn(),
     };
+
+    // Mock findByUserAndBot to return botUser with correct state structure
+    (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+      mockBotUser,
+    );
 
     // Mock active subscription for trial_activated state
     const expiresAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
@@ -551,8 +580,8 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
     // Assert - ctx.botUser.state is accessible for state checks
     expect(mockContext.botUser?.state).toBeDefined();
     expect(
-      (mockContext.botUser?.state as { verificationState?: string })
-        ?.verificationState,
+      (mockContext.botUser?.state as { sceneData?: { verificationState?: string } })
+        ?.sceneData?.verificationState,
     ).toBe('trial_activated');
 
     // Assert - subscription query uses botUser.id (botUserId), not telegramId

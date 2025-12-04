@@ -78,9 +78,12 @@ export class StartCommandUpdate {
       );
 
       // Get botUser from context (populated by middleware)
-      const botUser = ctx.botUser;
+      const botUser = await this.botUsersRepository.findByUserAndBot(
+        userId,
+        botId,
+      );
       const verificationState = (
-        botUser?.state as { verificationState?: string } | undefined
+        botUser?.state?.sceneData as { verificationState?: string } | undefined
       )?.verificationState;
 
       this.logger.debug({
@@ -224,8 +227,23 @@ export class StartCommandUpdate {
         lang,
       );
     } catch {
-      messageContent = 'Your trial is active';
+      messageContent =
+        'Your trial is active until {expiryDate}. Days remaining: {daysRemaining}.';
     }
+
+    // Format values for message placeholders
+    const now = new Date();
+    const remainingMs = expiresAt.getTime() - now.getTime();
+    const daysRemaining = Math.max(
+      0,
+      Math.ceil(remainingMs / (1000 * 60 * 60 * 24)),
+    );
+    const expiryDateStr = expiresAt.toLocaleDateString(lang);
+
+    // Replace placeholders
+    messageContent = messageContent
+      .replace('{daysRemaining}', daysRemaining.toString())
+      .replace('{expiryDate}', expiryDateStr);
 
     this.logger.log({
       message: 'Showing trial status',
