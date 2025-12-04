@@ -5,6 +5,7 @@ import {
   TelegrafModuleOptions,
   TelegrafModuleAsyncOptions,
   TelegrafDynamicModuleOptions,
+  TelegrafDynamicModuleAsyncOptions,
 } from './interfaces';
 
 @Module({})
@@ -72,6 +73,39 @@ export class TelegrafModule {
     return {
       module: TelegrafModule,
       imports: [DynamicTelegrafCoreModule.forRoot(options)],
+      exports: [DynamicTelegrafCoreModule],
+    };
+  }
+
+  /**
+   * Dynamic bot loading with async configuration.
+   *
+   * Same as forRootDynamic but supports useFactory pattern for
+   * async configuration with dependency injection.
+   *
+   * @param options Async configuration with useFactory and inject
+   * @returns DynamicModule for NestJS registration
+   *
+   * @example
+   * ```typescript
+   * TelegrafModule.forRootDynamicAsync({
+   *   botConfigProvider: DynamicBotConfigService,
+   *   sharedHandlerModules: [PartnerBotModule],
+   *   imports: [ConfigModule, DbModule, PartnerBotModule],
+   *   inject: [ConfigService],
+   *   useFactory: (configService: ConfigService) => ({
+   *     webhookDomain: configService.getOrThrow('TELEGRAM_BOT_WEBHOOK_DOMAIN'),
+   *     globalMiddlewares: [sessionMiddleware],
+   *   }),
+   * })
+   * ```
+   */
+  public static forRootDynamicAsync(
+    options: TelegrafDynamicModuleAsyncOptions,
+  ): DynamicModule {
+    return {
+      module: TelegrafModule,
+      imports: [DynamicTelegrafCoreModule.forRootAsync(options)],
       exports: [DynamicTelegrafCoreModule],
     };
   }

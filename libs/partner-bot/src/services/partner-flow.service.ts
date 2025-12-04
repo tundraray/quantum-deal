@@ -320,8 +320,31 @@ export class PartnerFlowService {
         botId,
       });
 
-      // Activate trial
-      const activationResult = await this.trialService.activate(userId);
+      // Resolve botUser to get botUserId for subscription operations
+      // botUser is already fetched earlier in this method, but may have been for verification attempts only.
+      // Re-fetch to ensure we have the full botUser object with id
+      const botUserForActivation =
+        await this.botUsersRepository.findByUserAndBot(userId, botId);
+      if (!botUserForActivation) {
+        this.logger.warn({
+          message: 'Failed to resolve botUser for trial activation',
+          userId,
+          botId,
+        });
+        return { verified: false, error: 'User context not found' };
+      }
+
+      this.logger.debug({
+        message: 'Resolved botUserId for trial activation',
+        userId, // telegramId for reference
+        botId,
+        botUserId: botUserForActivation.id, // Should be small integer
+      });
+
+      // FIXED: Use botUser.id (bot_users.id) instead of userId (telegramId)
+      const activationResult = await this.trialService.activate(
+        botUserForActivation.id,
+      );
 
       if (!activationResult.success) {
         // Revert state to channel_verified
@@ -358,9 +381,10 @@ export class PartnerFlowService {
       await this.botUsersRepository.updateState(userId, botId, activatedState);
 
       this.logger.log({
-        message: 'Trial activated successfully',
-        userId,
+        message: 'Trial activated with botUserId',
+        userId, // telegramId for reference
         botId,
+        botUserId: botUserForActivation.id, // Should be small integer
         expiresAt: activationResult.expiresAt,
       });
 

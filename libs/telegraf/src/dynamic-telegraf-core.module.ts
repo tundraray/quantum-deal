@@ -2,6 +2,7 @@ import { DynamicModule, Global, Module, Provider, Type } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 import {
   TelegrafDynamicModuleOptions,
+  TelegrafDynamicModuleAsyncOptions,
   BOT_CONFIGURATION_PROVIDER,
 } from './interfaces';
 import { DYNAMIC_TELEGRAF_MODULE_OPTIONS } from './telegraf.constants';
@@ -71,6 +72,84 @@ export class DynamicTelegrafCoreModule {
         DynamicListenersExplorerService,
       ],
       exports: [DynamicTelegrafService, DYNAMIC_TELEGRAF_MODULE_OPTIONS],
+    };
+  }
+
+  /**
+   * Create dynamic module with async configuration using factory pattern.
+   *
+   * This method allows injecting dependencies (e.g., ConfigService) to
+   * resolve configuration asynchronously.
+   *
+   * @param options - Async configuration options with useFactory and inject
+   * @returns DynamicModule configured with async providers
+   *
+   * @example
+   * ```typescript
+   * TelegrafModule.forRootDynamicAsync({
+   *   botConfigProvider: DynamicBotConfigService,
+   *   sharedHandlerModules: [PartnerBotModule],
+   *   imports: [ConfigModule, DbModule],
+   *   inject: [ConfigService],
+   *   useFactory: (configService: ConfigService) => ({
+   *     webhookDomain: configService.getOrThrow('WEBHOOK_DOMAIN'),
+   *     globalMiddlewares: [sessionMiddleware],
+   *   }),
+   * })
+   * ```
+   */
+  public static forRootAsync(
+    options: TelegrafDynamicModuleAsyncOptions,
+  ): DynamicModule {
+    const botConfigProviderProvider: Provider = {
+      provide: BOT_CONFIGURATION_PROVIDER,
+      useClass: options.botConfigProvider,
+    };
+
+    // Cast sharedHandlerModules to Type[] for NestJS module imports
+    const sharedModules = options.sharedHandlerModules as unknown as Type[];
+
+    const asyncOptionsProvider = this.createAsyncOptionsProvider(options);
+
+    return {
+      module: DynamicTelegrafCoreModule,
+      imports: [...(options.imports || []), ...sharedModules],
+      providers: [
+        asyncOptionsProvider,
+        botConfigProviderProvider,
+        DynamicTelegrafService,
+        DynamicListenersExplorerService,
+      ],
+      exports: [DynamicTelegrafService, DYNAMIC_TELEGRAF_MODULE_OPTIONS],
+    };
+  }
+
+  /**
+   * Create the async options provider using useFactory pattern.
+   *
+   * Transforms the factory options into full module options by combining
+   * with the static options (botConfigProvider, sharedHandlerModules).
+   *
+   * @param options - Async options containing useFactory and inject
+   * @returns Provider for DYNAMIC_TELEGRAF_MODULE_OPTIONS
+   */
+  private static createAsyncOptionsProvider(
+    options: TelegrafDynamicModuleAsyncOptions,
+  ): Provider {
+    return {
+      provide: DYNAMIC_TELEGRAF_MODULE_OPTIONS,
+      useFactory: async (
+        ...args: unknown[]
+      ): Promise<TelegrafDynamicModuleOptions> => {
+        const factoryOptions = await options.useFactory(...args);
+        return {
+          botConfigProvider: options.botConfigProvider,
+          sharedHandlerModules: options.sharedHandlerModules,
+          imports: options.imports,
+          ...factoryOptions,
+        };
+      },
+      inject: options.inject || [],
     };
   }
 }

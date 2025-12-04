@@ -84,15 +84,16 @@ describe('ReminderSchedulerService', () => {
       const botId = 1;
       const mockExpiredTrials = [
         {
-          user: {
-            telegramId: 123,
-            username: 'user1',
-            languageCode: 'en',
+          botUser: {
+            id: 1,
+            userId: 123,
+            botId: 1,
+            lang: 'en',
             isActive: true,
           },
           userSubscription: {
             id: 1,
-            userId: 123,
+            botUserId: 1,
             subscriptionId: 1,
             botId: 1,
             expiresAt: new Date('2025-11-01'),
@@ -100,15 +101,16 @@ describe('ReminderSchedulerService', () => {
           },
         },
         {
-          user: {
-            telegramId: 456,
-            username: 'user2',
-            languageCode: 'ru',
+          botUser: {
+            id: 2,
+            userId: 456,
+            botId: 1,
+            lang: 'ru',
             isActive: true,
           },
           userSubscription: {
             id: 2,
-            userId: 456,
+            botUserId: 2,
             subscriptionId: 1,
             botId: 1,
             expiresAt: new Date('2025-11-15'),
@@ -147,15 +149,16 @@ describe('ReminderSchedulerService', () => {
       const botId = 1;
       const mockExpiredTrials = [
         {
-          user: {
-            telegramId: 123,
-            username: 'user1',
-            languageCode: 'en',
+          botUser: {
+            id: 1,
+            userId: 123,
+            botId: 1,
+            lang: 'en',
             isActive: true,
           },
           userSubscription: {
             id: 1,
-            userId: 123,
+            botUserId: 1,
             subscriptionId: 1,
             botId: 1,
             expiresAt: new Date('2025-11-01'),
@@ -192,20 +195,20 @@ describe('ReminderSchedulerService', () => {
       const botId = 1;
       const mockExpiredTrials = [
         {
-          user: { telegramId: 123, languageCode: 'en', isActive: true },
+          botUser: { id: 1, userId: 123, botId: 1, lang: 'en', isActive: true },
           userSubscription: {
             id: 1,
-            userId: 123,
+            botUserId: 1,
             botId: 1,
             expiresAt: new Date('2025-11-01'),
             isActive: false,
           },
         },
         {
-          user: { telegramId: 456, languageCode: 'ru', isActive: true },
+          botUser: { id: 2, userId: 456, botId: 1, lang: 'ru', isActive: true },
           userSubscription: {
             id: 2,
-            userId: 456,
+            botUserId: 2,
             botId: 1,
             expiresAt: new Date('2025-11-15'),
             isActive: false,

@@ -60,10 +60,13 @@ export class ChannelVerificationAction {
    */
   @Action('partner_verify_subscription')
   async handleVerify(@Ctx() ctx: PartnerBotContext): Promise<void> {
-    const userId = ctx.from?.id;
+    const botUserId = ctx.user?.botUserId;
+    const telegramId = ctx.from?.id;
     const botId = ctx.botId;
-
-    if (!userId) {
+    console.log('botUserId', botUserId);
+    console.log('telegramId', telegramId);
+    console.log('botId', botId);
+    if (!botUserId || !telegramId) {
       this.logger.warn('Missing user context in verification callback');
       await ctx.answerCbQuery?.();
       return;
@@ -72,7 +75,7 @@ export class ChannelVerificationAction {
     if (!botId) {
       this.logger.error({
         message: 'botId not available in context',
-        userId,
+        userId: telegramId,
       });
       await ctx.answerCbQuery?.();
       await ctx.reply('Configuration error. Please try again later.');
@@ -85,41 +88,27 @@ export class ChannelVerificationAction {
 
       // Get user language
       const lang = await this.getUserLanguage(
-        userId,
+        telegramId,
         botId,
         ctx.from?.language_code,
       );
 
-      // Check and handle rate limit
-      const rateLimitHandled = await this.handleRateLimit(
-        userId,
-        botId,
-        lang,
-        ctx,
-      );
-      if (rateLimitHandled) {
-        return;
-      }
-
       // Get partner channel ID
-      const channelId = await this.getPartnerChannelId(userId, botId, ctx);
+      const channelId = await this.getPartnerChannelId(telegramId, botId, ctx);
       if (!channelId) {
         return;
       }
 
-      // Record verification attempt
-      await this.recordVerificationAttempt(userId, botId);
-
       // Verify channel membership
       const isMember = await this.channelVerifierService.verifyMembership(
         channelId,
-        userId,
+        telegramId,
         botId,
       );
 
       if (!isMember) {
         await this.sendVerificationFailedMessage(
-          userId,
+          telegramId,
           botId,
           lang,
           channelId,
@@ -129,11 +118,11 @@ export class ChannelVerificationAction {
       }
 
       // Handle successful verification and trial activation
-      await this.handleSuccessfulVerification(userId, botId, lang, ctx);
+      await this.handleSuccessfulVerification(telegramId, botId, lang, ctx);
     } catch (error) {
       this.logger.error({
         message: 'Error during channel verification',
-        userId,
+        userId: telegramId,
         botId,
         error: (error as Error).message,
       });

@@ -134,10 +134,55 @@ export interface TelegrafDynamicModuleOptions
 }
 
 /**
- * Async options for TelegrafModule.forRootDynamic().
+ * Factory options returned by useFactory in async configuration.
  *
- * Supports useFactory pattern for async configuration.
- * @see TelegrafModule.forRootDynamic
+ * Contains only the runtime configuration options that can be
+ * resolved asynchronously (e.g., from ConfigService).
+ */
+export interface TelegrafDynamicModuleFactoryOptions {
+  /**
+   * Webhook domain for dynamic bots.
+   * Combined with bot's webhookPath to form full webhook URL.
+   * @example 'https://api.example.com'
+   */
+  webhookDomain: string;
+
+  /**
+   * Global middlewares applied to all dynamic bots.
+   * @example Session middleware, logging middleware
+   */
+  globalMiddlewares?: ReadonlyArray<Middleware<Context>>;
+
+  /**
+   * Optional factory for creating bot-specific middlewares.
+   * Called for each bot during initialization.
+   */
+  middlewareFactory?: (botConfig: DynamicBotConfig) => Middleware<Context>[];
+
+  /**
+   * Optional Telegraf options applied to all dynamic bot instances.
+   */
+  telegrafOptions?: Partial<Telegraf.Options<Context>>;
+}
+
+/**
+ * Async options for TelegrafModule.forRootDynamicAsync().
+ *
+ * Supports useFactory pattern for async configuration with dependency injection.
+ * @see TelegrafModule.forRootDynamicAsync
+ *
+ * @example
+ * ```typescript
+ * TelegrafModule.forRootDynamicAsync({
+ *   botConfigProvider: DynamicBotConfigService,
+ *   sharedHandlerModules: [PartnerBotModule],
+ *   imports: [ConfigModule],
+ *   inject: [ConfigService],
+ *   useFactory: (configService: ConfigService) => ({
+ *     webhookDomain: configService.getOrThrow('WEBHOOK_DOMAIN'),
+ *   }),
+ * })
+ * ```
  */
 export interface TelegrafDynamicModuleAsyncOptions
   extends Pick<ModuleMetadata, 'imports'> {
@@ -152,14 +197,18 @@ export interface TelegrafDynamicModuleAsyncOptions
   sharedHandlerModules: ModuleClass[];
 
   /**
-   * Factory function for creating options.
+   * Factory function for creating runtime options.
+   * Receives injected dependencies and returns configuration.
    */
-  useFactory?: (
+  useFactory: (
     ...args: unknown[]
-  ) => Promise<TelegrafDynamicModuleOptions> | TelegrafDynamicModuleOptions;
+  ) =>
+    | Promise<TelegrafDynamicModuleFactoryOptions>
+    | TelegrafDynamicModuleFactoryOptions;
 
   /**
    * Dependencies to inject into useFactory.
+   * @example [ConfigService, SomeOtherService]
    */
   inject?: Array<Type<unknown> | string | symbol | Abstract<unknown>>;
 }

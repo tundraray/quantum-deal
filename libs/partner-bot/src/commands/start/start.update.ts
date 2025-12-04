@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Update, Command, Ctx, RequiresFeature } from '@quantumdeal/telegraf';
-import { BotMessagesRepository, BotUsersRepository } from '@quantumdeal/db';
+import {
+  BotMessagesRepository,
+  BotUsersRepository,
+  UserSubscriptionsRepository,
+  BotUser,
+  BotUserState,
+} from '@quantumdeal/db';
 import { PartnerFlowService } from '../../services/partner-flow.service';
 import type { PartnerBotContext } from '../../interfaces';
 import { PARTNER_FLOW_FEATURE_KEY } from '../../constants';
@@ -35,6 +41,7 @@ export class StartCommandUpdate {
     private readonly botMessagesRepository: BotMessagesRepository,
     private readonly partnerFlowService: PartnerFlowService,
     private readonly botUsersRepository: BotUsersRepository,
+    private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
   ) {}
 
   /**
@@ -70,6 +77,50 @@ export class StartCommandUpdate {
         defaultLang,
       );
 
+      // Get botUser from context (populated by middleware)
+      const botUser = ctx.botUser;
+      const verificationState = (
+        botUser?.state as { verificationState?: string } | undefined
+      )?.verificationState;
+
+      this.logger.debug({
+        message: 'State check on /start',
+        userId,
+        botId,
+        verificationState,
+      });
+
+      // State-aware routing (AC-1)
+      // 1. If trial_activated with active subscription -> show trial status
+      if (verificationState === 'trial_activated' && botUser) {
+        const activeSubscriptions =
+          await this.userSubscriptionsRepository.findActiveByBotUserId(
+            botUser.id,
+          );
+        if (activeSubscriptions.length > 0) {
+          // Show trial status (implementation in TASK-003)
+          await this.sendTrialStatus(ctx, botUser, lang);
+          return;
+        }
+        // Trial expired, continue to welcome flow
+      }
+
+      // 2. If awaiting_channel_subscription -> re-send channel prompt (no welcome)
+      if (verificationState === 'awaiting_channel_subscription') {
+        // Re-show channel prompt without welcome message
+        // Preserve existing verification attempt counter (no state reset)
+        await this.partnerFlowService.sendChannelPrompt(userId, botId, lang);
+
+        this.logger.log({
+          message: '/start command completed (re-sent channel prompt)',
+          userId,
+          botId,
+          lang,
+        });
+        return;
+      }
+
+      // 3. Default flow: No state or trial_expired -> send welcome + channel prompt
       // Retrieve welcome message
       const welcomeMessage = await this.botMessagesRepository.resolveMessage(
         botId,
@@ -85,7 +136,7 @@ export class StartCommandUpdate {
         verificationState: 'awaiting_channel_subscription',
         verificationAttempts: 0,
         lastVerificationAttempt: new Date(),
-      } as any);
+      } as BotUserState);
 
       // Send channel subscription prompt
       await this.partnerFlowService.sendChannelPrompt(userId, botId, lang);
@@ -114,5 +165,112 @@ export class StartCommandUpdate {
           });
         });
     }
+  }
+
+  /**
+   * Send trial status message with remaining time button
+   *
+   * Displays current trial status with a button showing remaining time.
+   * - >= 1 day: "Trial: X days remaining"
+   * - < 1 day: "Trial: Y hours remaining"
+   *
+   * @param ctx - Telegram context
+   * @param botUser - Bot user with trial data
+   * @param lang - User language code
+   */
+  private async sendTrialStatus(
+    ctx: PartnerBotContext,
+    botUser: BotUser,
+    lang: string,
+  ): Promise<void> {
+    const userId = ctx.from?.id;
+    const botId = ctx.botId;
+
+    // Get active subscription to calculate remaining time
+    const subscriptions =
+      await this.userSubscriptionsRepository.findActiveByBotUserId(botUser.id);
+
+    if (subscriptions.length === 0) {
+      // No active subscription, fall back to welcome flow
+      this.logger.warn({
+        message: 'No active subscription found in sendTrialStatus',
+        userId,
+        botId,
+        botUserId: botUser.id,
+      });
+      return;
+    }
+
+    const subscription = subscriptions[0];
+    // Active subscriptions from findActiveByBotUserId always have expiresAt (filtered by SQL)
+    if (!subscription.expiresAt) {
+      this.logger.warn({
+        message: 'Active subscription missing expiresAt',
+        userId,
+        botId,
+        botUserId: botUser.id,
+      });
+      return;
+    }
+    const expiresAt = new Date(subscription.expiresAt);
+    const displayText = this.calculateRemainingTimeDisplay(expiresAt);
+
+    // Get trial status message from bot_messages with fallback
+    let messageContent: string;
+    try {
+      messageContent = await this.botMessagesRepository.resolveMessage(
+        botId ?? 0,
+        'partner_trial_status',
+        lang,
+      );
+    } catch {
+      messageContent = 'Your trial is active';
+    }
+
+    this.logger.log({
+      message: 'Showing trial status',
+      userId,
+      botId,
+      botUserId: botUser.id,
+      displayText,
+    });
+
+    // Send message with inline keyboard button
+    await ctx.reply(messageContent, {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: displayText,
+              callback_data: 'partner_trial_status',
+            },
+          ],
+        ],
+      },
+    });
+  }
+
+  /**
+   * Calculate remaining time display text
+   *
+   * @param expiresAt - Subscription expiration date
+   * @returns Display text: "Trial: X days remaining" or "Trial: Y hours remaining"
+   */
+  private calculateRemainingTimeDisplay(expiresAt: Date): string {
+    const now = new Date();
+    const remainingMs = expiresAt.getTime() - now.getTime();
+
+    // Handle zero or negative remaining time
+    if (remainingMs <= 0) {
+      return 'Trial: 0 hours remaining';
+    }
+
+    const remainingHours = Math.floor(remainingMs / (1000 * 60 * 60));
+    const remainingDays = Math.floor(remainingHours / 24);
+
+    if (remainingDays >= 1) {
+      return `Trial: ${remainingDays} day${remainingDays > 1 ? 's' : ''} remaining`;
+    }
+    return `Trial: ${remainingHours} hour${remainingHours > 1 ? 's' : ''} remaining`;
   }
 }

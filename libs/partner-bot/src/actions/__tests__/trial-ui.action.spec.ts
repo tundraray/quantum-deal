@@ -297,6 +297,32 @@ describe('TrialUIAction', () => {
     });
   });
 
+  describe('handleTrialStatus', () => {
+    it('should acknowledge callback query when user clicks trial status button', async () => {
+      // Arrange
+      const mockContext: Partial<PartnerBotContext> = {
+        botId: TEST_BOT_ID,
+        from: {
+          id: 123456,
+          is_bot: false,
+          first_name: 'Test',
+          language_code: 'en',
+        },
+        answerCbQuery: jest.fn(),
+        reply: jest.fn(),
+      };
+
+      // Act
+      await trialUIAction.handleTrialStatus(mockContext as PartnerBotContext);
+
+      // Assert - should acknowledge callback query
+      expect(mockContext.answerCbQuery).toHaveBeenCalled();
+
+      // Assert - should NOT send any reply (informational button only)
+      expect(mockContext.reply).not.toHaveBeenCalled();
+    });
+  });
+
   describe('handleBuy', () => {
     it('should retrieve partner_coming_soon message when user clicks "Buy Subscription" button', async () => {
       // Arrange
