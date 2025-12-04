@@ -377,7 +377,7 @@ Required SQL INSERT statements for all message types and languages (generated se
 
 | Component | Integration | Purpose |
 |-----------|-------------|---------|
-| `TrialService` | `activate(userId)` | Reuse existing trial activation logic |
+| `TrialService` | `activate(botUserId)` | Reuse existing trial activation logic (botUserId = bot_users.id) |
 | `BotMessagesRepository` | `resolveMessage(botId, type, lang)` | Multi-language message retrieval |
 | `BotSettingsRepository` | `findByBotId(botId)` | Partner configuration (channelId, referralUrl) |
 | `Telegraf.telegram` | `getChatMember(channelId, userId)` | Channel membership verification |

@@ -163,11 +163,11 @@ sequenceDiagram
         TS-->>TA: true
     end
 
-    TA->>TS: activate(userId)
+    TA->>TS: activate(botUserId)
 
     rect rgb(255, 248, 240)
         Note over TS,DB: Activation Process
-        TS->>TS: isEligible(userId) [double-check]
+        TS->>TS: isEligible(botUserId) [double-check]
         TS->>SR: findTrialSubscription()
         SR->>DB: SELECT * FROM subscriptions<br/>JOIN subscription_features<br/>WHERE feature_key = 'is_trial'
         DB-->>SR: Trial subscription (id=X)
@@ -178,7 +178,7 @@ sequenceDiagram
 
         Note over TS: Calculate expiresAt = NOW + 7 days
 
-        TS->>USR: activate(userId, subscriptionId, expiresAt)
+        TS->>USR: activateForBotUser(botUserId, subscriptionId, expiresAt)
         USR->>DB: INSERT INTO user_subscriptions<br/>(user_id, subscription_id, expires_at, is_active)
         DB-->>USR: New record
         USR-->>TS: UserSubscription
@@ -461,29 +461,29 @@ LIMIT 1;
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `isEligible` | `(userId: number) => Promise<boolean>` | Check if user can activate trial |
-| `activate` | `(userId: number) => Promise<{ success: boolean; expiresAt?: Date; error?: string }>` | Activate trial for user |
+| `isEligible` | `(botUserId: number) => Promise<boolean>` | Check if user can activate trial (botUserId = bot_users.id) |
+| `activate` | `(botUserId: number) => Promise<{ success: boolean; expiresAt?: Date; error?: string }>` | Activate trial for user (botUserId = bot_users.id) |
 
-#### isEligible(userId) Implementation
+#### isEligible(botUserId) Implementation
 
 ```typescript
-async isEligible(userId: number): Promise<boolean> {
+async isEligible(botUserId: number): Promise<boolean> {
   // 1. Check TRIAL_ENABLED config (default: true)
   const trialEnabled = this.configService.get<boolean>('TRIAL_ENABLED', true);
   if (!trialEnabled) return false;
 
-  // 2. Check subscription history
-  const existing = await this.userSubscriptionsRepository.findByUserId(userId);
+  // 2. Check subscription history for this bot-user
+  const existing = await this.userSubscriptionsRepository.findByBotUserId(botUserId);
   return existing.length === 0;
 }
 ```
 
-#### activate(userId) Implementation
+#### activate(botUserId) Implementation
 
 ```typescript
-async activate(userId: number): Promise<Result> {
+async activate(botUserId: number): Promise<Result> {
   // 1. Double-check eligibility
-  if (!await this.isEligible(userId)) {
+  if (!await this.isEligible(botUserId)) {
     return { success: false, error: 'Trial already used or not enabled' };
   }
 
@@ -498,8 +498,8 @@ async activate(userId: number): Promise<Result> {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + durationDays);
 
-  // 4. Create user_subscription record
-  await this.userSubscriptionsRepository.activate(userId, trialSubscription.id, expiresAt);
+  // 4. Create user_subscription record (using botUserId = bot_users.id)
+  await this.userSubscriptionsRepository.activateForBotUser(botUserId, trialSubscription.id, expiresAt);
 
   return { success: true, expiresAt };
 }

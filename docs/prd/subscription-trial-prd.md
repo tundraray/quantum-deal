@@ -299,8 +299,8 @@ The trial subscription is created via migration `20251101094200_seed_trial_subsc
 
 | Method | Description | Returns |
 |--------|-------------|---------|
-| `isEligible(userId)` | Check if user can activate trial | `Promise<boolean>` |
-| `activate(userId)` | Activate trial for user | `Promise<{ success, expiresAt?, error? }>` |
+| `isEligible(botUserId)` | Check if user can activate trial (botUserId = bot_users.id) | `Promise<boolean>` |
+| `activate(botUserId)` | Activate trial for user (botUserId = bot_users.id) | `Promise<{ success, expiresAt?, error? }>` |
 
 ### SubscriptionsRepository (Trial-related)
 
