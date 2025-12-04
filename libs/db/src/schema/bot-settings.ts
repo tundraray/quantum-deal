@@ -45,10 +45,6 @@ export interface BotSettings {
     trialDays: number;
     language: string;
   };
-  ui?: {
-    welcomeImage?: string;
-    brandColor?: string;
-  };
   /** Per-bot language options. Falls back to DEFAULT_LANGS if not set. */
   langs?: LangOption[];
 }

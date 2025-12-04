@@ -10,12 +10,14 @@ import { TrialService, BotCommandsService } from '@quantumdeal/bot';
 import { ChannelVerifierService } from './channel-verifier.service';
 import type { VerificationResult } from '../types/partner-settings';
 import { FeatureFlag } from '@quantumdeal/db/schema';
+import { BotSettings } from '@quantumdeal/telegraf/interfaces/dynamic-telegraf-options.interface';
 
 /**
  * Partner settings structure from bot_settings
  */
-interface PartnerSettings {
+interface PartnerSettings extends BotSettings {
   channelId?: string;
+  channelName?: string;
 }
 
 /**
@@ -103,9 +105,11 @@ export class PartnerFlowService {
       );
 
       // Interpolate variables
-      const channelName = channelId.startsWith('@')
-        ? channelId.substring(1)
-        : channelId;
+      const channelName =
+        (settings.channelName ?? channelId.startsWith('@'))
+          ? channelId.substring(1)
+          : channelId;
+      console.log('channelName', channelName, settings);
       const channelUrl = channelId.startsWith('@')
         ? `https://t.me/${channelName}`
         : `https://t.me/${channelId}`;
@@ -126,13 +130,19 @@ export class PartnerFlowService {
         throw new Error(`Bot with ID ${botId} not found`);
       }
 
+      // Retrieve buttons text
+      const iSubscribedButtonText = await this.botMessagesRepository
+        .resolveMessage(botId, 'button_i_subscribed', lang)
+        .catch(() => 'I subscribed ✅');
+
       // Send message with inline keyboard
       await bot.telegram.sendMessage(userId, message, {
+        parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
             [
               {
-                text: 'I subscribed ✅',
+                text: iSubscribedButtonText,
                 callback_data: 'partner_verify_subscription',
               },
             ],
@@ -192,23 +202,6 @@ export class PartnerFlowService {
         botId,
         'en',
       );
-
-      // Check rate limit
-      const isRateLimited = await this.channelVerifierService.isRateLimited(
-        userId,
-        botId,
-      );
-      if (isRateLimited) {
-        this.logger.warn({
-          message: 'User is rate limited',
-          userId,
-          botId,
-        });
-        return {
-          verified: false,
-          error: 'Too many verification attempts. Please try again later.',
-        };
-      }
 
       // Get partner channel ID
       const settingsRecord =
@@ -271,6 +264,11 @@ export class PartnerFlowService {
           };
         }
 
+        // Retrieve buttons text
+        const tryAgainButtonText = await this.botMessagesRepository
+          .resolveMessage(botId, 'button_try_again', lang)
+          .catch(() => 'Try Again');
+
         // Send failure message
         const failureMessage = await this.botMessagesRepository.resolveMessage(
           botId,
@@ -278,11 +276,12 @@ export class PartnerFlowService {
           lang,
         );
         await bot.telegram.sendMessage(userId, failureMessage, {
+          parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
               [
                 {
-                  text: 'Try Again',
+                  text: tryAgainButtonText,
                   callback_data: 'partner_verify_subscription',
                 },
               ],
@@ -344,6 +343,7 @@ export class PartnerFlowService {
       // FIXED: Use botUser.id (bot_users.id) instead of userId (telegramId)
       const activationResult = await this.trialService.activate(
         botUserForActivation.id,
+        settings?.defaults?.trialDays,
       );
 
       if (!activationResult.success) {
@@ -452,19 +452,29 @@ export class PartnerFlowService {
         throw new Error(`Bot with ID ${botId} not found`);
       }
 
+      // Retrieve buttons text
+      const extendTrialButtonText = await this.botMessagesRepository
+        .resolveMessage(botId, 'button_extend_trial', lang)
+        .catch(() => 'Extend Free Period 🎁');
+
+      const buySubscriptionButtonText = await this.botMessagesRepository
+        .resolveMessage(botId, 'button_buy_subscription', lang)
+        .catch(() => 'Buy Subscription 💳');
+
       // Send message with inline keyboard
       await bot.telegram.sendMessage(userId, message, {
+        parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
             [
               {
-                text: 'Extend Free Period 🎁',
+                text: extendTrialButtonText,
                 callback_data: 'partner_extend_trial',
               },
             ],
             [
               {
-                text: 'Buy Subscription 💳',
+                text: buySubscriptionButtonText,
                 callback_data: 'partner_buy_subscription',
               },
             ],

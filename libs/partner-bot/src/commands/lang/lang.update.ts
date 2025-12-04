@@ -110,7 +110,7 @@ export class LangUpdate {
       const selectMessage = await this.getLanguageSelectionMessage(botId, lang);
 
       await ctx.reply(selectMessage, {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
         ...this.buildLangKeyboard(langs, 2),
       });
     } catch (error) {
@@ -173,7 +173,7 @@ export class LangUpdate {
       await ctx.telegram.answerCbQuery(ctx.callbackQuery?.id ?? '');
 
       // Send confirmation message
-      await ctx.reply(confirmationMessage);
+      await ctx.reply(confirmationMessage, { parse_mode: 'HTML' });
 
       this.logger.log({
         message: 'Language changed',

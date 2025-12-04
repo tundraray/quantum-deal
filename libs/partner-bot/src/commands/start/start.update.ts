@@ -136,12 +136,13 @@ export class StartCommandUpdate {
       const changeLangButtonText =
         await this.botMessagesRepository.resolveMessage(
           botId,
-          'change_language_button',
+          'button_change_language',
           lang,
         );
 
       // Send welcome message with change language button
       await ctx.reply(welcomeMessage, {
+        parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
             [Markup.button.callback(changeLangButtonText, 'change_lang')],
@@ -265,7 +266,7 @@ export class StartCommandUpdate {
     try {
       changeLangButtonText = await this.botMessagesRepository.resolveMessage(
         botId ?? 0,
-        'change_language_button',
+        'button_change_language',
         lang,
       );
     } catch {
@@ -282,6 +283,7 @@ export class StartCommandUpdate {
 
     // Send message with inline keyboard buttons
     await ctx.reply(messageContent, {
+      parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
           [
