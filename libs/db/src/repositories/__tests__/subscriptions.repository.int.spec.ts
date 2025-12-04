@@ -13,6 +13,7 @@ import { BotsRepository } from '../bots.repository';
 
 import { bots, NewBot } from '../../schema/bots';
 import { users } from '../../schema/users';
+import { botUsers } from '../../schema/bot-users';
 import { subscriptions } from '../../schema/subscriptions';
 import { userSubscriptions } from '../../schema/user-subscriptions';
 import { subscriptionFeatures } from '../../schema/subscription-features';
@@ -36,6 +37,7 @@ describe('SubscriptionsRepository Integration Tests', () => {
   // Track created records for cleanup
   const createdBotIds: number[] = [];
   const createdUserIds: number[] = [];
+  const createdBotUserIds: number[] = [];
   const createdSubscriptionIds: number[] = [];
   const createdUserSubscriptionIds: number[] = [];
   const createdSubscriptionFeatureIds: number[] = [];
@@ -67,7 +69,6 @@ describe('SubscriptionsRepository Integration Tests', () => {
         telegramId: id,
         username: generateUniqueName('testuser'),
         firstName: 'Test',
-        isActive: true,
       })
       .returning();
     createdUserIds.push(result[0].telegramId);
@@ -105,19 +106,37 @@ describe('SubscriptionsRepository Integration Tests', () => {
     return result[0];
   };
 
+  // Helper to create bot_user record
+  const createBotUser = async (userId: number, botId: number) => {
+    const result = await db
+      .insert(botUsers)
+      .values({
+        userId,
+        botId,
+        isActive: true,
+      })
+      .returning();
+    createdBotUserIds.push(result[0].id);
+    return result[0];
+  };
+
   // Helper to create user subscription with specific botId
+  // Now requires botUserId (from bot_users table) instead of userId
   const createUserSubscription = async (
-    userId: number,
+    telegramId: number,
     subscriptionId: number,
-    botId: number | null,
+    botId: number,
     expiresAt?: Date,
   ) => {
+    // First create bot_user record
+    const botUser = await createBotUser(telegramId, botId);
+
     const expiration =
       expiresAt ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
     const result = await db
       .insert(userSubscriptions)
       .values({
-        userId,
+        botUserId: botUser.id,
         subscriptionId,
         botId,
         isActive: true,
@@ -195,6 +214,13 @@ describe('SubscriptionsRepository Integration Tests', () => {
           // Ignore cleanup errors
         }
       }
+      for (const id of createdBotUserIds) {
+        try {
+          await db.delete(botUsers).where(eq(botUsers.id, id));
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
       for (const id of createdUserIds) {
         try {
           await db.delete(users).where(eq(users.telegramId, id));
@@ -217,67 +243,65 @@ describe('SubscriptionsRepository Integration Tests', () => {
   });
 
   // =============================================================================
-  // AC-003: findBySectorForBot(sector, null) returns ONLY users with botId IS NULL
+  // AC-003: findBySectorForBot returns users for specific bot
+  // Note: Static bot support (botId=null) has been removed in the new architecture
   // =============================================================================
 
-  describe('AC-003: findBySectorForBot with botId=null (static bot)', () => {
-    it('AC-003: Should return ONLY users with botId IS NULL when botId is null', async () => {
+  describe('AC-003: findBySectorForBot returns users for specific bot', () => {
+    it('AC-003: Should return users subscribed to the specified bot', async () => {
       if (!process.env.DATABASE_URL) return;
 
-      // Arrange - Create bot for comparison
-      const dynamicBot = await createTestBot();
+      // Arrange - Create bots for comparison
+      const bot1 = await createTestBot();
+      const bot2 = await createTestBot();
 
       // Create users
-      const userStaticBot = await createTestUser();
-      const userDynamicBot = await createTestUser();
+      const userBot1 = await createTestUser();
+      const userBot2 = await createTestUser();
 
       // Create subscription with 'crypto' sector
       const subscription = await createTestSubscription('crypto');
 
-      // Create user subscription for static bot (botId = null)
+      // Create user subscriptions for different bots
       await createUserSubscription(
-        userStaticBot.telegramId,
+        userBot1.telegramId,
         subscription.id,
-        null, // Static bot
+        bot1.id,
       );
 
-      // Create user subscription for dynamic bot (botId = N)
       await createUserSubscription(
-        userDynamicBot.telegramId,
+        userBot2.telegramId,
         subscription.id,
-        dynamicBot.id,
+        bot2.id,
       );
 
-      // Act - Query for static bot users (botId = null)
-      const result = await repository.findBySectorForBot('crypto', null);
+      // Act - Query for bot1 users
+      const result = await repository.findBySectorForBot('crypto', bot1.id);
 
-      // Assert - Should only contain static bot user
-      const resultUserIds = result.map((r) => r.userId);
-      expect(resultUserIds).toContain(userStaticBot.telegramId);
-      expect(resultUserIds).not.toContain(userDynamicBot.telegramId);
+      // Assert - Should only contain bot1 user
+      const resultUserIds = result.map((r) => r.userTelegramId);
+      expect(resultUserIds).toContain(String(userBot1.telegramId));
+      expect(resultUserIds).not.toContain(String(userBot2.telegramId));
     });
 
-    it('AC-003: Should return empty array when no users have botId IS NULL', async () => {
+    it('AC-003: Should return empty array when no users subscribed to specified bot', async () => {
       if (!process.env.DATABASE_URL) return;
 
-      // Arrange - Create bot and user
-      const dynamicBot = await createTestBot();
+      // Arrange - Create bots and user
+      const bot1 = await createTestBot();
+      const bot2 = await createTestBot();
       const user = await createTestUser();
       const subscription = await createTestSubscription('forex');
 
-      // Create user subscription only for dynamic bot
-      await createUserSubscription(
-        user.telegramId,
-        subscription.id,
-        dynamicBot.id,
-      );
+      // Create user subscription only for bot1
+      await createUserSubscription(user.telegramId, subscription.id, bot1.id);
 
-      // Act - Query for static bot users (botId = null)
-      const result = await repository.findBySectorForBot('forex', null);
+      // Act - Query for bot2 users (no subscriptions)
+      const result = await repository.findBySectorForBot('forex', bot2.id);
 
-      // Assert - Should not contain dynamic bot user
-      const resultUserIds = result.map((r) => r.userId);
-      expect(resultUserIds).not.toContain(user.telegramId);
+      // Assert - Should not contain bot1 user
+      const resultUserIds = result.map((r) => r.userTelegramId);
+      expect(resultUserIds).not.toContain(String(user.telegramId));
     });
   });
 
@@ -296,7 +320,6 @@ describe('SubscriptionsRepository Integration Tests', () => {
       // Create users
       const userBot1 = await createTestUser();
       const userBot2 = await createTestUser();
-      const userStaticBot = await createTestUser();
 
       // Create subscription with 'stocks' sector
       const subscription = await createTestSubscription('stocks');
@@ -312,20 +335,14 @@ describe('SubscriptionsRepository Integration Tests', () => {
         subscription.id,
         bot2.id,
       );
-      await createUserSubscription(
-        userStaticBot.telegramId,
-        subscription.id,
-        null,
-      );
 
       // Act - Query for bot1 users
       const result = await repository.findBySectorForBot('stocks', bot1.id);
 
       // Assert - Should only contain bot1 user
-      const resultUserIds = result.map((r) => r.userId);
-      expect(resultUserIds).toContain(userBot1.telegramId);
-      expect(resultUserIds).not.toContain(userBot2.telegramId);
-      expect(resultUserIds).not.toContain(userStaticBot.telegramId);
+      const resultUserIds = result.map((r) => r.userTelegramId);
+      expect(resultUserIds).toContain(String(userBot1.telegramId));
+      expect(resultUserIds).not.toContain(String(userBot2.telegramId));
     });
 
     it('AC-004: Should return empty array when no users have specified botId', async () => {
@@ -347,8 +364,8 @@ describe('SubscriptionsRepository Integration Tests', () => {
       );
 
       // Assert - Should not contain bot1 user
-      const resultUserIds = result.map((r) => r.userId);
-      expect(resultUserIds).not.toContain(user.telegramId);
+      const resultUserIds = result.map((r) => r.userTelegramId);
+      expect(resultUserIds).not.toContain(String(user.telegramId));
     });
   });
 
@@ -365,11 +382,12 @@ describe('SubscriptionsRepository Integration Tests', () => {
       const user = await createTestUser();
       const subscription = await createTestSubscription('crypto');
 
-      // Create inactive user subscription
+      // Create bot_user and inactive user subscription
+      const botUser = await createBotUser(user.telegramId, bot.id);
       const result = await db
         .insert(userSubscriptions)
         .values({
-          userId: user.telegramId,
+          botUserId: botUser.id,
           subscriptionId: subscription.id,
           botId: bot.id,
           isActive: false, // Inactive
@@ -382,8 +400,8 @@ describe('SubscriptionsRepository Integration Tests', () => {
       const queryResult = await repository.findBySectorForBot('crypto', bot.id);
 
       // Assert - Should not contain inactive user
-      const resultUserIds = queryResult.map((r) => r.userId);
-      expect(resultUserIds).not.toContain(user.telegramId);
+      const resultUserIds = queryResult.map((r) => r.userTelegramId);
+      expect(resultUserIds).not.toContain(String(user.telegramId));
     });
 
     it('Should exclude expired subscriptions', async () => {
@@ -407,8 +425,8 @@ describe('SubscriptionsRepository Integration Tests', () => {
       const queryResult = await repository.findBySectorForBot('crypto', bot.id);
 
       // Assert - Should not contain expired user
-      const resultUserIds = queryResult.map((r) => r.userId);
-      expect(resultUserIds).not.toContain(user.telegramId);
+      const resultUserIds = queryResult.map((r) => r.userTelegramId);
+      expect(resultUserIds).not.toContain(String(user.telegramId));
     });
   });
 
@@ -431,7 +449,9 @@ describe('SubscriptionsRepository Integration Tests', () => {
       const result = await repository.findBySectorForBot('crypto', bot.id);
 
       // Assert
-      const userResult = result.find((r) => r.userId === user.telegramId);
+      const userResult = result.find(
+        (r) => r.userTelegramId === String(user.telegramId),
+      );
       expect(userResult).toBeDefined();
       expect(userResult?.hasCustomFiltering).toBe(true);
     });
@@ -453,7 +473,9 @@ describe('SubscriptionsRepository Integration Tests', () => {
       const result = await repository.findBySectorForBot('forex', bot.id);
 
       // Assert
-      const userResult = result.find((r) => r.userId === user.telegramId);
+      const userResult = result.find(
+        (r) => r.userTelegramId === String(user.telegramId),
+      );
       expect(userResult).toBeDefined();
       expect(userResult?.hasCustomFiltering).toBe(false);
     });
@@ -477,8 +499,8 @@ describe('SubscriptionsRepository Integration Tests', () => {
       const result = await repository.findBySectorForBot('any_sector', bot.id);
 
       // Assert
-      const resultUserIds = result.map((r) => r.userId);
-      expect(resultUserIds).toContain(user.telegramId);
+      const resultUserIds = result.map((r) => r.userTelegramId);
+      expect(resultUserIds).toContain(String(user.telegramId));
     });
   });
 
@@ -491,11 +513,12 @@ describe('SubscriptionsRepository Integration Tests', () => {
       if (!process.env.DATABASE_URL) return;
 
       // Arrange
+      const bot = await createTestBot();
       const user = await createTestUser();
       const subscription = await createTestSubscription('crypto');
 
-      // Create user subscription (botId null for static bot)
-      await createUserSubscription(user.telegramId, subscription.id, null);
+      // Create user subscription with botId
+      await createUserSubscription(user.telegramId, subscription.id, bot.id);
 
       // Act - Use existing findBySector method
       const result = await repository.findBySector('crypto');

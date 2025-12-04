@@ -456,7 +456,7 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
         first_name: 'Test',
         language_code: 'en',
       },
-      reply: jest.fn(),
+      reply: jest.fn().mockResolvedValue(undefined),
     };
 
     // Mock findByUserAndBot to return botUser with no state
@@ -469,9 +469,10 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
       'en',
     );
 
-    // Welcome message and channel prompt messages
+    // Welcome message, change language button, and channel prompt messages
     (mockBotMessagesRepository.resolveMessage as jest.Mock)
       .mockResolvedValueOnce('Welcome to the partner bot!') // partner_welcome
+      .mockResolvedValueOnce('Change language') // change_language_button
       .mockResolvedValueOnce('Please subscribe to {channelUrl}'); // partner_channel_prompt
 
     // Act
@@ -485,6 +486,11 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
     );
     expect(mockContext.reply).toHaveBeenCalledWith(
       'Welcome to the partner bot!',
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.any(Array),
+        }),
+      }),
     );
 
     // Assert - should initialize state to awaiting_channel_subscription
@@ -580,8 +586,11 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
     // Assert - ctx.botUser.state is accessible for state checks
     expect(mockContext.botUser?.state).toBeDefined();
     expect(
-      (mockContext.botUser?.state as { sceneData?: { verificationState?: string } })
-        ?.sceneData?.verificationState,
+      (
+        mockContext.botUser?.state as {
+          sceneData?: { verificationState?: string };
+        }
+      )?.sceneData?.verificationState,
     ).toBe('trial_activated');
 
     // Assert - subscription query uses botUser.id (botUserId), not telegramId

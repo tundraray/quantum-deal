@@ -54,8 +54,6 @@ describe('BotUsersRepository Integration Tests', () => {
     username: `TestUser_${Date.now()}`,
     firstName: 'Test',
     lastName: 'User',
-    lang: 'en',
-    isActive: true,
     ...overrides,
   });
 
@@ -392,12 +390,10 @@ describe('BotUsersRepository Integration Tests', () => {
       const activeUser = await createAndTrackUser({
         firstName: 'Active',
         lastName: 'User',
-        isActive: true,
       });
       const inactiveUser = await createAndTrackUser({
         firstName: 'Inactive',
         lastName: 'User',
-        isActive: false,
       });
       const bot = await createAndTrackBot();
 
@@ -412,7 +408,7 @@ describe('BotUsersRepository Integration Tests', () => {
       const inactiveBotUser = await repository.create({
         userId: inactiveUser.telegramId,
         botId: bot.id,
-        isActive: true, // bot_users.isActive is true, but users.isActive is false
+        isActive: false, // bot_users.isActive is false means user blocked the bot
       });
       trackBotUser(inactiveBotUser);
 
@@ -444,7 +440,7 @@ describe('BotUsersRepository Integration Tests', () => {
       }
 
       // Arrange
-      const user = await createAndTrackUser({ isActive: true });
+      const user = await createAndTrackUser();
       const bot = await createAndTrackBot();
 
       // Create inactive bot-user record (user blocked the bot)
@@ -472,8 +468,8 @@ describe('BotUsersRepository Integration Tests', () => {
         return;
       }
 
-      // Arrange - User has global lang 'en', bot_users has 'de'
-      const user = await createAndTrackUser({ lang: 'en' });
+      // Arrange - User exists, bot_users has 'de'
+      const user = await createAndTrackUser();
       const bot = await createAndTrackBot();
 
       const botUser = await repository.create({
@@ -500,8 +496,8 @@ describe('BotUsersRepository Integration Tests', () => {
         return;
       }
 
-      // Arrange - User has global lang 'ru', bot_users has no lang
-      const user = await createAndTrackUser({ lang: 'ru' });
+      // Arrange - User exists, bot_users has no lang
+      const user = await createAndTrackUser();
       const bot = await createAndTrackBot();
 
       const botUser = await repository.create({
@@ -518,8 +514,8 @@ describe('BotUsersRepository Integration Tests', () => {
         'fr',
       );
 
-      // Assert - Should fall back to users.lang
-      expect(result).toBe('ru');
+      // Assert - Should fall back to default since no bot_users.lang
+      expect(result).toBe('fr');
     });
 
     it('AC-3.4: resolveLanguage() returns default lang if both are null', async () => {
@@ -528,8 +524,8 @@ describe('BotUsersRepository Integration Tests', () => {
         return;
       }
 
-      // Arrange - User has no lang, bot_users has no lang
-      const user = await createAndTrackUser({ lang: undefined });
+      // Arrange - User exists, bot_users has no lang
+      const user = await createAndTrackUser();
       const bot = await createAndTrackBot();
 
       const botUser = await repository.create({
@@ -556,8 +552,8 @@ describe('BotUsersRepository Integration Tests', () => {
         return;
       }
 
-      // Arrange - User exists with lang 'pt', but no bot_user record
-      const user = await createAndTrackUser({ lang: 'pt' });
+      // Arrange - User exists, but no bot_user record
+      const user = await createAndTrackUser();
       const bot = await createAndTrackBot();
       // Don't create bot_user record
 
@@ -568,8 +564,8 @@ describe('BotUsersRepository Integration Tests', () => {
         'en',
       );
 
-      // Assert - Should fall back to users.lang
-      expect(result).toBe('pt');
+      // Assert - Should fall back to default since no bot_user record
+      expect(result).toBe('en');
     });
   });
 

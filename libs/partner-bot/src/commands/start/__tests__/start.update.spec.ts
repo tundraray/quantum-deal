@@ -100,6 +100,11 @@ describe('StartCommandUpdate', () => {
       );
       expect(mockContext.reply).toHaveBeenCalledWith(
         'Welcome to the partner bot! Here you can activate trial access to our channels.',
+        expect.objectContaining({
+          reply_markup: expect.objectContaining({
+            inline_keyboard: expect.any(Array),
+          }),
+        }),
       );
     });
 
@@ -437,7 +442,14 @@ describe('StartCommandUpdate', () => {
         'partner_welcome',
         'en',
       );
-      expect(mockContext.reply).toHaveBeenCalledWith('Welcome message');
+      expect(mockContext.reply).toHaveBeenCalledWith(
+        'Welcome message',
+        expect.objectContaining({
+          reply_markup: expect.objectContaining({
+            inline_keyboard: expect.any(Array),
+          }),
+        }),
+      );
 
       // Assert - should initialize state
       expect(mockBotUsersRepository.updateState).toHaveBeenCalledWith(

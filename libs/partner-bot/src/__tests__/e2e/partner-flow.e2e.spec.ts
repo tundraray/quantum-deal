@@ -160,7 +160,9 @@ describe('Partner Bot Flow E2E Tests', () => {
     // Mock messages
     mockBotMessagesRepository.resolveMessage
       .mockResolvedValueOnce('Welcome to Partner Bot! 🎉') // partner_welcome
+      .mockResolvedValueOnce('🌐 Change language') // change_language_button
       .mockResolvedValueOnce('Please subscribe to {channelUrl} ({channelName})') // partner_channel_prompt
+      .mockResolvedValueOnce('I subscribed ✅') // partner_verification_button
       .mockResolvedValueOnce(
         'Trial activated! Expires: {expiryDate} ({daysRemaining} days)',
       ); // partner_trial_activated
@@ -219,9 +221,14 @@ describe('Partner Bot Flow E2E Tests', () => {
     // Step 1: User sends /start command
     await startCommandUpdate.handleStart(mockStartCtx as any);
 
-    // Verify welcome message sent
+    // Verify welcome message sent (with change language button)
     expect(mockStartCtx.reply).toHaveBeenCalledWith(
       'Welcome to Partner Bot! 🎉',
+      expect.objectContaining({
+        reply_markup: expect.objectContaining({
+          inline_keyboard: expect.any(Array),
+        }),
+      }),
     );
 
     // Verify channel prompt sent with interpolated variables

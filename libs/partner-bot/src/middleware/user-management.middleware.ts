@@ -63,9 +63,6 @@ export class UserDynamicManagementMiddleware {
       }
 
       if (botId) {
-        this.logger.warn(
-          `Bot "${botId}" not found in database. Using legacy userId flow.`,
-        );
         // Fall back to legacy flow if bot not found
         const user = await this.upsertUser(ctx.from);
         const botUser = await this.botUsersRepository.findOrCreate(

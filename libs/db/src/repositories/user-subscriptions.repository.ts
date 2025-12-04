@@ -156,6 +156,7 @@ export class UserSubscriptionsRepository extends BaseRepository<
    */
   async findActiveUsersWithActiveSubscription(
     subscriptionType?: string,
+    botId?: number,
   ): Promise<
     Array<{
       botUser: BotUser;
@@ -171,6 +172,7 @@ export class UserSubscriptionsRepository extends BaseRepository<
       eq(subscriptions.isActive, true),
       sql`${this.table.expiresAt} IS NOT NULL`,
       sql`${this.table.expiresAt} >= ${now}`,
+      eq(botUsers.botId, botId ?? 0),
     ];
 
     // Add optional subscription type filter
