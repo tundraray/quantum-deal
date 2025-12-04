@@ -46,7 +46,6 @@ const mockTelegram = {
 };
 
 jest.mock('telegraf', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const actual = jest.requireActual<typeof import('telegraf')>('telegraf');
   return {
     ...actual,

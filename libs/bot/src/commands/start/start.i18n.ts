@@ -58,7 +58,7 @@ function formatTrialButtonDuration(lang: string, days: number): string {
   }
 }
 
-export const startMessages = {
+const startMessages = {
   ru: {
     // Error messages
     registrationRequired:
@@ -208,7 +208,7 @@ export const startMessages = {
   },
 };
 
-export type StartLang = keyof typeof startMessages;
+type StartLang = keyof typeof startMessages;
 
 /**
  * Get localized message for start command

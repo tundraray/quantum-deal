@@ -1,6 +1,5 @@
 import { Injectable, Logger, UseFilters } from '@nestjs/common';
 import { Action, Ctx, InjectBot, Update } from '@quantumdeal/telegraf';
-import { Telegraf } from 'telegraf';
 import { ConfigService } from '@nestjs/config';
 import type { UserContext } from '../../interfaces';
 import { TrialService } from '../../services/trial.service';
@@ -16,7 +15,6 @@ export class TrialAction {
 
   constructor(
     @InjectBot('QuantumDealBot')
-    private readonly bot: Telegraf<UserContext>,
     private readonly trialService: TrialService,
     private readonly botCommandsService: BotCommandsService,
     private readonly configService: ConfigService,

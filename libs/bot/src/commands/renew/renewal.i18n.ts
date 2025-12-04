@@ -4,7 +4,7 @@
  * Multi-language support for subscription renewal UI
  */
 
-export const renewalMessages = {
+const renewalMessages = {
   ru: {
     // Commands and Actions
     registrationRequired:
@@ -589,7 +589,7 @@ export const renewalMessages = {
   },
 };
 
-export type RenewalLang = keyof typeof renewalMessages;
+type RenewalLang = keyof typeof renewalMessages;
 
 /**
  * Get localized message

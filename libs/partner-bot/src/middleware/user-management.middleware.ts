@@ -8,13 +8,8 @@ import {
   BotUsersRepository,
   BotUser,
 } from '@quantumdeal/db';
-import { FeatureFlag, FeatureConfig } from '@quantumdeal/db/schema';
-import {
-  UserContext,
-  UserWithSubscriptions,
-  PartnerBotContext,
-} from '../interfaces';
-// import { FeatureFlagService } from '../services/feature-flag.service'; // TODO: Implement if needed
+import { UserContext, UserWithSubscriptions } from '../interfaces';
+import { FeatureFlagService } from '@quantumdeal/bot/services/feature-flag.service';
 
 /**
  * Middleware that handles user authentication and creation for Telegram bot
@@ -26,15 +21,21 @@ import {
  * - Loads feature flags via FeatureFlagService
  * - Attaches the enriched user to the context for further use
  */
+/**
+ * Default bot name for static bot middleware.
+ * This is the main QuantumDealBot that is configured via environment variables
+ * and uses nest-telegraf (not dynamic loading).
+ */
+
 @Injectable()
-export class UserManagementMiddleware {
-  private readonly logger = new Logger(UserManagementMiddleware.name);
+export class UserDynamicManagementMiddleware {
+  private readonly logger = new Logger(UserDynamicManagementMiddleware.name);
 
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
+    private readonly featureFlagService: FeatureFlagService,
     private readonly botUsersRepository: BotUsersRepository,
-    // private readonly featureFlagService: FeatureFlagService, // TODO: Implement if needed
   ) {
     this.logger.debug('User management middleware constructor');
   }
@@ -53,12 +54,38 @@ export class UserManagementMiddleware {
         return;
       }
 
-      // Get botId from context (injected by DynamicTelegrafService middleware)
-      const botId = (ctx as PartnerBotContext).botId;
+      // Resolve default bot ID if not cached
+      const botId = (ctx as { botId?: number }).botId;
+
       if (!botId) {
-        this.logger.error(
-          'botId not available in partner-bot context. Ensure middleware is used with DynamicTelegrafService.',
+        this.logger.error('botId not available in context');
+        throw new Error('botId not available in context');
+      }
+
+      if (botId) {
+        // Fall back to legacy flow if bot not found
+        const user = await this.upsertUser(ctx.from);
+        const botUser = await this.botUsersRepository.findOrCreate(
+          user.telegramId,
+          botId,
+          {
+            lang: ctx.from.language_code || 'en',
+            isActive: true,
+          },
         );
+        const userWithSubscriptions = await this.loadUserWithSubscriptions(
+          {
+            telegramId: user.telegramId,
+            username: user.username,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            lang: ctx.from.language_code || 'en',
+            isPremium: user.isPremium ?? false,
+            createdAt: user.createdAt,
+          },
+          botUser,
+        );
+        (ctx as UserContext).user = userWithSubscriptions;
         await next();
         return;
       }
@@ -77,7 +104,7 @@ export class UserManagementMiddleware {
       );
 
       // Attach botUser to context for downstream services (e.g., TrialService)
-      (ctx as PartnerBotContext & { botUser?: BotUser }).botUser = botUser;
+      (ctx as UserContext & { botUser?: BotUser }).botUser = botUser;
 
       // Attach user to context with subscriptions (using botUserId)
       const userWithSubscriptions = await this.loadUserWithSubscriptions(
@@ -86,7 +113,7 @@ export class UserManagementMiddleware {
           username: user.username,
           firstName: user.firstName,
           lastName: user.lastName,
-          lang: ctx.from.language_code || 'en',
+          lang: botUser.lang,
           isPremium: user.isPremium ?? false,
           createdAt: user.createdAt,
         },
@@ -131,7 +158,7 @@ export class UserManagementMiddleware {
    *
    * This method:
    * 1. Loads active subscriptions with subscription details using botUserId
-   * 2. Loads feature flags via FeatureFlagService (TODO: Implement if needed)
+   * 2. Loads feature flags via FeatureFlagService
    * 3. Returns enriched UserWithSubscriptions DTO
    *
    * @param user - Raw user entity from database
@@ -151,34 +178,30 @@ export class UserManagementMiddleware {
     botUser: BotUser,
   ): Promise<UserWithSubscriptions> {
     // Load active subscriptions with subscription details using botUserId
-
     const subscriptions =
       await this.userSubscriptionsRepository.findActiveByBotUserIdWithSubscription(
         botUser.id,
       );
 
     // Load feature flags for this user
-    // TODO: Implement FeatureFlagService if needed
-    // const { enabledFeatures, featureConfigs } =
-    //   await this.featureFlagService.getUserFeatures(user.telegramId);
-    const enabledFeatures = new Set<FeatureFlag>();
-    const featureConfigs = new Map<FeatureFlag, FeatureConfig>();
+    const { enabledFeatures, featureConfigs } =
+      await this.featureFlagService.getUserFeatures(botUser.id);
 
     this.logger.debug(
-      `Loaded ${subscriptions.length} subscriptions and ${enabledFeatures.size} features for user ${user.telegramId} (botUserId: ${botUser.id})`,
+      `Loaded ${subscriptions.length} subscriptions and ${enabledFeatures.size} features for bot user ${botUser.id}`,
     );
 
     // Map to UserWithSubscriptions DTO
     return {
-      botUserId: botUser.id,
       telegramId: user.telegramId,
+      botUserId: botUser.id,
       username: user.username,
       firstName: user.firstName,
       lastName: user.lastName,
-      lang: botUser.lang,
+      lang: user.lang,
       isPremium: user.isPremium ?? false,
       isActive: botUser.isActive,
-      createdAt: botUser.createdAt,
+      createdAt: user.createdAt,
       activeSubscriptions: subscriptions.map((s) => ({
         subscriptionId: s.subscription.id,
         name: s.subscription.name,

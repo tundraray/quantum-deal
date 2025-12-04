@@ -443,7 +443,7 @@ describe('MultiBotSignalService', () => {
       // Assert
       expect(result.totalSent).toBe(1);
       expect(
-        userSubscriptionFeaturesRepository.getUserFeatureSettings,
+        userSubscriptionFeaturesRepository.getBotUserFeatureSettings,
       ).not.toHaveBeenCalled();
     });
 
@@ -458,11 +458,10 @@ describe('MultiBotSignalService', () => {
       ]);
 
       // User's filter does not include BTCUSD
-      userSubscriptionFeaturesRepository.getUserFeatureSettings.mockResolvedValue(
+      userSubscriptionFeaturesRepository.getBotUserFeatureSettings.mockResolvedValue(
         {
           id: 1,
-          userId: 123456,
-          botUserId: null,
+          botUserId: 1,
           featureKey: FeatureFlag.CUSTOM_USER_FILTERING,
           isActive: true,
           settings: { symbols: ['ETHUSD', 'XRPUSD'] },
@@ -490,11 +489,10 @@ describe('MultiBotSignalService', () => {
       ]);
 
       // User's filter includes BTCUSD
-      userSubscriptionFeaturesRepository.getUserFeatureSettings.mockResolvedValue(
+      userSubscriptionFeaturesRepository.getBotUserFeatureSettings.mockResolvedValue(
         {
           id: 1,
-          userId: 123456,
-          botUserId: null,
+          botUserId: 1,
           featureKey: FeatureFlag.CUSTOM_USER_FILTERING,
           isActive: true,
           settings: { symbols: ['BTCUSD', 'ETHUSD'] },
@@ -522,11 +520,10 @@ describe('MultiBotSignalService', () => {
       ]);
 
       // Empty symbol list means send all
-      userSubscriptionFeaturesRepository.getUserFeatureSettings.mockResolvedValue(
+      userSubscriptionFeaturesRepository.getBotUserFeatureSettings.mockResolvedValue(
         {
           id: 1,
-          userId: 123456,
-          botUserId: null,
+          botUserId: 1,
           featureKey: FeatureFlag.CUSTOM_USER_FILTERING,
           isActive: true,
           settings: { symbols: [] },

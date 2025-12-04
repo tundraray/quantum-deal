@@ -471,7 +471,7 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
 
       // Mock metadataScanner to scan prototype methods
       (mockMetadataScanner.scanFromPrototype as jest.Mock).mockImplementation(
-        (instance, prototype, callback) => {
+        (_instance, _prototype, callback) => {
           // Simulate scanning methods
           callback('onStart');
           callback('onHelp');
@@ -603,7 +603,7 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
 
       // Mock metadataScanner to scan prototype methods
       (mockMetadataScanner.scanFromPrototype as jest.Mock).mockImplementation(
-        (instance, prototype, callback) => {
+        (_instance, _prototype, callback) => {
           callback('onStart');
         },
       );
@@ -678,7 +678,7 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
 
       // Mock metadataScanner to scan prototype methods
       (mockMetadataScanner.scanFromPrototype as jest.Mock).mockImplementation(
-        (instance, prototype, callback) => {
+        (_instance, _prototype, callback) => {
           callback('onStart');
         },
       );

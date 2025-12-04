@@ -58,39 +58,6 @@ export class RenewUpdate {
   }
 
   /**
-   * DEPRECATED: Moved to RenewalAction class
-   *
-   * This handler has been replaced by @Action('open_renewal_scene') in RenewalAction.
-   * Using @On('callback_query') caused conflicts with other callback handlers.
-   *
-   * See: libs/bot/src/actions/renewal.action.ts - handleOpenRenewalScene()
-   */
-  // @On('callback_query')
-  // async onOpenRenewalScene(@Ctx() ctx: UserContext): Promise<void> {
-  //   const callbackData = ctx.callbackQuery?.['data'] as unknown;
-  //
-  //   if (
-  //     typeof callbackData !== 'string' ||
-  //     callbackData !== 'open_renewal_scene'
-  //   ) {
-  //     return;
-  //   }
-  //
-  //   if (!ctx.user) {
-  //     await ctx.answerCbQuery('User not found. Please use /start first.');
-  //     return;
-  //   }
-  //
-  //   try {
-  //     // Handle renewal button click from expiration notification
-  //     await ctx.scene.enter(RENEWAL_SCENE_ID);
-  //   } catch (error) {
-  //     this.logger.error('Error opening renewal scene from callback', error);
-  //     await ctx.answerCbQuery('An error occurred. Please try /renew command.');
-  //   }
-  // }
-
-  /**
    * Handle pre-checkout query for payment validation
    *
    * Called before Stars are deducted from user's account.

@@ -42,7 +42,10 @@ export class TrialService {
    * Creates user_subscription record with configurable expiration (TRIAL_DURATION_DAYS)
    * @param botUserId - The bot_users.id (NOT telegramId)
    */
-  async activate(botUserId: number): Promise<{
+  async activate(
+    botUserId: number,
+    trialDays?: number,
+  ): Promise<{
     success: boolean;
     expiresAt?: Date;
     error?: string;
@@ -65,10 +68,8 @@ export class TrialService {
       }
 
       // Get trial duration from config
-      const durationDays = this.configService.get<number>(
-        'TRIAL_DURATION_DAYS',
-        7,
-      );
+      const durationDays =
+        trialDays ?? this.configService.get<number>('TRIAL_DURATION_DAYS', 7);
 
       // Calculate expiration date
       const expiresAt = new Date();

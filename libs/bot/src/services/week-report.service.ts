@@ -2,9 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import {
-  UsersRepository,
   OrdersRepository,
-  SubscriptionsRepository,
   UserSubscriptionsRepository,
   SubscriptionFeaturesRepository,
   MessagesRepository,
@@ -67,7 +65,7 @@ interface ClientSubscription {
   readonly lang?: string | null;
   readonly subscriptionId: number;
   readonly subscriptionName: string;
-  readonly subscriptionScope: null | string[];
+  readonly subscriptionSectors: string[]; // Sectors from subscription_features.config.sectors
   readonly subscriptionExpirationDate: Date;
 }
 
@@ -83,7 +81,7 @@ interface ClientWeeklyReportData {
     readonly subscription: {
       readonly id: number;
       readonly name: string;
-      readonly scope: null | string[];
+      readonly sectors: string[]; // Sectors from subscription_features.config.sectors
       readonly expirationDate: Date;
     };
   };
@@ -112,9 +110,7 @@ export class WeekReportService {
   private readonly logger = new Logger(WeekReportService.name);
 
   constructor(
-    private readonly usersRepository: UsersRepository,
     private readonly ordersRepository: OrdersRepository,
-    private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly messagesRepository: MessagesRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly subscriptionFeaturesRepository: SubscriptionFeaturesRepository,
@@ -313,27 +309,35 @@ export class WeekReportService {
       const results =
         await this.userSubscriptionsRepository.findActiveUsersWithActiveSubscription(
           'signals',
+          1,
         );
 
       if (results.length === 0) {
         return [];
       }
 
-      // Transform to ClientSubscription format
-      const clientSubscriptions: ClientSubscription[] = results.map(
-        (result) => ({
-          telegramId: result.botUser.userId,
-          botUserId: result.botUser.id,
-          botId: result.botUser.botId,
-          firstName: result.user.firstName,
-          lastName: result.user.lastName,
-          username: result.user.username,
-          lang: result.botUser.lang,
-          subscriptionId: result.subscription.id,
-          subscriptionName: result.subscription.name,
-          subscriptionScope: result.subscription.scope,
-          subscriptionExpirationDate:
-            result.userSubscription.expiresAt || new Date(),
+      // Transform to ClientSubscription format with sectors from subscription_features
+      const clientSubscriptions: ClientSubscription[] = await Promise.all(
+        results.map(async (result) => {
+          // Get sectors from TIER_BASED_FILTERING feature config
+          const sectors = await this.getSubscriptionSectors(
+            result.subscription.id,
+          );
+
+          return {
+            telegramId: result.botUser.userId,
+            botUserId: result.botUser.id,
+            botId: result.botUser.botId,
+            firstName: result.user.firstName,
+            lastName: result.user.lastName,
+            username: result.user.username,
+            lang: result.botUser.lang,
+            subscriptionId: result.subscription.id,
+            subscriptionName: result.subscription.name,
+            subscriptionSectors: sectors,
+            subscriptionExpirationDate:
+              result.userSubscription.expiresAt || new Date(),
+          };
         }),
       );
 
@@ -343,6 +347,38 @@ export class WeekReportService {
       this.logger.error(
         `Failed to get active clients with subscriptions: ${err.message}`,
         err.stack,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Get sectors from subscription_features.config.sectors for TIER_BASED_FILTERING feature
+   * Returns empty array if feature not found or no sectors configured
+   */
+  private async getSubscriptionSectors(
+    subscriptionId: number,
+  ): Promise<string[]> {
+    try {
+      const feature = await this.subscriptionFeaturesRepository.getFeature(
+        subscriptionId,
+        FeatureFlag.TIER_BASED_FILTERING,
+      );
+
+      if (!feature || !feature.isEnabled || !feature.config) {
+        return [];
+      }
+
+      const sectors = feature.config.sectors;
+      if (Array.isArray(sectors)) {
+        return sectors.filter((s): s is string => typeof s === 'string');
+      }
+
+      return [];
+    } catch (error) {
+      const err = error as Error;
+      this.logger.warn(
+        `Failed to get sectors for subscription ${subscriptionId}: ${err.message}`,
       );
       return [];
     }
@@ -362,7 +398,7 @@ export class WeekReportService {
         client.botUserId,
         startDate,
         endDate,
-        client.subscriptionScope,
+        client.subscriptionSectors,
       );
 
       // Build client-specific report data
@@ -378,7 +414,7 @@ export class WeekReportService {
           subscription: {
             id: client.subscriptionId,
             name: client.subscriptionName,
-            scope: client.subscriptionScope,
+            sectors: client.subscriptionSectors,
             expirationDate: client.subscriptionExpirationDate,
           },
         },
@@ -407,19 +443,18 @@ export class WeekReportService {
     botUserId: number,
     startDate: Date,
     endDate: Date,
-    subscriptionScope: unknown,
+    subscriptionSectors: string[],
   ): Promise<TradingActivityStats> {
     this.logger.debug(
       `Gathering client-specific trading activity data for bot user ${botUserId}`,
     );
 
     try {
-      // Determine which sectors to include
-      const allowedSectors = this.extractAllowedSectors(subscriptionScope);
-      const isAllSectors = allowedSectors.includes('*');
+      // Use sectors directly from subscription_features.config.sectors
+      const isAllSectors = subscriptionSectors.includes('*');
 
       this.logger.debug(
-        `Client subscription allows sectors: ${isAllSectors ? 'ALL' : allowedSectors.join(', ')}`,
+        `Client subscription allows sectors: ${isAllSectors ? 'ALL' : subscriptionSectors.join(', ')}`,
       );
 
       const allTradingActivity = await this.ordersRepository.findByEventPeriod(
@@ -432,7 +467,7 @@ export class WeekReportService {
         : await this.ordersRepository.findByEventPeriod(
             startDate,
             endDate,
-            allowedSectors,
+            subscriptionSectors,
           );
 
       // Calculate instrument filtering statistics (for CUSTOM_USER_FILTERING feature)
@@ -627,50 +662,6 @@ export class WeekReportService {
     }
   }
 
-  private extractAllowedSectors(subscriptionScope: unknown): string[] {
-    if (!subscriptionScope) {
-      return [];
-    }
-
-    // Handle different scope formats
-    if (typeof subscriptionScope === 'string') {
-      return subscriptionScope === '*' ? ['*'] : [subscriptionScope];
-    }
-
-    if (Array.isArray(subscriptionScope)) {
-      return subscriptionScope.filter((sector) => typeof sector === 'string');
-    }
-
-    if (typeof subscriptionScope === 'object' && subscriptionScope !== null) {
-      const scope = subscriptionScope as Record<string, unknown>;
-
-      if ('sectors' in scope) {
-        const sectors = scope.sectors;
-        if (sectors === '*') {
-          return ['*'];
-        }
-        if (Array.isArray(sectors)) {
-          return sectors.filter(
-            (sector): sector is string => typeof sector === 'string',
-          );
-        }
-        if (typeof sectors === 'string') {
-          return [sectors];
-        }
-      }
-
-      if ('*' in scope && scope['*']) {
-        return ['*'];
-      }
-
-      return Object.keys(scope).filter(
-        (key) => typeof key === 'string' && scope[key] === true,
-      );
-    }
-
-    return [];
-  }
-
   private calculateProfitLossFromOrders(orders: Order[]): {
     profitableOrders: number;
     lossingOrders: number;
@@ -720,9 +711,9 @@ export class WeekReportService {
     try {
       const reportMessage = await this.formatClientWeeklyReport(clientReport);
 
-      // Check if user has VIP subscription
+      // Check if user has VIP subscription (sectors contains '*' means all sectors)
       const isVipSubscription =
-        clientReport.client.subscription.scope?.includes('*');
+        clientReport.client.subscription.sectors.includes('*');
 
       // Create upgrade button for non-VIP users
       const buttons = isVipSubscription
@@ -777,7 +768,7 @@ export class WeekReportService {
     // Determine template name based on subscription and filter status
     // VIP users with active filters get special template with filter stats
     const hasActiveFilters = filteredStats !== undefined;
-    const isVipSubscription = data.client.subscription.scope?.includes('*');
+    const isVipSubscription = data.client.subscription.sectors.includes('*');
 
     let templateName: string;
     if (hasActiveFilters && isVipSubscription) {

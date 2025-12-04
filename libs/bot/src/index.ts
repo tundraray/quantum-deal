@@ -10,3 +10,4 @@ export * from './services/bot-commands.service';
 export * from './constants';
 export * from './middleware';
 export * from './interfaces';
+export * from './lang';

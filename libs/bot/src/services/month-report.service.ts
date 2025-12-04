@@ -3,9 +3,7 @@ import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 
 import {
-  UsersRepository,
   OrdersRepository,
-  SubscriptionsRepository,
   UserSubscriptionsRepository,
   MessagesRepository,
   Order,
@@ -40,7 +38,6 @@ interface ClientSubscription {
   readonly lang?: string | null;
   readonly subscriptionId: number;
   readonly subscriptionName: string;
-  readonly subscriptionScope: unknown;
   readonly subscriptionExpirationDate: Date;
 }
 
@@ -55,7 +52,6 @@ interface ClientMonthlyReportData {
     readonly lang?: string | null;
     readonly subscription: {
       readonly id: number;
-      readonly scope: unknown;
       readonly expirationDate: Date;
     };
   };
@@ -91,9 +87,7 @@ export class MonthReportService {
   private readonly logger = new Logger(MonthReportService.name);
 
   constructor(
-    private readonly usersRepository: UsersRepository,
     private readonly ordersRepository: OrdersRepository,
-    private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly messagesRepository: MessagesRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly notificationService: NotificationService,
@@ -283,6 +277,7 @@ export class MonthReportService {
       const results =
         await this.userSubscriptionsRepository.findActiveUsersWithActiveSubscription(
           'signals',
+          1,
         );
 
       if (results.length === 0) {
@@ -300,7 +295,6 @@ export class MonthReportService {
           lang: result.botUser.lang,
           subscriptionId: result.subscription.id,
           subscriptionName: result.subscription.name,
-          subscriptionScope: result.subscription.scope,
           subscriptionExpirationDate:
             result.userSubscription.expiresAt || new Date(),
         }),
@@ -476,7 +470,6 @@ export class MonthReportService {
           lang: client.lang,
           subscription: {
             id: client.subscriptionId,
-            scope: client.subscriptionScope,
             expirationDate: client.subscriptionExpirationDate,
           },
         },

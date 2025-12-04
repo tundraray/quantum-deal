@@ -119,53 +119,6 @@ export interface UserWithSubscriptions {
 }
 
 /**
- * Helper type guard to check if user has any active subscriptions
- */
-export function hasActiveSubscriptions(user: UserWithSubscriptions): boolean {
-  return user.activeSubscriptions.length > 0;
-}
-
-/**
- * Helper function to check if user has a specific subscription type
- */
-export function hasSubscriptionType(
-  user: UserWithSubscriptions,
-  type: string,
-): boolean {
-  return user.activeSubscriptions.some(
-    (sub) => sub.type === type && sub.isActive,
-  );
-}
-
-/**
- * Helper function to get active subscription by type
- */
-export function getActiveSubscriptionByType(
-  user: UserWithSubscriptions,
-  type: string,
-): ActiveSubscriptionDto | undefined {
-  return user.activeSubscriptions.find(
-    (sub) => sub.type === type && sub.isActive,
-  );
-}
-
-/**
- * Helper function to check if user has any signals subscription
- */
-export function hasSignalsSubscription(user: UserWithSubscriptions): boolean {
-  return hasSubscriptionType(user, 'signals');
-}
-
-/**
- * Helper function to check if user has any broadcast subscription
- */
-export function hasBroadcastSubscription(user: UserWithSubscriptions): boolean {
-  return user.activeSubscriptions.some(
-    (sub) => sub.type.startsWith('subscription_') && sub.isActive,
-  );
-}
-
-/**
  * Helper function to check if user has a specific feature
  *
  * Use this for conditional logic and UI rendering.
@@ -180,54 +133,4 @@ export function hasFeature(
   feature: FeatureFlag,
 ): boolean {
   return user.enabledFeatures.has(feature);
-}
-
-/**
- * Helper function to get feature configuration
- *
- * Returns the configuration object for a feature if user has it enabled.
- * Useful for getting feature-specific settings.
- *
- * @param user - User with subscriptions and features
- * @param feature - The feature to get config for
- * @returns Feature configuration or null if not enabled
- */
-export function getFeatureConfig<T = FeatureConfig>(
-  user: UserWithSubscriptions,
-  feature: FeatureFlag,
-): T | null {
-  const config = user.featureConfigs.get(feature);
-  return (config as T) || null;
-}
-
-/**
- * Helper function to check if user has multiple features
- *
- * Returns true only if user has ALL specified features.
- *
- * @param user - User with subscriptions and features
- * @param features - Array of features to check
- * @returns true if user has all features
- */
-export function hasAllFeatures(
-  user: UserWithSubscriptions,
-  features: FeatureFlag[],
-): boolean {
-  return features.every((feature) => user.enabledFeatures.has(feature));
-}
-
-/**
- * Helper function to check if user has any of the specified features
- *
- * Returns true if user has AT LEAST ONE of the specified features.
- *
- * @param user - User with subscriptions and features
- * @param features - Array of features to check
- * @returns true if user has at least one feature
- */
-export function hasAnyFeature(
-  user: UserWithSubscriptions,
-  features: FeatureFlag[],
-): boolean {
-  return features.some((feature) => user.enabledFeatures.has(feature));
 }

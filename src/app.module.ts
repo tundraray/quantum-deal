@@ -15,8 +15,9 @@ import { FrameworkModule, SentryModule } from '@quantumdeal/framework';
 import { session } from 'telegraf';
 import { WebhookService } from './webhook.service';
 import { PartnerBotModule } from '@quantumdeal/partner-bot';
+import { UserDynamicManagementMiddleware } from '@quantumdeal/partner-bot/middleware/user-management.middleware';
 
-export const sessionMiddleware = session();
+const sessionMiddleware = session();
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -82,12 +83,43 @@ export const sessionMiddleware = session();
       }),
     }),
 
+    TelegrafModule.forRootDynamicAsync({
+      botConfigProvider: DynamicBotConfigService,
+      sharedHandlerModules: [PartnerBotModule],
+      imports: [DbModule, ConfigModule, PartnerBotModule],
+      useFactory: (
+        configService: ConfigService,
+        userMiddleware: UserDynamicManagementMiddleware,
+      ) => ({
+        webhookDomain: configService.getOrThrow<string>(
+          'TELEGRAM_BOT_WEBHOOK_DOMAIN',
+        ),
+        globalMiddlewares: [
+          sessionMiddleware,
+          userMiddleware.use.bind(userMiddleware),
+        ],
+        middlewareFactory: (botConfig) => [
+          async (ctx, next) => {
+            (ctx as { botId?: number }).botId = botConfig.id;
+            await next();
+          },
+        ],
+      }),
+      inject: [ConfigService, UserDynamicManagementMiddleware],
+    }),
+
     // Dynamic bots loaded from database
+    /*
     TelegrafModule.forRootDynamic({
       botConfigProvider: DynamicBotConfigService,
       sharedHandlerModules: [PartnerBotModule],
       webhookDomain: process.env.TELEGRAM_BOT_WEBHOOK_DOMAIN ?? '',
-      imports: [DbModule, ConfigModule, PartnerBotModule],
+      imports: [
+        DbModule,
+        ConfigModule,
+        PartnerBotModule,
+        UserManagementMiddleware,
+      ],
       globalMiddlewares: [sessionMiddleware],
       // Inject botId into context for each dynamic bot
       middlewareFactory: (botConfig) => [
@@ -99,6 +131,7 @@ export const sessionMiddleware = session();
         },
       ],
     }),
+    */
   ],
   controllers: [WebhookController],
   providers: [WebhookService, OrdersRepository],

@@ -8,7 +8,7 @@
  * Pluralize trial duration for each language
  * Handles complex pluralization rules (Russian/Ukrainian: 3 forms, English/French: 2 forms, others: 1 form)
  */
-export function pluralizeTrialDuration(lang: string, days: number): string {
+function pluralizeTrialDuration(lang: string, days: number): string {
   switch (lang) {
     case 'ru':
       // Russian: 1 день, 2-4 дня, 5+ дней
@@ -61,7 +61,7 @@ export function pluralizeTrialDuration(lang: string, days: number): string {
   }
 }
 
-export const trialMessages = {
+const trialMessages = {
   ru: {
     // Callback query responses
     userNotFound: 'Пользователь не найден',
@@ -186,7 +186,7 @@ export const trialMessages = {
   },
 };
 
-export type TrialLang = keyof typeof trialMessages;
+type TrialLang = keyof typeof trialMessages;
 
 /**
  * Get localized message for trial activation

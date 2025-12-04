@@ -192,19 +192,33 @@ export class ReminderSchedulerService {
           // Interpolate referral URL
           const message = messageTemplate.replace('{referralUrl}', referralUrl);
 
+          // Retrieve buttons text
+          const extendTrialButtonText = await this.botMessagesRepository
+            .resolveMessage(botId, 'button_extend_trial', botUser.lang ?? 'en')
+            .catch(() => 'Extend Free Period 🎁');
+
+          const buySubscriptionButtonText = await this.botMessagesRepository
+            .resolveMessage(
+              botId,
+              'button_buy_subscription',
+              botUser.lang ?? 'en',
+            )
+            .catch(() => 'Buy Subscription 💳');
+
           // Send reminder with action buttons using the bot's Telegraf instance
           await botInstance.bot.telegram.sendMessage(botUser.userId, message, {
+            parse_mode: 'HTML',
             reply_markup: {
               inline_keyboard: [
                 [
                   {
-                    text: 'Extend Free Period',
+                    text: extendTrialButtonText,
                     callback_data: 'partner_extend_trial',
                   },
                 ],
                 [
                   {
-                    text: 'Buy Subscription',
+                    text: buySubscriptionButtonText,
                     callback_data: 'partner_buy_subscription',
                   },
                 ],

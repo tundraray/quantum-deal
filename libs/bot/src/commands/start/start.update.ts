@@ -10,7 +10,6 @@ import {
 } from '@quantumdeal/framework';
 import {
   CodesRepository,
-  UsersRepository,
   SubscriptionsRepository,
   UserSubscriptionsRepository,
 } from '@quantumdeal/db';
@@ -54,7 +53,6 @@ export class StartUpdate {
     @InjectBot(MASTERBOT_BOT_NAME)
     private readonly masterbot: Telegraf<UserContext>,
     private readonly llmService: LLMService,
-    private readonly usersRepository: UsersRepository,
     private readonly codesRepository: CodesRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,

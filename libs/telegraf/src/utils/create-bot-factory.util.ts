@@ -7,7 +7,6 @@ export function createBotFactory(
 ): Promise<Telegraf<Context>> {
   const bot = new Telegraf<Context>(options.token, options.options);
 
-  bot.use(...(options.middlewares ?? []));
   bot.catch((err, ctx) =>
     Logger.error(err, `Telegraf: ${ctx.botInfo?.username ?? 'unknown'}`),
   );

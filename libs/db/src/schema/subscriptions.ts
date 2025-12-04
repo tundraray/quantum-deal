@@ -3,7 +3,6 @@ import {
   timestamp,
   varchar,
   bigint,
-  jsonb,
   boolean,
 } from 'drizzle-orm/pg-core';
 import { nanoid } from 'nanoid';
@@ -44,17 +43,6 @@ export function isBroadcastSubscription(type: string): boolean {
 export const subscriptions = pgTable('subscriptions', {
   id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
   name: varchar('name').notNull(),
-
-  /**
-   * @deprecated Use subscription_features.config.sectors instead
-   * This field will be removed in a future version.
-   * Sector filtering is now managed via TIER_BASED_FILTERING feature config.
-   *
-   * Migration: Run scripts/migrate-subscription-features.ts to migrate
-   * scope data to subscription_features.config.sectors
-   */
-  scope: jsonb('scope').$type<string[] | null>(),
-
   type: varchar('type', { length: 30 })
     .notNull()
     .default(SubscriptionType.SIGNALS),

@@ -2,6 +2,32 @@ import { pgTable, bigint, jsonb, timestamp } from 'drizzle-orm/pg-core';
 import { bots } from './bots';
 
 /**
+ * Language Option Interface
+ *
+ * Defines a language choice for the bot's language selection.
+ */
+export interface LangOption {
+  code: string;
+  label: string;
+}
+
+/**
+ * Default Languages
+ *
+ * Standard language options available for bots.
+ */
+export const DEFAULT_LANGS: LangOption[] = [
+  { code: 'ru', label: '🇷🇺 Русский' },
+  { code: 'en', label: '🇬🇧 English' },
+  { code: 'uk', label: '🇺🇦 Українська' },
+  { code: 'hi', label: '🇮🇳 हिंदी' },
+  { code: 'fr', label: '🇫🇷 Français' },
+  { code: 'kk', label: '🇰🇿 Қазақша' },
+  { code: 'uz', label: "🇺🇿 O'zbekcha" },
+  { code: 'tg', label: '🇹🇯 Тоҷикӣ' },
+];
+
+/**
  * Bot Settings Interface
  *
  * Defines the JSONB structure for per-bot feature configuration.
@@ -19,10 +45,8 @@ export interface BotSettings {
     trialDays: number;
     language: string;
   };
-  ui?: {
-    welcomeImage?: string;
-    brandColor?: string;
-  };
+  /** Per-bot language options. Falls back to DEFAULT_LANGS if not set. */
+  langs?: LangOption[];
 }
 
 /**

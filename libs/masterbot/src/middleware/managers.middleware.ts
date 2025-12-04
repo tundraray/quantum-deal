@@ -109,7 +109,7 @@ export class ManagersMiddleware {
    * Handle unauthorized access attempts
    */
   private handleUnauthorizedAccess(
-    ctx: UserContext,
+    _ctx: UserContext,
     telegramId: number,
     username?: string,
   ): void {

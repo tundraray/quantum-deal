@@ -12,7 +12,6 @@ export interface NotificationUser {
   username: string | null;
   lang: string | null;
   subscriptionId: number;
-  subscriptionScope: any; // JSON scope data
   subscriptionExpirationDate: Date | null;
   hasCustomFiltering: boolean; // Feature flag for custom filtering
 }

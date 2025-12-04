@@ -4,10 +4,6 @@
 // Test Type: Integration Tests
 // Implementation Timing: Created alongside feature implementation
 
-// @nestjs/testing imports will be used when tests are implemented
-// import { Test, TestingModule } from '@nestjs/testing';
-// import { ConfigModule } from '@nestjs/config';
-
 /**
  * Integration tests for Multi-Bot Signal Broadcasting
  *

@@ -138,6 +138,30 @@ export class TrialUIAction {
   }
 
   /**
+   * Handle "Trial Status" button callback
+   * Callback data: 'partner_trial_status'
+   *
+   * Acknowledges the callback query to remove loading indicator.
+   * This is an informational button - the status is already displayed on the button text.
+   * No additional action needed.
+   *
+   * @param ctx - Telegram context with botId injected by middleware
+   */
+  @Action('partner_trial_status')
+  async handleTrialStatus(@Ctx() ctx: PartnerBotContext): Promise<void> {
+    // Acknowledge callback query (removes loading indicator)
+    await ctx.answerCbQuery();
+
+    // Informational button - no additional action needed
+    // The status is already displayed on the button
+    this.logger.debug({
+      message: 'Trial status button clicked',
+      userId: ctx.from?.id,
+      botId: ctx.botId,
+    });
+  }
+
+  /**
    * Handle "Buy Subscription" button callback
    * Callback data: 'partner_buy_subscription'
    *

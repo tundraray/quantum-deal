@@ -2,8 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UserSubscriptionsRepository } from '../user-subscriptions.repository';
 import { DRIZZLE_CLIENT } from '../../database.provider';
 import { userSubscriptions } from '../../schema/user-subscriptions';
-import { users } from '../../schema/users';
 import { subscriptions } from '../../schema/subscriptions';
+import { botUsers } from '../../schema/bot-users';
 
 interface MockDb {
   select: jest.Mock;
@@ -60,35 +60,49 @@ describe('UserSubscriptionsRepository', () => {
       const botId = 1;
       const mockExpiredTrials = [
         {
-          user: {
-            telegramId: 123,
-            username: 'user1',
+          botUser: {
+            id: 1,
+            userId: 123,
+            botId: 1,
             lang: 'en',
             isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            preferences: null,
+            state: null,
           },
           userSubscription: {
             id: 1,
-            userId: 123,
+            botUserId: 1,
             subscriptionId: 1,
             botId: 1,
             expiresAt: new Date('2025-11-01'),
             isActive: false,
+            activatedAt: new Date(),
+            createdAt: new Date(),
           },
         },
         {
-          user: {
-            telegramId: 456,
-            username: 'user2',
+          botUser: {
+            id: 2,
+            userId: 456,
+            botId: 1,
             lang: 'ru',
             isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            preferences: null,
+            state: null,
           },
           userSubscription: {
             id: 2,
-            userId: 456,
+            botUserId: 2,
             subscriptionId: 1,
             botId: 1,
             expiresAt: new Date('2025-11-15'),
             isActive: false,
+            activatedAt: new Date(),
+            createdAt: new Date(),
           },
         },
       ];
@@ -101,11 +115,14 @@ describe('UserSubscriptionsRepository', () => {
       const result = await repository.findExpiredTrials(botId);
 
       expect(mockDb.select).toHaveBeenCalledWith({
-        user: users,
+        botUser: botUsers,
         userSubscription: userSubscriptions,
       });
       expect(mockDb.from).toHaveBeenCalledWith(userSubscriptions);
-      expect(mockDb.innerJoin).toHaveBeenCalledWith(users, expect.anything());
+      expect(mockDb.innerJoin).toHaveBeenCalledWith(
+        botUsers,
+        expect.anything(),
+      );
       expect(result).toEqual(mockExpiredTrials);
       expect(result).toHaveLength(2);
     });
@@ -127,19 +144,26 @@ describe('UserSubscriptionsRepository', () => {
       const botId = 1;
       const mockExpiredTrials = [
         {
-          user: {
-            telegramId: 123,
-            username: 'user1',
+          botUser: {
+            id: 1,
+            userId: 123,
+            botId: 1,
             lang: 'es',
             isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            preferences: null,
+            state: null,
           },
           userSubscription: {
             id: 1,
-            userId: 123,
+            botUserId: 1,
             subscriptionId: 1,
             botId: 1,
             expiresAt: new Date('2025-11-01'),
             isActive: false,
+            activatedAt: new Date(),
+            createdAt: new Date(),
           },
         },
       ];
@@ -148,7 +172,7 @@ describe('UserSubscriptionsRepository', () => {
 
       const result = await repository.findExpiredTrials(botId);
 
-      expect(result[0].user.lang).toBe('es');
+      expect(result[0].botUser.lang).toBe('es');
     });
   });
 

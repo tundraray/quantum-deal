@@ -126,8 +126,8 @@ export class DynamicTelegrafService
 
     const stopPromises: Promise<void>[] = [];
 
-    for (const [botId, instance] of this.bots) {
-      stopPromises.push(this.stopBot(botId, instance));
+    for (const [, instance] of this.bots) {
+      stopPromises.push(this.stopBot(instance));
     }
 
     const results = await Promise.allSettled(stopPromises);
@@ -185,11 +185,7 @@ export class DynamicTelegrafService
       const bot = await createBotFactory({
         token,
         options: this.options.telegrafOptions,
-        middlewares: this.options.globalMiddlewares,
       });
-      // Create Telegraf instance with optional global options
-      // const bot = new Telegraf<Context>(token, this.options.telegrafOptions);
-
       // Validate token by calling getMe()
       const botInfo = await bot.telegram.getMe();
       const username = botInfo.username;
@@ -210,6 +206,10 @@ export class DynamicTelegrafService
         for (const middleware of botMiddlewares) {
           bot.use(middleware);
         }
+      }
+
+      if (this.options.globalMiddlewares) {
+        bot.use(...(this.options.globalMiddlewares ?? []));
       }
 
       // Apply stage middleware (must be after global and factory middlewares)
@@ -234,9 +234,6 @@ export class DynamicTelegrafService
       limiter.on('error', (error) => {
         this.logger.error(`Bottleneck error for bot "${name}":`, error);
       });
-
-      // Setup webhook with Telegram API
-      // await this.setupWebhook(bot, webhookPath, name);
 
       // Store bot instance in registry
       const instance: DynamicBotInstance = {
@@ -310,10 +307,7 @@ export class DynamicTelegrafService
    * @param botId - Database bot ID
    * @param instance - Dynamic bot instance
    */
-  private async stopBot(
-    botId: number,
-    instance: DynamicBotInstance,
-  ): Promise<void> {
+  private async stopBot(instance: DynamicBotInstance): Promise<void> {
     try {
       // Stop the rate limiter (ADR-007)
       await instance.limiter.stop({ dropWaitingJobs: false });

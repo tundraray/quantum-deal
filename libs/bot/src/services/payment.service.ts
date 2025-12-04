@@ -6,7 +6,6 @@ import {
   RenewalTariffsRepository,
   UserSubscriptionsRepository,
   SubscriptionsRepository,
-  UsersRepository,
   BotUsersRepository,
   BotsRepository,
 } from '@quantumdeal/db';
@@ -50,7 +49,6 @@ export class PaymentService {
     private readonly renewalTariffsRepo: RenewalTariffsRepository,
     private readonly userSubscriptionsRepo: UserSubscriptionsRepository,
     private readonly subscriptionsRepo: SubscriptionsRepository,
-    private readonly usersRepo: UsersRepository,
     private readonly botUsersRepo: BotUsersRepository,
     private readonly botsRepo: BotsRepository,
   ) {}

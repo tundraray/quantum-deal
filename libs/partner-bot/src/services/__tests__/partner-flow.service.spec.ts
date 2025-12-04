@@ -8,7 +8,6 @@ import type { BotCommandsService } from '@quantumdeal/bot';
 import type { DynamicTelegrafService } from '@quantumdeal/telegraf';
 import { PartnerFlowService } from '../partner-flow.service';
 import type { ChannelVerifierService } from '../channel-verifier.service';
-import type { VerificationResult } from '../../types/partner-settings';
 
 describe('PartnerFlowService', () => {
   let service: PartnerFlowService;
@@ -294,6 +293,7 @@ describe('PartnerFlowService', () => {
     it('should update state to channel_verified and call TrialService.activate if verified', async () => {
       const userId = 12345;
       const botId = 1;
+      const botUserId = 99; // bot_users.id (small integer)
       const expiresAt = new Date('2025-01-01');
 
       (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
@@ -304,6 +304,13 @@ describe('PartnerFlowService', () => {
         settings: {
           channelId: '@testchannel',
         },
+      } as never);
+      // Mock findByUserAndBot to return botUser with id for both calls
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue({
+        id: botUserId,
+        userId,
+        botId,
+        state: { sceneData: { verificationAttempts: 0 } },
       } as never);
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
@@ -326,13 +333,15 @@ describe('PartnerFlowService', () => {
           }),
         }),
       );
-      expect(mockTrialService.activate).toHaveBeenCalledWith(userId);
+      // After bug fix: TrialService.activate receives botUser.id, NOT userId
+      expect(mockTrialService.activate).toHaveBeenCalledWith(botUserId);
       expect(result.verified).toBe(true);
     });
 
     it('should update state to trial_activated after successful activation', async () => {
       const userId = 12345;
       const botId = 1;
+      const botUserId = 99; // bot_users.id (small integer)
       const expiresAt = new Date('2025-01-01');
 
       (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
@@ -343,6 +352,13 @@ describe('PartnerFlowService', () => {
         settings: {
           channelId: '@testchannel',
         },
+      } as never);
+      // Mock findByUserAndBot to return botUser with id for both calls
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue({
+        id: botUserId,
+        userId,
+        botId,
+        state: { sceneData: { verificationAttempts: 0 } },
       } as never);
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
@@ -407,6 +423,7 @@ describe('PartnerFlowService', () => {
     it('should revert state to channel_verified if trial activation fails', async () => {
       const userId = 12345;
       const botId = 1;
+      const botUserId = 99; // bot_users.id (small integer)
 
       (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
         false,
@@ -416,6 +433,13 @@ describe('PartnerFlowService', () => {
         settings: {
           channelId: '@testchannel',
         },
+      } as never);
+      // Mock findByUserAndBot to return botUser with id for both calls
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue({
+        id: botUserId,
+        userId,
+        botId,
+        state: { sceneData: { verificationAttempts: 0 } },
       } as never);
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
@@ -473,6 +497,120 @@ describe('PartnerFlowService', () => {
           }),
         }),
       );
+    });
+
+    // ==========================================================================
+    // AC-4: botUserId Migration - Critical Bug Fix Tests
+    // Design Doc: partner-bot-flow-improvements-design.md
+    // ==========================================================================
+
+    // AC-4: "PartnerFlowService.handleVerificationRequest() resolves botUser and passes botUser.id to TrialService.activate()"
+    // ROI: 95 | Business Value: 10 (critical bug) | Frequency: 10 (every activation)
+    // Behavior: After channel verification succeeds, TrialService.activate() receives botUser.id (bot_users.id), NOT userId (telegramId)
+    // Verification:
+    //   - BotUsersRepository.findByUserAndBot() called to resolve botUser
+    //   - TrialService.activate() called with botUser.id (small integer, e.g., 42)
+    //   - TrialService.activate() NOT called with userId (large telegramId, e.g., 123456789)
+    // Expected Result: Subscription record created with correct botUserId foreign key
+    // Pass Criteria:
+    //   - mockTrialService.activate called with botUser.id value
+    //   - NOT called with telegramId value
+    // @category: core-functionality
+    // @dependency: BotUsersRepository, TrialService
+    // @complexity: high
+    it('AC-4: should call TrialService.activate with botUser.id (bot_users.id) not userId (telegramId)', async () => {
+      // Arrange
+      const userId = 123456789; // telegramId (large number)
+      const botId = 1;
+      const botUserId = 42; // botUser.id (small number from bot_users table)
+      const mockBotUser = {
+        id: botUserId,
+        userId: userId,
+        botId: botId,
+        state: {
+          sceneData: {
+            verificationState: 'awaiting_channel_subscription',
+            verificationAttempts: 0,
+          },
+        },
+      };
+
+      // Setup mocks for successful verification flow
+      (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
+        false,
+      );
+      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
+        botId,
+        settings: { channelId: '@testchannel' },
+      } as never);
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+        mockBotUser as never,
+      );
+      (
+        mockChannelVerifierService.verifyMembership as jest.Mock
+      ).mockResolvedValue(true);
+      (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue(null);
+      (mockTrialService.activate as jest.Mock).mockResolvedValue({
+        success: true,
+        expiresAt: new Date('2025-01-01'),
+      });
+
+      // Act
+      const result = await service.handleVerificationRequest(userId, botId);
+
+      // Assert - CRITICAL: TrialService.activate must receive botUser.id (42), NOT userId (123456789)
+      expect(mockTrialService.activate).toHaveBeenCalledWith(botUserId); // 42, not 123456789
+      expect(mockTrialService.activate).not.toHaveBeenCalledWith(userId); // Explicitly verify NOT called with telegramId
+      expect(result.verified).toBe(true);
+    });
+
+    // AC-4-error: "When botUser cannot be resolved, verification fails gracefully"
+    // ROI: 85 | Business Value: 9 (error handling) | Frequency: 3 (rare edge case)
+    // Behavior: When BotUsersRepository.findByUserAndBot() returns null, return error without calling TrialService
+    // Verification:
+    //   - BotUsersRepository.findByUserAndBot() called
+    //   - Returns null (user not found in bot_users table)
+    //   - TrialService.activate() NOT called
+    //   - Return { verified: false, error: 'User context not found' }
+    // Expected Result: Graceful error handling, no subscription created
+    // Pass Criteria:
+    //   - result.verified === false
+    //   - result.error contains meaningful message
+    //   - mockTrialService.activate not called
+    // @category: core-functionality
+    // @dependency: BotUsersRepository
+    // @complexity: medium
+    it('AC-4: should return error when botUser cannot be resolved for trial activation', async () => {
+      // Arrange
+      const userId = 123456789; // telegramId
+      const botId = 1;
+
+      // Setup mocks - botUser resolution returns null after channel verification succeeds
+      (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
+        false,
+      );
+      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
+        botId,
+        settings: { channelId: '@testchannel' },
+      } as never);
+      // First call returns user for rate limit check (with no state), second call (for botUserId resolution) returns null
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock)
+        .mockResolvedValueOnce({
+          state: { sceneData: { verificationAttempts: 0 } },
+        } as never) // First call for verification attempts
+        .mockResolvedValueOnce(null as never); // Second call for botUserId resolution returns null
+      (
+        mockChannelVerifierService.verifyMembership as jest.Mock
+      ).mockResolvedValue(true);
+      (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue(null);
+
+      // Act
+      const result = await service.handleVerificationRequest(userId, botId);
+
+      // Assert - Should fail gracefully without calling TrialService
+      expect(result.verified).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(mockTrialService.activate).not.toHaveBeenCalled();
     });
   });
 

@@ -14,6 +14,7 @@ import { RenewalTariffsRepository } from '../renewal-tariffs.repository';
 import { CodesRepository } from '../codes.repository';
 
 import { bots, Bot, NewBot } from '../../schema/bots';
+import { botUsers } from '../../schema/bot-users';
 import { userSubscriptions } from '../../schema/user-subscriptions';
 import { renewalTariffs } from '../../schema/renewal-tariffs';
 import { codes } from '../../schema/codes';
@@ -41,6 +42,7 @@ describe('Modified Tables Integration Tests', () => {
   // Track created records for cleanup
   const createdBotIds: number[] = [];
   const createdUserIds: number[] = [];
+  const createdBotUserIds: number[] = [];
   const createdSubscriptionIds: number[] = [];
   const createdUserSubscriptionIds: number[] = [];
   const createdTariffIds: number[] = [];
@@ -73,10 +75,23 @@ describe('Modified Tables Integration Tests', () => {
         telegramId: id,
         username: generateUniqueName('testuser'),
         firstName: 'Test',
-        isActive: true,
       })
       .returning();
     createdUserIds.push(result[0].telegramId);
+    return result[0];
+  };
+
+  // Helper function to create bot_user record
+  const createBotUser = async (userId: number, botId: number) => {
+    const result = await db
+      .insert(botUsers)
+      .values({
+        userId,
+        botId,
+        isActive: true,
+      })
+      .returning();
+    createdBotUserIds.push(result[0].id);
     return result[0];
   };
 
@@ -163,6 +178,13 @@ describe('Modified Tables Integration Tests', () => {
           // Ignore cleanup errors
         }
       }
+      for (const id of createdBotUserIds) {
+        try {
+          await db.delete(botUsers).where(eq(botUsers.id, id));
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
       for (const id of createdUserIds) {
         try {
           await db.delete(users).where(eq(users.telegramId, id));
@@ -188,21 +210,22 @@ describe('Modified Tables Integration Tests', () => {
   // AC-2: botId columns added to existing tables
   // =============================================================================
 
-  describe('AC-2: UserSubscriptions with botId', () => {
-    // AC-2.1: "user_subscriptions.bot_id column added with FK constraint"
-    it('AC-2.1: Should create user_subscription with valid botId foreign key', async () => {
+  describe('AC-2: UserSubscriptions with botUserId', () => {
+    // AC-2.1: "user_subscriptions.bot_user_id column added with FK constraint"
+    it('AC-2.1: Should create user_subscription with valid botUserId foreign key', async () => {
       if (!process.env.DATABASE_URL) return;
 
       // Arrange
       const bot = await createTestBot();
       const user = await createTestUser();
+      const botUser = await createBotUser(user.telegramId, bot.id);
       const subscription = await createTestSubscription();
 
       // Act
       const result = await db
         .insert(userSubscriptions)
         .values({
-          userId: user.telegramId,
+          botUserId: botUser.id,
           subscriptionId: subscription.id,
           botId: bot.id,
           isActive: true,
@@ -213,25 +236,23 @@ describe('Modified Tables Integration Tests', () => {
       // Assert
       expect(result[0]).toBeDefined();
       expect(result[0].botId).toBe(bot.id);
-      expect(result[0].userId).toBe(user.telegramId);
+      expect(result[0].botUserId).toBe(botUser.id);
       expect(result[0].subscriptionId).toBe(subscription.id);
     });
 
-    // AC-2.2: "botId column is nullable for backward compatibility"
-    it('AC-2.2: Should allow null botId for backward compatibility', async () => {
+    // AC-2.2: "botUserId column is nullable for backward compatibility"
+    it('AC-2.2: Should allow null botUserId for backward compatibility', async () => {
       if (!process.env.DATABASE_URL) return;
 
       // Arrange
-      const user = await createTestUser();
       const subscription = await createTestSubscription();
 
-      // Act - Create subscription WITHOUT botId
+      // Act - Create subscription WITHOUT botUserId (legacy record)
       const result = await db
         .insert(userSubscriptions)
         .values({
-          userId: user.telegramId,
           subscriptionId: subscription.id,
-          // botId intentionally omitted
+          // botUserId intentionally omitted
           isActive: true,
         })
         .returning();
@@ -239,25 +260,26 @@ describe('Modified Tables Integration Tests', () => {
 
       // Assert
       expect(result[0]).toBeDefined();
-      expect(result[0].botId).toBeNull();
-      expect(result[0].userId).toBe(user.telegramId);
+      expect(result[0].botUserId).toBeNull();
     });
 
     // AC-2.3: "Bot-scoped subscription queries work correctly"
-    it('AC-2.3: Should filter subscriptions by botId in queries', async () => {
+    it('AC-2.3: Should filter subscriptions by botUserId in queries', async () => {
       if (!process.env.DATABASE_URL) return;
 
       // Arrange - Create 2 bots and subscriptions for the same user
       const bot1 = await createTestBot({ name: generateUniqueName('Bot1') });
       const bot2 = await createTestBot({ name: generateUniqueName('Bot2') });
       const user = await createTestUser();
+      const botUser1 = await createBotUser(user.telegramId, bot1.id);
+      const botUser2 = await createBotUser(user.telegramId, bot2.id);
       const subscription = await createTestSubscription();
 
       // Create subscription for bot1
       const sub1 = await db
         .insert(userSubscriptions)
         .values({
-          userId: user.telegramId,
+          botUserId: botUser1.id,
           subscriptionId: subscription.id,
           botId: bot1.id,
           isActive: true,
@@ -269,7 +291,7 @@ describe('Modified Tables Integration Tests', () => {
       const sub2 = await db
         .insert(userSubscriptions)
         .values({
-          userId: user.telegramId,
+          botUserId: botUser2.id,
           subscriptionId: subscription.id,
           botId: bot2.id,
           isActive: true,
@@ -277,13 +299,13 @@ describe('Modified Tables Integration Tests', () => {
         .returning();
       createdUserSubscriptionIds.push(sub2[0].id);
 
-      // Act - Query by bot1 ID
+      // Act - Query by botUserId
       const resultBot1 = await db
         .select()
         .from(userSubscriptions)
         .where(
           and(
-            eq(userSubscriptions.userId, user.telegramId),
+            eq(userSubscriptions.botUserId, botUser1.id),
             eq(userSubscriptions.botId, bot1.id),
           ),
         );
@@ -484,11 +506,12 @@ describe('Modified Tables Integration Tests', () => {
         expirationDate,
       );
 
-      // Create corresponding user subscription with same botId
+      // Create bot_user and corresponding user subscription with same botId
+      const botUser = await createBotUser(user.telegramId, bot.id);
       const userSub = await db
         .insert(userSubscriptions)
         .values({
-          userId: user.telegramId,
+          botUserId: botUser.id,
           subscriptionId: subscription.id,
           botId: code.botId, // Use bot from code
           isActive: true,
@@ -509,41 +532,44 @@ describe('Modified Tables Integration Tests', () => {
   // =============================================================================
 
   describe('AC-5: Backward Compatibility', () => {
-    // AC-5.1: "Existing queries work without botId parameter"
-    it('AC-5.1: Existing UserSubscriptionsRepository methods work without botId parameter', async () => {
+    // AC-5.1: "Existing queries work with botUserId parameter"
+    it('AC-5.1: UserSubscriptionsRepository methods work with botUserId', async () => {
       if (!process.env.DATABASE_URL) return;
 
       // Arrange
+      const bot = await createTestBot();
       const user = await createTestUser();
+      const botUser = await createBotUser(user.telegramId, bot.id);
       const subscription = await createTestSubscription();
 
-      // Create user subscription without botId (backward compat)
+      // Create user subscription with botUserId
       const userSub = await db
         .insert(userSubscriptions)
         .values({
-          userId: user.telegramId,
+          botUserId: botUser.id,
           subscriptionId: subscription.id,
+          botId: bot.id,
           isActive: true,
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
         })
         .returning();
       createdUserSubscriptionIds.push(userSub[0].id);
 
-      // Act - Use existing repository methods
-      const foundByUser = await userSubscriptionsRepository.findByUserId(
-        user.telegramId,
+      // Act - Use existing repository methods with botUserId
+      const foundByBotUser = await userSubscriptionsRepository.findByBotUserId(
+        botUser.id,
       );
-      const activeByUser = await userSubscriptionsRepository.findActiveByUserId(
-        user.telegramId,
-      );
-      const hasActive = await userSubscriptionsRepository.hasActiveSubscription(
-        user.telegramId,
-        subscription.id,
-      );
+      const activeByBotUser =
+        await userSubscriptionsRepository.findActiveByBotUserId(botUser.id);
+      const hasActive =
+        await userSubscriptionsRepository.hasActiveSubscriptionByBotUser(
+          botUser.id,
+          subscription.id,
+        );
 
       // Assert
-      expect(foundByUser.length).toBeGreaterThanOrEqual(1);
-      expect(activeByUser.length).toBeGreaterThanOrEqual(1);
+      expect(foundByBotUser.length).toBeGreaterThanOrEqual(1);
+      expect(activeByBotUser.length).toBeGreaterThanOrEqual(1);
       expect(hasActive).toBe(true);
     });
 
@@ -582,49 +608,51 @@ describe('Modified Tables Integration Tests', () => {
       expect(activatedCode?.botId).toBeNull();
     });
 
-    // AC-5.3: "Existing subscription queries return all subscriptions when botId not specified"
-    it('AC-5.3: Subscription queries without botId filter return all subscriptions', async () => {
+    // AC-5.3: "Subscription queries return all subscriptions for botUserId"
+    it('AC-5.3: Subscription queries return all subscriptions for botUserId', async () => {
       if (!process.env.DATABASE_URL) return;
 
       // Arrange
       const bot = await createTestBot();
       const user = await createTestUser();
-      const subscription = await createTestSubscription();
+      const botUser = await createBotUser(user.telegramId, bot.id);
+      const subscription1 = await createTestSubscription();
+      const subscription2 = await createTestSubscription();
 
-      // Create subscription WITH botId
-      const withBot = await db
+      // Create first subscription
+      const sub1 = await db
         .insert(userSubscriptions)
         .values({
-          userId: user.telegramId,
-          subscriptionId: subscription.id,
+          botUserId: botUser.id,
+          subscriptionId: subscription1.id,
           botId: bot.id,
           isActive: true,
         })
         .returning();
-      createdUserSubscriptionIds.push(withBot[0].id);
+      createdUserSubscriptionIds.push(sub1[0].id);
 
-      // Create subscription WITHOUT botId (same user)
-      const withoutBot = await db
+      // Create second subscription for same botUser
+      const sub2 = await db
         .insert(userSubscriptions)
         .values({
-          userId: user.telegramId,
-          subscriptionId: subscription.id,
-          // botId intentionally omitted
+          botUserId: botUser.id,
+          subscriptionId: subscription2.id,
+          botId: bot.id,
           isActive: true,
         })
         .returning();
-      createdUserSubscriptionIds.push(withoutBot[0].id);
+      createdUserSubscriptionIds.push(sub2[0].id);
 
-      // Act - Query all subscriptions for user (no botId filter)
-      const allSubs = await userSubscriptionsRepository.findByUserId(
-        user.telegramId,
+      // Act - Query all subscriptions for botUser
+      const allSubs = await userSubscriptionsRepository.findByBotUserId(
+        botUser.id,
       );
 
       // Assert - Should return both subscriptions
       expect(allSubs.length).toBeGreaterThanOrEqual(2);
-      const botIds = allSubs.map((s) => s.botId);
-      expect(botIds).toContain(bot.id);
-      expect(botIds).toContain(null);
+      const subscriptionIds = allSubs.map((s) => s.subscriptionId);
+      expect(subscriptionIds).toContain(subscription1.id);
+      expect(subscriptionIds).toContain(subscription2.id);
     });
   });
 
@@ -642,13 +670,14 @@ describe('Modified Tables Integration Tests', () => {
         name: generateUniqueName('CascadeBot'),
       });
       const user = await createTestUser();
+      const botUser = await createBotUser(user.telegramId, botForCascade.id);
       const subscription = await createTestSubscription();
 
-      // Create user subscription linked to bot
+      // Create user subscription linked to bot via botUser
       const userSub = await db
         .insert(userSubscriptions)
         .values({
-          userId: user.telegramId,
+          botUserId: botUser.id,
           subscriptionId: subscription.id,
           botId: botForCascade.id,
           isActive: true,
