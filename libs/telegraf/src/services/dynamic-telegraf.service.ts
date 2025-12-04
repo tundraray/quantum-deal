@@ -185,7 +185,6 @@ export class DynamicTelegrafService
       const bot = await createBotFactory({
         token,
         options: this.options.telegrafOptions,
-        middlewares: this.options.globalMiddlewares,
       });
       // Validate token by calling getMe()
       const botInfo = await bot.telegram.getMe();
@@ -207,6 +206,10 @@ export class DynamicTelegrafService
         for (const middleware of botMiddlewares) {
           bot.use(middleware);
         }
+      }
+
+      if (this.options.globalMiddlewares) {
+        bot.use(...(this.options.globalMiddlewares ?? []));
       }
 
       // Apply stage middleware (must be after global and factory middlewares)

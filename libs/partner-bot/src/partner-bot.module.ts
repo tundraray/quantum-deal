@@ -5,6 +5,7 @@ import { BotModule } from '@quantumdeal/bot';
 // Services
 import { ChannelVerifierService } from './services/channel-verifier.service';
 import { PartnerFlowService } from './services/partner-flow.service';
+import { UserDynamicManagementMiddleware } from './middleware/user-management.middleware';
 
 // Actions
 import { ChannelVerificationAction } from './actions/channel-verification.action';
@@ -35,12 +36,16 @@ import { StartCommandUpdate } from './commands/start/start.update';
     ChannelVerificationAction,
     TrialUIAction,
 
+    // Middlewares
+    UserDynamicManagementMiddleware,
+
     // Commands
     StartCommandUpdate,
   ],
   exports: [
     // Export PartnerFlowService for potential external usage
     PartnerFlowService,
+    UserDynamicManagementMiddleware,
   ],
 })
 export class PartnerBotModule {}
