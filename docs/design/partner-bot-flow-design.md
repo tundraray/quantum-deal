@@ -118,7 +118,7 @@ This document defines the technical implementation for a specialized partner bot
 - Handle Telegram API errors: `USER_ID_INVALID` (400) returns false, others throw for retry
 
 **FR-PB004: Trial Activation via TrialService**
-- Call `TrialService.activate(userId)` after successful channel verification
+- Call `TrialService.activate(botUserId)` after successful channel verification (botUserId = bot_users.id)
 - Update `bot_users.state` to `{ verification: 'trial_activated' }` on success
 - Preserve existing TrialService eligibility and expiration logic
 
@@ -220,7 +220,7 @@ This document defines the technical implementation for a specialized partner bot
 ### AC-PB002: Successful Channel Verification and Trial Activation
 - [ ] When user clicks "I subscribed" button and is subscribed to partner channel, bot verifies membership via `getChatMember` API
 - [ ] Bot updates `bot_users.state.verification` to `channel_verified` immediately after successful verification
-- [ ] Bot calls `TrialService.activate(userId)` to create trial subscription
+- [ ] Bot calls `TrialService.activate(botUserId)` to create trial subscription (botUserId = bot_users.id)
 - [ ] Bot updates `bot_users.state.verification` to `trial_activated` after successful trial creation
 - [ ] Bot sends success message from `bot_messages` type `partner_trial_activated` with interpolated `{expiryDate}` and `{daysRemaining}`
 - [ ] Success message includes inline keyboard with two buttons: "Extend Free Period" (URL) and "Buy Subscription" (callback)
@@ -280,8 +280,8 @@ This document defines the technical implementation for a specialized partner bot
 - [ ] State updates are atomic (wrapped in database transaction)
 
 ### AC-PB011: Integration with Existing Trial System
-- [ ] PartnerFlowService calls `TrialService.activate(userId)` without modifications to TrialService code
-- [ ] Trial eligibility check via `TrialService.isEligible(userId)` respects existing logic (no prior subscriptions)
+- [ ] PartnerFlowService calls `TrialService.activate(botUserId)` without modifications to TrialService code
+- [ ] Trial eligibility check via `TrialService.isEligible(botUserId)` respects existing logic (no prior subscriptions)
 - [ ] Trial expiration date calculation uses `TRIAL_DURATION_DAYS` environment variable
 - [ ] `user_subscriptions` table record created by TrialService has correct `expires_at` date
 - [ ] Trial status in `user_subscriptions` transitions from `active` to `expired` at expiration time
@@ -324,7 +324,7 @@ This document defines the technical implementation for a specialized partner bot
 
 #### Integration Point 1: TrialService Wrapper
 - **Existing Component:** `libs/bot/src/services/trial.service.ts`
-- **Methods Used:** `isEligible(userId: number): Promise<boolean>`, `activate(userId: number): Promise<{ success: boolean, expiresAt?: Date, error?: string }>`
+- **Methods Used:** `isEligible(botUserId: number): Promise<boolean>`, `activate(botUserId: number): Promise<{ success: boolean, expiresAt?: Date, error?: string }>`
 - **Integration Method:** Dependency injection into `PartnerFlowService`, direct method calls after verification
 - **Impact Level:** Low (Read-only operations, no state changes to TrialService)
 - **Required Test Coverage:** Mock TrialService in partner-bot tests, verify correct method calls with expected parameters
@@ -564,7 +564,7 @@ sequenceDiagram
 
     CVA->>BUR: updateState(userId, botId, {verification: 'channel_verified'})
     CVA->>PFS: handleVerificationRequest(userId, botId)
-    PFS->>TS: activate(userId)
+    PFS->>TS: activate(botUserId)
     TS-->>PFS: { success: true, expiresAt: Date }
     PFS->>BUR: updateState(userId, botId, {verification: 'trial_activated'})
     PFS->>BCS: setUserCommands(userId, features, lang)

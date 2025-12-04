@@ -183,8 +183,15 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
     );
 
     // Assert - CRITICAL: TrialService.activate must receive botUser.id (42), NOT userId (123456789)
-    expect(mockTrialService.activate).toHaveBeenCalledWith(TEST_BOT_USER_ID);
-    expect(mockTrialService.activate).not.toHaveBeenCalledWith(TEST_USER_ID);
+    // Implementation now passes optional trialDays parameter as well
+    expect(mockTrialService.activate).toHaveBeenCalledWith(
+      TEST_BOT_USER_ID,
+      undefined,
+    );
+    expect(mockTrialService.activate).not.toHaveBeenCalledWith(
+      TEST_USER_ID,
+      expect.anything(),
+    );
     expect(result.verified).toBe(true);
 
     // Verify botUser was resolved to get botUserId
@@ -210,20 +217,18 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
   // @dependency: PartnerFlowService, BotUsersRepository
   // @complexity: medium
   it('AC-4: handleVerificationRequest returns error when botUser cannot be resolved', async () => {
-    // Arrange - setup mocks where botUser resolution fails after channel verification
+    // Arrange - setup mocks where botUser resolution returns null
     // Setup settings with channelId
     (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
       botId: TEST_BOT_ID,
       settings: { channelId: '@testchannel' },
     });
 
-    // First call for verification attempts returns user data
-    // Second call for botUserId resolution returns null (simulating race condition or data inconsistency)
-    (mockBotUsersRepository.findByUserAndBot as jest.Mock)
-      .mockResolvedValueOnce({
-        state: { sceneData: { verificationAttempts: 0 } },
-      }) // First call for verification attempts
-      .mockResolvedValueOnce(null); // Second call for botUserId resolution returns null
+    // Implementation only calls findByUserAndBot once (at the beginning)
+    // When it returns null, botUser check after verification will fail
+    (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+      null,
+    );
 
     // Channel verification succeeds
     mockBot.telegram.getChatMember.mockResolvedValue({
@@ -237,6 +242,7 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
     );
 
     // Assert - Should fail gracefully without calling TrialService
+    // When botUser is null, the null check returns early with 'User context not found'
     expect(result.verified).toBe(false);
     expect(result.error).toBeDefined();
     expect(result.error).toContain('User context not found');

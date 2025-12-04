@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -607,8 +607,8 @@ ON user_subscriptions(bot_user_id);
 | Attribute | Value |
 |-----------|-------|
 | **Decision Date** | 2025-12-02 |
-| **Decision Status** | Proposed |
-| **Implementation Status** | Not Started |
+| **Decision Status** | Accepted |
+| **Implementation Status** | Completed |
 | **Estimated Effort** | 3-4 days (migration + code updates) |
 | **Estimated Downtime** | 15-30 minutes |
 | **Reviewed By** | Pending Architecture Review |
@@ -621,10 +621,11 @@ ON user_subscriptions(bot_user_id);
 |---------|------|--------|---------|
 | 1.0.0 | 2025-12-02 | Claude Code Architecture Agent | Initial version - Three architecture decisions for user_subscriptions migration |
 | 1.0.1 | 2025-12-02 | Claude Code Architecture Agent | Simplified migration script for big-bang transactional execution (removed NOT VALID and CONCURRENTLY patterns), added test files to affected files list, added Implementation Dependencies section documenting ADR-004 dependency |
+| 1.1.0 | 2025-12-04 | Claude Code | Updated status to Accepted/Completed - migration implemented, all repository methods use botUserId |
 
 ---
 
-**Document Version**: 1.0.1
+**Document Version**: 1.1.0
 **Created**: 2025-12-02
-**Last Updated**: 2025-12-02
+**Last Updated**: 2025-12-04
 **Author**: Claude Code Architecture Agent

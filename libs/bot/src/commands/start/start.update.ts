@@ -201,8 +201,8 @@ export class StartUpdate {
         user.botUserId,
       );
 
-    // Check trial eligibility
-    const trialEligible = await this.trialService.isEligible(user.telegramId);
+    // Check trial eligibility (using botUserId, not telegramId)
+    const trialEligible = await this.trialService.isEligible(user.botUserId);
 
     // Get trial duration from config for LLM prompt
     const trialDuration = this.configService.get<number>(

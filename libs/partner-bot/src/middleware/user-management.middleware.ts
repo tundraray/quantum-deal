@@ -62,34 +62,6 @@ export class UserDynamicManagementMiddleware {
         throw new Error('botId not available in context');
       }
 
-      if (botId) {
-        // Fall back to legacy flow if bot not found
-        const user = await this.upsertUser(ctx.from);
-        const botUser = await this.botUsersRepository.findOrCreate(
-          user.telegramId,
-          botId,
-          {
-            lang: ctx.from.language_code || 'en',
-            isActive: true,
-          },
-        );
-        const userWithSubscriptions = await this.loadUserWithSubscriptions(
-          {
-            telegramId: user.telegramId,
-            username: user.username,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            lang: ctx.from.language_code || 'en',
-            isPremium: user.isPremium ?? false,
-            createdAt: user.createdAt,
-          },
-          botUser,
-        );
-        (ctx as UserContext).user = userWithSubscriptions;
-        await next();
-        return;
-      }
-
       // Upsert user - creates new or updates existing (race-condition safe)
       const user = await this.upsertUser(ctx.from);
 

@@ -1,3 +1,6 @@
+// Re-export scene data types for unified import path
+export * from './scene-data.types';
+
 /**
  * Verification states for partner bot flow.
  * Tracks user progression through channel subscription verification and trial activation.
@@ -64,6 +67,11 @@ export interface VerificationResult {
    * Error message if verification failed
    */
   error?: string;
+
+  /**
+   * Trial expiration date (only present when trial is activated successfully)
+   */
+  trialExpiresAt?: Date;
 }
 
 /**

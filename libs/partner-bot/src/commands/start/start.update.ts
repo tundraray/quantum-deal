@@ -10,27 +10,18 @@ import {
 } from '@quantumdeal/db';
 import { PartnerFlowService } from '../../services/partner-flow.service';
 import type { PartnerBotContext } from '../../interfaces';
-import { PARTNER_FLOW_FEATURE_KEY } from '../../constants';
+import {
+  PARTNER_FLOW_FEATURE_KEY,
+  CALLBACK_DATA,
+  MESSAGE_KEYS,
+} from '../../constants';
+import type { PartnerFlowSceneData } from '../../types/scene-data.types';
+import { calculateRemainingTimeDisplay } from '../../utils/trial-status.utils';
 
 /**
- * StartCommandUpdate
- *
  * Handles /start command for partner bot flow.
- * Sends welcome message and initiates channel subscription prompt flow.
- *
- * This handler is only registered on bots where partnerFlowEnabled = true
- * in bot_settings.features (via @RequiresFeature decorator).
- *
- * Flow:
- * 1. User sends /start command
- * 2. Send partner_welcome message
- * 3. Initialize bot_users.state.verification to 'awaiting_channel_subscription'
- * 4. Call PartnerFlowService.sendChannelPrompt()
- *
- * Integration:
- * - BotMessagesRepository: Resolve partner_welcome message with fallback chain
- * - BotUsersRepository: Update verification state
- * - PartnerFlowService: Send channel subscription prompt
+ * Sends welcome message and initiates channel subscription prompt.
+ * Only registered on bots where partnerFlowEnabled = true via @RequiresFeature.
  */
 @Update()
 @RequiresFeature(PARTNER_FLOW_FEATURE_KEY)
@@ -83,9 +74,10 @@ export class StartCommandUpdate {
         userId,
         botId,
       );
-      const verificationState = (
-        botUser?.state?.sceneData as { verificationState?: string } | undefined
-      )?.verificationState;
+      const sceneData = botUser?.state?.sceneData as
+        | PartnerFlowSceneData
+        | undefined;
+      const verificationState = sceneData?.verificationState;
 
       this.logger.debug({
         message: 'State check on /start',
@@ -232,14 +224,18 @@ export class StartCommandUpdate {
       return;
     }
     const expiresAt = new Date(subscription.expiresAt);
-    const displayText = this.calculateRemainingTimeDisplay(expiresAt);
+    const remainingTime = calculateRemainingTimeDisplay(expiresAt);
+    const displayText =
+      remainingTime === 'Expired'
+        ? 'Trial: 0 hours remaining'
+        : `Trial: ${remainingTime} remaining`;
 
     // Get trial status message from bot_messages with fallback
     let messageContent: string;
     try {
       messageContent = await this.botMessagesRepository.resolveMessage(
         botId ?? 0,
-        'partner_trial_status',
+        MESSAGE_KEYS.TRIAL_ACTIVATED,
         lang,
       );
     } catch {
@@ -289,36 +285,12 @@ export class StartCommandUpdate {
           [
             {
               text: displayText,
-              callback_data: 'partner_trial_status',
+              callback_data: CALLBACK_DATA.TRIAL_STATUS,
             },
           ],
           [Markup.button.callback(changeLangButtonText, 'change_lang')],
         ],
       },
     });
-  }
-
-  /**
-   * Calculate remaining time display text
-   *
-   * @param expiresAt - Subscription expiration date
-   * @returns Display text: "Trial: X days remaining" or "Trial: Y hours remaining"
-   */
-  private calculateRemainingTimeDisplay(expiresAt: Date): string {
-    const now = new Date();
-    const remainingMs = expiresAt.getTime() - now.getTime();
-
-    // Handle zero or negative remaining time
-    if (remainingMs <= 0) {
-      return 'Trial: 0 hours remaining';
-    }
-
-    const remainingHours = Math.floor(remainingMs / (1000 * 60 * 60));
-    const remainingDays = Math.floor(remainingHours / 24);
-
-    if (remainingDays >= 1) {
-      return `Trial: ${remainingDays} day${remainingDays > 1 ? 's' : ''} remaining`;
-    }
-    return `Trial: ${remainingHours} hour${remainingHours > 1 ? 's' : ''} remaining`;
   }
 }

@@ -7,7 +7,12 @@ import type {
   BotsRepository,
 } from '@quantumdeal/db';
 import { DynamicTelegrafService } from '@quantumdeal/telegraf';
-import { PARTNER_FLOW_FEATURE_KEY } from '../constants';
+import {
+  PARTNER_FLOW_FEATURE_KEY,
+  CALLBACK_DATA,
+  BUTTON_KEYS,
+} from '../constants';
+import { interpolateVariables } from '../utils/message-interpolator.utils';
 
 /**
  * Statistics returned by processExpiredTrials
@@ -190,17 +195,23 @@ export class ReminderSchedulerService {
             );
 
           // Interpolate referral URL
-          const message = messageTemplate.replace('{referralUrl}', referralUrl);
+          const message = interpolateVariables(messageTemplate, {
+            referralUrl,
+          });
 
           // Retrieve buttons text
           const extendTrialButtonText = await this.botMessagesRepository
-            .resolveMessage(botId, 'button_extend_trial', botUser.lang ?? 'en')
+            .resolveMessage(
+              botId,
+              BUTTON_KEYS.EXTEND_TRIAL,
+              botUser.lang ?? 'en',
+            )
             .catch(() => 'Extend Free Period 🎁');
 
           const buySubscriptionButtonText = await this.botMessagesRepository
             .resolveMessage(
               botId,
-              'button_buy_subscription',
+              BUTTON_KEYS.BUY_SUBSCRIPTION,
               botUser.lang ?? 'en',
             )
             .catch(() => 'Buy Subscription 💳');
@@ -213,13 +224,13 @@ export class ReminderSchedulerService {
                 [
                   {
                     text: extendTrialButtonText,
-                    callback_data: 'partner_extend_trial',
+                    callback_data: CALLBACK_DATA.EXTEND_TRIAL,
                   },
                 ],
                 [
                   {
                     text: buySubscriptionButtonText,
-                    callback_data: 'partner_buy_subscription',
+                    callback_data: CALLBACK_DATA.BUY_SUBSCRIPTION,
                   },
                 ],
               ],

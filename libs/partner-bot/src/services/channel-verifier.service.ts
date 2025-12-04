@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BotUsersRepository } from '@quantumdeal/db';
 import { DynamicTelegrafService } from '@quantumdeal/telegraf';
+import { retryWithBackoff } from '../utils/retry.utils';
+import { maskUserId, maskChannelId } from '../utils/log-masking.utils';
 
 /**
  * Rate limit status for channel verification attempts
@@ -66,64 +68,70 @@ export class ChannelVerifierService {
       this.logger.error({
         message: 'Bot not found for channel verification',
         botId,
-        userId: this.maskUserId(userId),
-        channelId: this.maskChannelId(channelId),
+        userId: maskUserId(userId),
+        channelId: maskChannelId(channelId),
       });
       throw new Error(`Bot with ID ${botId} not found`);
     }
 
-    return this.retryWithBackoff(async () => {
-      try {
-        const chatMember = await bot.telegram.getChatMember(channelId, userId);
+    return retryWithBackoff(
+      async () => {
+        try {
+          const chatMember = await bot.telegram.getChatMember(
+            channelId,
+            userId,
+          );
 
-        const validStatuses = ['member', 'administrator', 'creator'];
-        const isValid = validStatuses.includes(chatMember.status);
+          const validStatuses = ['member', 'administrator', 'creator'];
+          const isValid = validStatuses.includes(chatMember.status);
 
-        this.logger.debug({
-          message: 'Channel membership verification completed',
-          userId: this.maskUserId(userId),
-          channelId: this.maskChannelId(channelId),
-          status: chatMember.status,
-          isValid,
-        });
-
-        return isValid;
-      } catch (error) {
-        const telegramError = error as TelegramError;
-        const errorCode = telegramError.response?.error_code;
-
-        // Non-retryable errors (400, 403) return false
-        if (errorCode === 400 || errorCode === 403) {
           this.logger.debug({
-            message: 'User verification failed with non-retryable error',
-            userId: this.maskUserId(userId),
-            channelId: this.maskChannelId(channelId),
-            errorCode,
+            message: 'Channel membership verification completed',
+            userId: maskUserId(userId),
+            channelId: maskChannelId(channelId),
+            status: chatMember.status,
+            isValid,
           });
-          return false;
-        }
 
-        // Retryable errors (500, 503, 429) throw to trigger retry
-        if (errorCode === 500 || errorCode === 503 || errorCode === 429) {
-          this.logger.warn({
-            message: 'Telegram API error, will retry',
-            userId: this.maskUserId(userId),
-            channelId: this.maskChannelId(channelId),
-            errorCode,
+          return isValid;
+        } catch (error) {
+          const telegramError = error as TelegramError;
+          const errorCode = telegramError.response?.error_code;
+
+          // Non-retryable errors (400, 403) return false
+          if (errorCode === 400 || errorCode === 403) {
+            this.logger.debug({
+              message: 'User verification failed with non-retryable error',
+              userId: maskUserId(userId),
+              channelId: maskChannelId(channelId),
+              errorCode,
+            });
+            return false;
+          }
+
+          // Retryable errors (500, 503, 429) throw to trigger retry
+          if (errorCode === 500 || errorCode === 503 || errorCode === 429) {
+            this.logger.warn({
+              message: 'Telegram API error, will retry',
+              userId: maskUserId(userId),
+              channelId: maskChannelId(channelId),
+              errorCode,
+            });
+            throw error;
+          }
+
+          // Unknown errors throw to trigger retry
+          this.logger.error({
+            message: 'Unknown error during verification',
+            userId: maskUserId(userId),
+            channelId: maskChannelId(channelId),
+            error: (error as Error).message,
           });
           throw error;
         }
-
-        // Unknown errors throw to trigger retry
-        this.logger.error({
-          message: 'Unknown error during verification',
-          userId: this.maskUserId(userId),
-          channelId: this.maskChannelId(channelId),
-          error: (error as Error).message,
-        });
-        throw error;
-      }
-    });
+      },
+      { maxRetries: this.MAX_RETRIES, delays: this.RETRY_DELAYS },
+    );
   }
 
   /**
@@ -171,7 +179,7 @@ export class ChannelVerifierService {
     if (timeSinceLastAttempt > this.RATE_LIMIT_WINDOW_MS) {
       this.logger.debug({
         message: 'Rate limit expired, resetting counter',
-        userId: this.maskUserId(userId),
+        userId: maskUserId(userId),
         botId,
         attempts,
       });
@@ -180,7 +188,7 @@ export class ChannelVerifierService {
 
     this.logger.warn({
       message: 'User is rate limited',
-      userId: this.maskUserId(userId),
+      userId: maskUserId(userId),
       botId,
       attempts,
       resetIn: Math.ceil(
@@ -231,81 +239,5 @@ export class ChannelVerifierService {
     const resetAt = new Date(lastAttempt.getTime() + this.RATE_LIMIT_WINDOW_MS);
 
     return { attempts, resetAt };
-  }
-
-  /**
-   * Execute function with exponential backoff retry
-   *
-   * @param fn - Function to execute
-   * @returns Result of function execution
-   * @throws Error after MAX_RETRIES attempts
-   */
-  private async retryWithBackoff<T>(fn: () => Promise<T>): Promise<T> {
-    let lastError: Error | null = null;
-
-    // Initial attempt + retries
-    for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
-      try {
-        return await fn();
-      } catch (error) {
-        lastError = error as Error;
-
-        // Don't retry if we've exhausted all attempts
-        if (attempt === this.MAX_RETRIES) {
-          break;
-        }
-
-        // Wait before retrying
-        const delay = this.RETRY_DELAYS[attempt];
-        await this.sleep(delay);
-      }
-    }
-
-    // All retries exhausted - lastError will always be set if we reach here
-    throw lastError ?? new Error('All retry attempts exhausted');
-  }
-
-  /**
-   * Sleep for specified milliseconds
-   *
-   * @param ms - Milliseconds to sleep
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Mask user ID for logging (show only last 4 digits)
-   *
-   * @param userId - Telegram user ID
-   * @returns Masked user ID string
-   */
-  private maskUserId(userId: number): string {
-    const userIdStr = userId.toString();
-    if (userIdStr.length <= 4) {
-      return `***${userIdStr}`;
-    }
-    return `***${userIdStr.slice(-4)}`;
-  }
-
-  /**
-   * Mask channel ID for logging (show only prefix and last 4 characters)
-   *
-   * @param channelId - Channel identifier
-   * @returns Masked channel ID string
-   */
-  private maskChannelId(channelId: string): string {
-    if (channelId.startsWith('@')) {
-      // For @username format, show @ and last 4 chars
-      if (channelId.length <= 5) {
-        return channelId;
-      }
-      return `@***${channelId.slice(-4)}`;
-    }
-    // For numeric IDs, show last 4 digits
-    if (channelId.length <= 4) {
-      return `***${channelId}`;
-    }
-    return `***${channelId.slice(-4)}`;
   }
 }

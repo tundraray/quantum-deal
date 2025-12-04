@@ -6,20 +6,16 @@ import {
   BotUsersRepository,
   BotSettingsRepository,
 } from '@quantumdeal/db';
-import type { BotUserState } from '@quantumdeal/db/schema';
 import { ChannelVerifierService } from '../services/channel-verifier.service';
 import { PartnerFlowService } from '../services/partner-flow.service';
 import { TelegrafExceptionFilter } from '@quantumdeal/framework';
-import { PARTNER_FLOW_FEATURE_KEY } from '../constants';
-
-/**
- * Partner flow scene data for verification attempts tracking
- */
-interface PartnerFlowSceneData extends Record<string, unknown> {
-  verificationState?: string;
-  verificationAttempts?: number;
-  lastVerificationAttempt?: string;
-}
+import {
+  PARTNER_FLOW_FEATURE_KEY,
+  CALLBACK_DATA,
+  MESSAGE_KEYS,
+} from '../constants';
+import { interpolateVariables } from '../utils/message-interpolator.utils';
+import { resolveChannelInfo } from '../utils/channel.utils';
 
 /**
  * ChannelVerificationAction
@@ -58,7 +54,7 @@ export class ChannelVerificationAction {
    *
    * @param ctx - Telegram context with botId injected by middleware
    */
-  @Action('partner_verify_subscription')
+  @Action(CALLBACK_DATA.VERIFY_SUBSCRIPTION)
   async handleVerify(@Ctx() ctx: PartnerBotContext): Promise<void> {
     const botUserId = ctx.user?.botUserId;
     const telegramId = ctx.from?.id;
@@ -145,68 +141,6 @@ export class ChannelVerificationAction {
   }
 
   /**
-   * Check rate limit and send message if limited
-   * @returns true if rate limited (handled), false if not limited
-   */
-  private async handleRateLimit(
-    userId: number,
-    botId: number,
-    lang: string,
-    ctx: PartnerBotContext,
-  ): Promise<boolean> {
-    const isRateLimited = await this.channelVerifierService.isRateLimited(
-      userId,
-      botId,
-    );
-
-    if (!isRateLimited) {
-      return false;
-    }
-
-    const rateLimitStatus =
-      await this.channelVerifierService.getRateLimitStatus(userId, botId);
-
-    await this.sendRateLimitMessage(botId, lang, rateLimitStatus, ctx);
-
-    this.logger.warn({
-      message: 'User verification attempt blocked by rate limit',
-      userId,
-      botId,
-      attempts: rateLimitStatus.attempts,
-    });
-
-    return true;
-  }
-
-  /**
-   * Send rate limit error message
-   */
-  private async sendRateLimitMessage(
-    botId: number,
-    lang: string,
-    rateLimitStatus: { attempts: number; resetAt: Date | null },
-    ctx: PartnerBotContext,
-  ): Promise<void> {
-    const message = await this.botMessagesRepository.resolveMessage(
-      botId,
-      'partner_rate_limit',
-      lang,
-    );
-
-    const minutesRemaining = rateLimitStatus.resetAt
-      ? Math.ceil(
-          (rateLimitStatus.resetAt.getTime() - Date.now()) / (1000 * 60),
-        )
-      : 0;
-
-    const interpolatedMessage = message
-      .replace('{attempts}', rateLimitStatus.attempts.toString())
-      .replace('{minutes}', minutesRemaining.toString());
-
-    await ctx.reply(interpolatedMessage);
-  }
-
-  /**
    * Get partner channel ID from settings
    * @returns channel ID or null if not configured
    */
@@ -233,40 +167,6 @@ export class ChannelVerificationAction {
   }
 
   /**
-   * Record verification attempt in user state
-   */
-  private async recordVerificationAttempt(
-    userId: number,
-    botId: number,
-  ): Promise<void> {
-    const botUser = await this.botUsersRepository.findByUserAndBot(
-      userId,
-      botId,
-    );
-    const sceneData = botUser?.state?.sceneData as
-      | PartnerFlowSceneData
-      | undefined;
-    const currentAttempts = sceneData?.verificationAttempts ?? 0;
-
-    const updatedState: BotUserState = {
-      currentScene: 'partner_flow',
-      sceneData: {
-        verificationAttempts: currentAttempts + 1,
-        lastVerificationAttempt: new Date().toISOString(),
-      } as PartnerFlowSceneData,
-    };
-
-    await this.botUsersRepository.updateState(userId, botId, updatedState);
-
-    this.logger.debug({
-      message: 'Verification attempt recorded',
-      userId,
-      botId,
-      attempts: currentAttempts + 1,
-    });
-  }
-
-  /**
    * Send verification failed message with retry button
    */
   private async sendVerificationFailedMessage(
@@ -276,19 +176,28 @@ export class ChannelVerificationAction {
     channelId: string,
     ctx: PartnerBotContext,
   ): Promise<void> {
-    const failureMessage = await this.botMessagesRepository.resolveMessage(
-      botId,
-      'partner_verification_failed',
-      lang,
-    );
+    const failureMessageTemplate =
+      await this.botMessagesRepository.resolveMessage(
+        botId,
+        MESSAGE_KEYS.VERIFICATION_FAILED,
+        lang,
+      );
+
+    // Calculate channel name and URL for interpolation
+    const channel = resolveChannelInfo(channelId);
+    const failureMessage = interpolateVariables(failureMessageTemplate, {
+      channelName: channel.name,
+      channelUrl: channel.url,
+    });
 
     await ctx.reply(failureMessage, {
+      parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
           [
             {
               text: 'Try Again',
-              callback_data: 'partner_verify_subscription',
+              callback_data: CALLBACK_DATA.VERIFY_SUBSCRIPTION,
             },
           ],
         ],
@@ -333,8 +242,7 @@ export class ChannelVerificationAction {
     }
 
     // Send trial UI
-    const trialExpiresAt =
-      (result as { trialExpiresAt?: Date }).trialExpiresAt ?? new Date();
+    const trialExpiresAt = result.trialExpiresAt ?? new Date();
     await this.partnerFlowService.sendTrialUI(
       userId,
       botId,

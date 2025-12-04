@@ -157,15 +157,23 @@ describe('Partner Bot Flow E2E Tests', () => {
       expiresAt: testExpiryDate,
     });
 
-    // Mock messages
-    mockBotMessagesRepository.resolveMessage
-      .mockResolvedValueOnce('Welcome to Partner Bot! 🎉') // partner_welcome
-      .mockResolvedValueOnce('🌐 Change language') // change_language_button
-      .mockResolvedValueOnce('Please subscribe to {channelUrl} ({channelName})') // partner_channel_prompt
-      .mockResolvedValueOnce('I subscribed ✅') // partner_verification_button
-      .mockResolvedValueOnce(
-        'Trial activated! Expires: {expiryDate} ({daysRemaining} days)',
-      ); // partner_trial_activated
+    // Mock messages - use mockImplementation to handle multiple calls with different keys
+    mockBotMessagesRepository.resolveMessage.mockImplementation(
+      (_botId: number, messageKey: string, _lang: string) => {
+        const messages: Record<string, string> = {
+          partner_welcome: 'Welcome to Partner Bot! 🎉',
+          button_change_language: '🌐 Change language',
+          partner_channel_prompt:
+            'Please subscribe to {channelUrl} ({channelName})',
+          button_i_subscribed: 'I subscribed ✅',
+          partner_trial_activated:
+            'Trial activated! Expires: {expiryDate} ({daysRemaining} days)',
+          button_extend_trial: 'Extend Free Period 🎁',
+          button_buy_subscription: 'Buy Subscription 💳',
+        };
+        return Promise.resolve(messages[messageKey] ?? 'Unknown message');
+      },
+    );
 
     // Mock Telegram API - user is subscribed
     mockBot.telegram.getChatMember.mockResolvedValue({ status: 'member' });
@@ -279,7 +287,11 @@ describe('Partner Bot Flow E2E Tests', () => {
     );
 
     // Verify trial activated with botUserId (not telegramId)
-    expect(mockTrialService.activate).toHaveBeenCalledWith(TEST_BOT_USER_ID);
+    // Implementation now passes optional trialDays parameter as well
+    expect(mockTrialService.activate).toHaveBeenCalledWith(
+      TEST_BOT_USER_ID,
+      undefined,
+    );
 
     // Verify state transitioned to trial_activated
     expect(mockBotUsersRepository.updateState).toHaveBeenCalledWith(
@@ -429,16 +441,21 @@ describe('Partner Bot Flow E2E Tests', () => {
       expiresAt: testExpiryDate,
     });
 
-    // Mock messages - ordered by call sequence
-    // 1. First verification attempt fails: resolveLanguage, then partner_verification_failed
-    // 2. Second verification attempt succeeds: resolveLanguage, then partner_trial_activated
-    mockBotMessagesRepository.resolveMessage
-      .mockResolvedValueOnce(
-        'You are not subscribed yet. Please subscribe first.',
-      ) // partner_verification_failed (first attempt)
-      .mockResolvedValueOnce(
-        'Trial activated! Expires: {expiryDate} ({daysRemaining} days)',
-      ); // partner_trial_activated (second attempt, success)
+    // Mock messages - use mockImplementation to handle multiple calls with different keys
+    mockBotMessagesRepository.resolveMessage.mockImplementation(
+      (_botId: number, messageKey: string, _lang: string) => {
+        const messages: Record<string, string> = {
+          partner_verification_failed:
+            'You are not subscribed yet. Please subscribe first.',
+          partner_trial_activated:
+            'Trial activated! Expires: {expiryDate} ({daysRemaining} days)',
+          button_extend_trial: 'Extend Free Period 🎁',
+          button_buy_subscription: 'Buy Subscription 💳',
+          button_try_again: 'Try Again',
+        };
+        return Promise.resolve(messages[messageKey] ?? 'Unknown message');
+      },
+    );
 
     // Mock Telegram API - first call returns 'left' (not subscribed), subsequent returns 'member' (subscribed)
     // Note: handleVerify calls verifyMembership, and on success handleVerificationRequest also calls verifyMembership
@@ -561,7 +578,11 @@ describe('Partner Bot Flow E2E Tests', () => {
     expect(mockBot.telegram.getChatMember).toHaveBeenCalledTimes(3);
 
     // Verify trial activated on retry with botUserId (not telegramId)
-    expect(mockTrialService.activate).toHaveBeenCalledWith(testBotUserId);
+    // Implementation now passes optional trialDays parameter as well
+    expect(mockTrialService.activate).toHaveBeenCalledWith(
+      testBotUserId,
+      undefined,
+    );
 
     // Verify state transitioned to trial_activated
     expect(mockBotUsersRepository.updateState).toHaveBeenCalledWith(
@@ -872,13 +893,20 @@ describe('Partner Bot Flow E2E Tests', () => {
     );
 
     // Mock messages
+    // Each user needs: main message + button_extend_trial + button_buy_subscription = 3 calls per user
     mockBotMessagesRepository.resolveMessage
+      // User 1
       .mockResolvedValueOnce(
         'Your trial expired! Extend with referral: {referralUrl}',
       ) // partner_trial_expired
+      .mockResolvedValueOnce('Extend Free Period 🎁') // button_extend_trial
+      .mockResolvedValueOnce('Buy Subscription 💳') // button_buy_subscription
+      // User 2
       .mockResolvedValueOnce(
         'Your trial expired! Extend with referral: {referralUrl}',
       ) // partner_trial_expired (user 2)
+      .mockResolvedValueOnce('Extend Free Period 🎁') // button_extend_trial (user 2)
+      .mockResolvedValueOnce('Buy Subscription 💳') // button_buy_subscription (user 2)
       .mockResolvedValueOnce('Payment integration coming soon!'); // partner_coming_soon
 
     mockBot.telegram.sendMessage.mockResolvedValue({});

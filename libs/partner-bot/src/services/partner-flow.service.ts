@@ -11,6 +11,10 @@ import { ChannelVerifierService } from './channel-verifier.service';
 import type { VerificationResult } from '../types/partner-settings';
 import { FeatureFlag } from '@quantumdeal/db/schema';
 import { BotSettings } from '@quantumdeal/telegraf/interfaces/dynamic-telegraf-options.interface';
+import type { PartnerFlowSceneData } from '../types/scene-data.types';
+import { interpolateVariables } from '../utils/message-interpolator.utils';
+import { resolveChannelInfo } from '../utils/channel.utils';
+import { CALLBACK_DATA, MESSAGE_KEYS, BUTTON_KEYS } from '../constants';
 
 /**
  * Partner settings structure from bot_settings
@@ -18,21 +22,6 @@ import { BotSettings } from '@quantumdeal/telegraf/interfaces/dynamic-telegraf-o
 interface PartnerSettings extends BotSettings {
   channelId?: string;
   channelName?: string;
-}
-
-/**
- * User state structure for partner flow (extends BotUserState via sceneData)
- *
- * Note: Partner flow state is stored in the generic sceneData field since
- * the BotUserState interface is shared across all bots. This allows partner-specific
- * state without modifying the shared schema.
- */
-interface PartnerFlowSceneData extends Record<string, unknown> {
-  verificationState?: string;
-  verificationAttempts?: number;
-  lastVerificationAttempt?: Date | string;
-  trialActivatedAt?: Date | string;
-  trialExpiresAt?: Date | string;
 }
 
 /**
@@ -100,23 +89,15 @@ export class PartnerFlowService {
       // Retrieve message
       const messageTemplate = await this.botMessagesRepository.resolveMessage(
         botId,
-        'partner_channel_prompt',
+        MESSAGE_KEYS.CHANNEL_PROMPT,
         lang,
       );
 
       // Interpolate variables
-      const channelName =
-        (settings.channelName ?? channelId.startsWith('@'))
-          ? channelId.substring(1)
-          : channelId;
-      console.log('channelName', channelName, settings);
-      const channelUrl = channelId.startsWith('@')
-        ? `https://t.me/${channelName}`
-        : `https://t.me/${channelId}`;
-
-      const message = this.interpolateVariables(messageTemplate, {
-        channelUrl,
-        channelName,
+      const channel = resolveChannelInfo(channelId, settings.channelName);
+      const message = interpolateVariables(messageTemplate, {
+        channelUrl: channel.url,
+        channelName: channel.name,
       });
 
       // Get bot instance for sending message
@@ -132,7 +113,7 @@ export class PartnerFlowService {
 
       // Retrieve buttons text
       const iSubscribedButtonText = await this.botMessagesRepository
-        .resolveMessage(botId, 'button_i_subscribed', lang)
+        .resolveMessage(botId, BUTTON_KEYS.I_SUBSCRIBED, lang)
         .catch(() => 'I subscribed ✅');
 
       // Send message with inline keyboard
@@ -143,7 +124,7 @@ export class PartnerFlowService {
             [
               {
                 text: iSubscribedButtonText,
-                callback_data: 'partner_verify_subscription',
+                callback_data: CALLBACK_DATA.VERIFY_SUBSCRIPTION,
               },
             ],
           ],
@@ -266,15 +247,24 @@ export class PartnerFlowService {
 
         // Retrieve buttons text
         const tryAgainButtonText = await this.botMessagesRepository
-          .resolveMessage(botId, 'button_try_again', lang)
+          .resolveMessage(botId, BUTTON_KEYS.TRY_AGAIN, lang)
           .catch(() => 'Try Again');
 
-        // Send failure message
-        const failureMessage = await this.botMessagesRepository.resolveMessage(
-          botId,
-          'partner_verification_failed',
-          lang,
-        );
+        // Send failure message with interpolated channel info
+        const failureMessageTemplate =
+          await this.botMessagesRepository.resolveMessage(
+            botId,
+            MESSAGE_KEYS.VERIFICATION_FAILED,
+            lang,
+          );
+
+        // Calculate channel name and URL for interpolation
+        const channel = resolveChannelInfo(channelId, settings.channelName);
+        const failureMessage = interpolateVariables(failureMessageTemplate, {
+          channelName: channel.name,
+          channelUrl: channel.url,
+        });
+
         await bot.telegram.sendMessage(userId, failureMessage, {
           parse_mode: 'HTML',
           reply_markup: {
@@ -282,7 +272,7 @@ export class PartnerFlowService {
               [
                 {
                   text: tryAgainButtonText,
-                  callback_data: 'partner_verify_subscription',
+                  callback_data: CALLBACK_DATA.VERIFY_SUBSCRIPTION,
                 },
               ],
             ],
@@ -319,12 +309,8 @@ export class PartnerFlowService {
         botId,
       });
 
-      // Resolve botUser to get botUserId for subscription operations
-      // botUser is already fetched earlier in this method, but may have been for verification attempts only.
-      // Re-fetch to ensure we have the full botUser object with id
-      const botUserForActivation =
-        await this.botUsersRepository.findByUserAndBot(userId, botId);
-      if (!botUserForActivation) {
+      // Use botUser fetched earlier (line 210) for trial activation
+      if (!botUser) {
         this.logger.warn({
           message: 'Failed to resolve botUser for trial activation',
           userId,
@@ -335,14 +321,14 @@ export class PartnerFlowService {
 
       this.logger.debug({
         message: 'Resolved botUserId for trial activation',
-        userId, // telegramId for reference
+        userId,
         botId,
-        botUserId: botUserForActivation.id, // Should be small integer
+        botUserId: botUser.id,
       });
 
-      // FIXED: Use botUser.id (bot_users.id) instead of userId (telegramId)
+      // Use botUser.id (bot_users.id) instead of userId (telegramId)
       const activationResult = await this.trialService.activate(
-        botUserForActivation.id,
+        botUser.id,
         settings?.defaults?.trialDays,
       );
 
@@ -382,14 +368,15 @@ export class PartnerFlowService {
 
       this.logger.log({
         message: 'Trial activated with botUserId',
-        userId, // telegramId for reference
+        userId,
         botId,
-        botUserId: botUserForActivation.id, // Should be small integer
+        botUserId: botUser.id,
         expiresAt: activationResult.expiresAt,
       });
 
       return {
         verified: true,
+        trialExpiresAt: activationResult.expiresAt,
       };
     } catch (error) {
       this.logger.error({
@@ -426,7 +413,7 @@ export class PartnerFlowService {
       // Retrieve message
       const messageTemplate = await this.botMessagesRepository.resolveMessage(
         botId,
-        'partner_trial_activated',
+        MESSAGE_KEYS.TRIAL_ACTIVATED,
         lang,
       );
 
@@ -436,7 +423,7 @@ export class PartnerFlowService {
       const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
       // Interpolate variables
-      const message = this.interpolateVariables(messageTemplate, {
+      const message = interpolateVariables(messageTemplate, {
         expiryDate: expiresAt.toISOString().split('T')[0],
         daysRemaining: daysRemaining.toString(),
       });
@@ -454,11 +441,11 @@ export class PartnerFlowService {
 
       // Retrieve buttons text
       const extendTrialButtonText = await this.botMessagesRepository
-        .resolveMessage(botId, 'button_extend_trial', lang)
+        .resolveMessage(botId, BUTTON_KEYS.EXTEND_TRIAL, lang)
         .catch(() => 'Extend Free Period 🎁');
 
       const buySubscriptionButtonText = await this.botMessagesRepository
-        .resolveMessage(botId, 'button_buy_subscription', lang)
+        .resolveMessage(botId, BUTTON_KEYS.BUY_SUBSCRIPTION, lang)
         .catch(() => 'Buy Subscription 💳');
 
       // Send message with inline keyboard
@@ -469,13 +456,13 @@ export class PartnerFlowService {
             [
               {
                 text: extendTrialButtonText,
-                callback_data: 'partner_extend_trial',
+                callback_data: CALLBACK_DATA.EXTEND_TRIAL,
               },
             ],
             [
               {
                 text: buySubscriptionButtonText,
-                callback_data: 'partner_buy_subscription',
+                callback_data: CALLBACK_DATA.BUY_SUBSCRIPTION,
               },
             ],
           ],
@@ -507,25 +494,5 @@ export class PartnerFlowService {
       });
       throw error;
     }
-  }
-
-  /**
-   * Interpolate variables in message template
-   *
-   * Simple string replacement using provided variable map.
-   *
-   * @param template - Message template with {variable} placeholders
-   * @param variables - Map of variable names to values
-   * @returns Interpolated message string
-   */
-  private interpolateVariables(
-    template: string,
-    variables: Record<string, string>,
-  ): string {
-    let result = template;
-    for (const [key, value] of Object.entries(variables)) {
-      result = result.replace(`{${key}}`, value);
-    }
-    return result;
   }
 }

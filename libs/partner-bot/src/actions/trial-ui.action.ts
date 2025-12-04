@@ -8,6 +8,8 @@ import {
 } from '@quantumdeal/db';
 import { TelegrafExceptionFilter } from '@quantumdeal/framework';
 import { PARTNER_FLOW_FEATURE_KEY } from '../constants';
+import { isValidHttpsUrl } from '../utils/url-validation.utils';
+import { maskUrl } from '../utils/log-masking.utils';
 
 /**
  * Fallback message when database message is not found
@@ -86,12 +88,12 @@ export class TrialUIAction {
       }
 
       // Validate HTTPS
-      if (!this.isValidHttpsUrl(referralUrl)) {
+      if (!isValidHttpsUrl(referralUrl)) {
         this.logger.error({
           message: 'Invalid referral URL (not HTTPS)',
           userId,
           botId,
-          url: this.maskUrl(referralUrl),
+          url: maskUrl(referralUrl),
         });
 
         await ctx.reply(
@@ -123,7 +125,7 @@ export class TrialUIAction {
         userId,
         botId,
         action: 'extend_trial_clicked',
-        referralUrl: this.maskUrl(referralUrl),
+        referralUrl: maskUrl(referralUrl),
       });
     } catch (error) {
       this.logger.error({
@@ -287,24 +289,5 @@ export class TrialUIAction {
     }
 
     return settings.referralUrl;
-  }
-
-  /**
-   * Validate URL is HTTPS format
-   */
-  private isValidHttpsUrl(url: string): boolean {
-    return url.startsWith('https://');
-  }
-
-  /**
-   * Mask URL for logging (hide sensitive parts)
-   */
-  private maskUrl(url: string): string {
-    try {
-      const urlObj = new URL(url);
-      return `${urlObj.protocol}//${urlObj.hostname}${urlObj.pathname}`;
-    } catch {
-      return 'invalid-url';
-    }
   }
 }

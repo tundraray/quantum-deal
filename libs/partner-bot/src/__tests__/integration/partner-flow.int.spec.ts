@@ -291,8 +291,16 @@ describe('Partner Bot Flow Integration Tests', () => {
     const trialActivatedTemplate =
       'Your trial is activated! Expires: {expiryDate} ({daysRemaining} days remaining)';
 
-    (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-      trialActivatedTemplate,
+    // Use mockImplementation to return different values based on message key
+    (mockBotMessagesRepository.resolveMessage as jest.Mock).mockImplementation(
+      (_botId: number, messageKey: string, _lang: string) => {
+        const messages: Record<string, string> = {
+          partner_trial_activated: trialActivatedTemplate,
+          button_extend_trial: 'Extend Free Period 🎁',
+          button_buy_subscription: 'Buy Subscription 💳',
+        };
+        return Promise.resolve(messages[messageKey] ?? 'Unknown message');
+      },
     );
 
     // Mock Telegram API to return valid subscription status
@@ -336,8 +344,12 @@ describe('Partner Bot Flow Integration Tests', () => {
     );
 
     // Verify TrialService.activate() called exactly once with correct botUserId (not telegramId)
+    // Implementation passes optional trialDays parameter as second argument
     expect(mockTrialService.activate).toHaveBeenCalledTimes(1);
-    expect(mockTrialService.activate).toHaveBeenCalledWith(TEST_BOT_USER_ID);
+    expect(mockTrialService.activate).toHaveBeenCalledWith(
+      TEST_BOT_USER_ID,
+      undefined,
+    );
 
     // Verify state transitions to trial_activated
     expect(mockBotUsersRepository.updateState).toHaveBeenCalledWith(
@@ -715,10 +727,29 @@ describe('Partner Bot Flow Integration Tests', () => {
     };
 
     // Mock BotMessagesRepository.resolveMessage() for partner_trial_expired
+    // ReminderSchedulerService calls resolveMessage 3 times per user:
+    // 1. Main message (partner_trial_expired)
+    // 2. Extend button text (button_extend_trial)
+    // 3. Buy button text (button_buy_subscription)
     const trialExpiredMessageTemplate =
       'Your trial has expired! Click "Extend" to get more free days via referral link: {referralUrl}';
-    (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-      trialExpiredMessageTemplate,
+    const extendButtonText = 'Extend Free Period 🎁';
+    const buyButtonText = 'Buy Subscription 💳';
+
+    // Mock implementation that returns different values based on message key
+    (mockBotMessagesRepository.resolveMessage as jest.Mock).mockImplementation(
+      (_botId: number, messageKey: string, _lang: string) => {
+        if (messageKey === 'partner_trial_expired') {
+          return Promise.resolve(trialExpiredMessageTemplate);
+        }
+        if (messageKey === 'button_extend_trial') {
+          return Promise.resolve(extendButtonText);
+        }
+        if (messageKey === 'button_buy_subscription') {
+          return Promise.resolve(buyButtonText);
+        }
+        return Promise.resolve('Unknown message');
+      },
     );
 
     // Mock BotSettingsRepository.findByBotId() with referral URL
@@ -787,7 +818,9 @@ describe('Partner Bot Flow Integration Tests', () => {
       'partner_trial_expired',
       'ru',
     );
-    expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledTimes(3);
+    // Each user gets 3 calls: main message + 2 button texts (extend_trial, buy_subscription)
+    // 3 users * 3 calls = 9 total calls
+    expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledTimes(9);
 
     // Verify reminder messages sent via Telegram
     expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
@@ -870,8 +903,12 @@ describe('Partner Bot Flow Integration Tests', () => {
     );
 
     // Verify TrialService.activate() called with correct botUserId (not telegramId)
+    // Implementation now passes optional trialDays parameter as well
     expect(mockTrialService.activate).toHaveBeenCalledTimes(1);
-    expect(mockTrialService.activate).toHaveBeenCalledWith(TEST_BOT_USER_ID);
+    expect(mockTrialService.activate).toHaveBeenCalledWith(
+      TEST_BOT_USER_ID,
+      undefined,
+    );
 
     // Verify successful result includes expiration date
     expect(result.verified).toBe(true);
@@ -909,7 +946,11 @@ describe('Partner Bot Flow Integration Tests', () => {
     );
 
     // Verify TrialService.activate() called with botUserId
-    expect(mockTrialService.activate).toHaveBeenCalledWith(TEST_BOT_USER_ID);
+    // Implementation now passes optional trialDays parameter as well
+    expect(mockTrialService.activate).toHaveBeenCalledWith(
+      TEST_BOT_USER_ID,
+      undefined,
+    );
 
     // Verify partner flow handles error gracefully
     expect(result.verified).toBe(false);

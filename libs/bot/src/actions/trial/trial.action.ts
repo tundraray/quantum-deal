@@ -48,8 +48,8 @@ export class TrialAction {
         return;
       }
 
-      // Activate trial
-      const result = await this.trialService.activate(user.telegramId);
+      // Activate trial (using botUserId, not telegramId)
+      const result = await this.trialService.activate(user.botUserId);
 
       if (!result.success) {
         await ctx.reply(

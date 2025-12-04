@@ -702,29 +702,36 @@ export class PartnerFlowService {
   ) {}
 
   async handleVerificationRequest(
-    userId: string,
-    botId: string,
+    userId: number,      // Telegram user ID (for channel verification)
+    botId: number,       // Bot ID (for settings lookup)
     channelId: string,
   ): Promise<{ verified: boolean, error?: string }> {
     // Step 1: Verify channel membership
     const isSubscribed = await this.channelVerifier.verifyMembership(
       channelId,
-      parseInt(userId),
+      userId,
     )
 
     if (!isSubscribed) {
       return { verified: false, error: 'not_subscribed' }
     }
 
-    // Step 2: Update user state
+    // Step 2: Resolve botUser to get botUserId for subscription operations
+    const botUser = await this.botUsersRepo.findByUserAndBot(userId, botId)
+    if (!botUser) {
+      return { verified: false, error: 'user_context_not_found' }
+    }
+
+    // Step 3: Update user state
     await this.botUsersRepo.updateState(userId, botId, {
       verification: 'channel_verified',
     })
 
-    // Step 3: Activate trial via existing TrialService
-    await this.trialService.activate(userId, botId)
+    // Step 4: Activate trial via existing TrialService
+    // NOTE: TrialService.activate() expects botUserId (bot_users.id), NOT telegramId
+    await this.trialService.activate(botUser.id)
 
-    // Step 4: Update state to trial_activated
+    // Step 5: Update state to trial_activated
     await this.botUsersRepo.updateState(userId, botId, {
       verification: 'trial_activated',
     })
@@ -880,7 +887,7 @@ flowchart TB
         F --> G{Subscribed?}
         G -->|Yes| H[BotUsersRepo.updateState: channel_verified]
         G -->|No| I[Send partner_verification_failed]
-        H --> J[TrialService.activate - from libs/bot]
+        H --> J[TrialService.activate botUserId - from libs/bot]
         J --> K[BotUsersRepo.updateState: trial_activated]
         K --> L[Send partner_trial_activated]
         I --> D
@@ -991,12 +998,13 @@ This ADR depends on the following common technical decisions:
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2025-12-02 | Claude Code Architecture Agent | Initial version - Six architecture decisions for partner bot flow |
+| 1.0.1 | 2025-12-04 | Claude Code | Fixed Decision 6: TrialService.activate() signature corrected to use botUserId (bot_users.id) instead of userId (telegramId) |
 
 ---
 
-**Document Version**: 1.0.0
+**Document Version**: 1.0.1
 **Created**: 2025-12-02
-**Last Updated**: 2025-12-02
+**Last Updated**: 2025-12-04
 **Author**: Claude Code Architecture Agent
 
 ---

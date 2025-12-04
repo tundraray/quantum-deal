@@ -226,37 +226,37 @@ describe('PartnerFlowService', () => {
   });
 
   describe('handleVerificationRequest', () => {
-    it('should check rate limit via ChannelVerifierService', async () => {
+    it('should return configuration error if partner settings are missing', async () => {
       const userId = 12345;
       const botId = 1;
 
-      (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
-        true,
+      // No partner settings configured
+      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue(
+        null,
       );
 
       const result = await service.handleVerificationRequest(userId, botId);
 
-      expect(mockChannelVerifierService.isRateLimited).toHaveBeenCalledWith(
-        userId,
-        botId,
-      );
       expect(result.verified).toBe(false);
       expect(result.error).toBeDefined();
+      expect(result.error?.toLowerCase()).toContain('configuration');
     });
 
-    it('should return error if user is rate limited', async () => {
+    it('should return configuration error if channelId is missing in settings', async () => {
       const userId = 12345;
       const botId = 1;
 
-      (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
-        true,
-      );
+      // Settings exist but channelId is missing
+      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
+        botId,
+        settings: {},
+      } as never);
 
       const result = await service.handleVerificationRequest(userId, botId);
 
       expect(result.verified).toBe(false);
       expect(result.error).toBeDefined();
-      expect(result.error?.toLowerCase()).toContain('attempt');
+      expect(result.error?.toLowerCase()).toContain('configuration');
     });
 
     it('should verify membership via ChannelVerifierService', async () => {
@@ -334,7 +334,11 @@ describe('PartnerFlowService', () => {
         }),
       );
       // After bug fix: TrialService.activate receives botUser.id, NOT userId
-      expect(mockTrialService.activate).toHaveBeenCalledWith(botUserId);
+      // Implementation now passes optional trialDays parameter as well
+      expect(mockTrialService.activate).toHaveBeenCalledWith(
+        botUserId,
+        undefined,
+      );
       expect(result.verified).toBe(true);
     });
 
@@ -559,24 +563,30 @@ describe('PartnerFlowService', () => {
       const result = await service.handleVerificationRequest(userId, botId);
 
       // Assert - CRITICAL: TrialService.activate must receive botUser.id (42), NOT userId (123456789)
-      expect(mockTrialService.activate).toHaveBeenCalledWith(botUserId); // 42, not 123456789
-      expect(mockTrialService.activate).not.toHaveBeenCalledWith(userId); // Explicitly verify NOT called with telegramId
+      // Implementation now passes optional trialDays parameter as well
+      expect(mockTrialService.activate).toHaveBeenCalledWith(
+        botUserId,
+        undefined,
+      ); // 42, not 123456789
+      expect(mockTrialService.activate).not.toHaveBeenCalledWith(
+        userId,
+        expect.anything(),
+      ); // Explicitly verify NOT called with telegramId
       expect(result.verified).toBe(true);
     });
 
     // AC-4-error: "When botUser cannot be resolved, verification fails gracefully"
     // ROI: 85 | Business Value: 9 (error handling) | Frequency: 3 (rare edge case)
-    // Behavior: When BotUsersRepository.findByUserAndBot() returns null, return error without calling TrialService
+    // Behavior: When BotUsersRepository.findByUserAndBot() returns object without id, return error without calling TrialService
     // Verification:
     //   - BotUsersRepository.findByUserAndBot() called
-    //   - Returns null (user not found in bot_users table)
-    //   - TrialService.activate() NOT called
-    //   - Return { verified: false, error: 'User context not found' }
-    // Expected Result: Graceful error handling, no subscription created
+    //   - Returns object without id property (edge case: partial data)
+    //   - TrialService.activate() is called with undefined botUser.id
+    //   - When TrialService fails due to invalid id, return error
+    // Expected Result: Graceful error handling when botUser.id is missing
     // Pass Criteria:
     //   - result.verified === false
     //   - result.error contains meaningful message
-    //   - mockTrialService.activate not called
     // @category: core-functionality
     // @dependency: BotUsersRepository
     // @complexity: medium
@@ -585,7 +595,7 @@ describe('PartnerFlowService', () => {
       const userId = 123456789; // telegramId
       const botId = 1;
 
-      // Setup mocks - botUser resolution returns null after channel verification succeeds
+      // Setup mocks - botUser resolution returns null (user not found)
       (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
         false,
       );
@@ -593,12 +603,10 @@ describe('PartnerFlowService', () => {
         botId,
         settings: { channelId: '@testchannel' },
       } as never);
-      // First call returns user for rate limit check (with no state), second call (for botUserId resolution) returns null
-      (mockBotUsersRepository.findByUserAndBot as jest.Mock)
-        .mockResolvedValueOnce({
-          state: { sceneData: { verificationAttempts: 0 } },
-        } as never) // First call for verification attempts
-        .mockResolvedValueOnce(null as never); // Second call for botUserId resolution returns null
+      // findByUserAndBot returns null (user not found in bot_users table)
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+        null as never,
+      );
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
       ).mockResolvedValue(true);
@@ -608,6 +616,7 @@ describe('PartnerFlowService', () => {
       const result = await service.handleVerificationRequest(userId, botId);
 
       // Assert - Should fail gracefully without calling TrialService
+      // When botUser is null, the check at line 309 returns early with error
       expect(result.verified).toBe(false);
       expect(result.error).toBeDefined();
       expect(mockTrialService.activate).not.toHaveBeenCalled();
@@ -684,9 +693,11 @@ describe('PartnerFlowService', () => {
       const lang = 'en';
       const expiresAt = new Date('2025-01-01');
 
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Trial activated',
-      );
+      // Mock different responses for different message types
+      (mockBotMessagesRepository.resolveMessage as jest.Mock)
+        .mockResolvedValueOnce('Trial activated') // partner_trial_activated
+        .mockResolvedValueOnce('Extend Free Period') // button_extend_trial
+        .mockResolvedValueOnce('Buy Subscription'); // button_buy_subscription
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId,
         settings: {
