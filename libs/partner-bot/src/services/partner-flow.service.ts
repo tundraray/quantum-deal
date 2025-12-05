@@ -14,6 +14,7 @@ import { BotSettings } from '@quantumdeal/telegraf/interfaces/dynamic-telegraf-o
 import type { PartnerFlowSceneData } from '../types/scene-data.types';
 import { interpolateVariables } from '../utils/message-interpolator.utils';
 import { resolveChannelInfo } from '../utils/channel.utils';
+import { isValidHttpsUrl } from '../utils/url-validation.utils';
 import { CALLBACK_DATA, MESSAGE_KEYS, BUTTON_KEYS } from '../constants';
 
 /**
@@ -439,6 +440,14 @@ export class PartnerFlowService {
         throw new Error(`Bot with ID ${botId} not found`);
       }
 
+      // Get referral URL from settings
+      const settingsRecord =
+        await this.botSettingsRepository.findByBotId(botId);
+      const settings = settingsRecord?.settings as
+        | (PartnerSettings & { referralUrl?: string })
+        | undefined;
+      const referralUrl = settings?.referralUrl;
+
       // Retrieve buttons text
       const extendTrialButtonText = await this.botMessagesRepository
         .resolveMessage(botId, BUTTON_KEYS.EXTEND_TRIAL, lang)
@@ -448,17 +457,17 @@ export class PartnerFlowService {
         .resolveMessage(botId, BUTTON_KEYS.BUY_SUBSCRIPTION, lang)
         .catch(() => 'Buy Subscription 💳');
 
+      // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
+      const extendTrialButton = isValidHttpsUrl(referralUrl ?? '')
+        ? { text: extendTrialButtonText, url: referralUrl as string }
+        : { text: extendTrialButtonText, callback_data: CALLBACK_DATA.EXTEND_TRIAL };
+
       // Send message with inline keyboard
       await bot.telegram.sendMessage(userId, message, {
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
-            [
-              {
-                text: extendTrialButtonText,
-                callback_data: CALLBACK_DATA.EXTEND_TRIAL,
-              },
-            ],
+            [extendTrialButton],
             [
               {
                 text: buySubscriptionButtonText,

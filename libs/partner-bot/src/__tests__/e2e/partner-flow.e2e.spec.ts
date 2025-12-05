@@ -306,7 +306,7 @@ describe('Partner Bot Flow E2E Tests', () => {
       }),
     );
 
-    // Verify success message sent with buttons
+    // Verify success message sent with buttons (2 rows: extend trial + buy subscription)
     const successMessageCall = mockBot.telegram.sendMessage.mock.calls.find(
       (call: any) => call[1].includes('Trial activated'),
     );
@@ -956,25 +956,26 @@ describe('Partner Bot Flow E2E Tests', () => {
     expect(mockBot.telegram.sendMessage).toHaveBeenCalledTimes(2);
 
     // Verify reminder messages contain interpolated referral URL
+    // When referralUrl is valid HTTPS, the extend button uses url instead of callback_data
     expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
       testUserId1,
       expect.stringContaining(testReferralUrl),
       expect.objectContaining({
         reply_markup: expect.objectContaining({
-          inline_keyboard: expect.arrayContaining([
-            expect.arrayContaining([
+          inline_keyboard: [
+            [
               expect.objectContaining({
                 text: expect.stringContaining('Extend Free Period'),
-                callback_data: 'partner_extend_trial',
+                url: testReferralUrl,
               }),
-            ]),
-            expect.arrayContaining([
+            ],
+            [
               expect.objectContaining({
                 text: expect.stringContaining('Buy Subscription'),
                 callback_data: 'partner_buy_subscription',
               }),
-            ]),
-          ]),
+            ],
+          ],
         }),
       }),
     );
@@ -1027,7 +1028,7 @@ describe('Partner Bot Flow E2E Tests', () => {
     expect(stats3.failed).toBe(0);
     expect(mockBot.telegram.sendMessage).toHaveBeenCalledTimes(2);
 
-    // Verify reminders include action buttons
+    // Verify reminders include action buttons (2 rows: extend trial + buy subscription)
     const reminderCall = mockBot.telegram.sendMessage.mock.calls[0];
     expect(reminderCall[2]?.reply_markup?.inline_keyboard).toHaveLength(2);
   });

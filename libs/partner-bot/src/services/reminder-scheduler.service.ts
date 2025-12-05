@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import type {
+import {
   UserSubscriptionsRepository,
   BotMessagesRepository,
   BotSettingsRepository,
@@ -13,6 +13,7 @@ import {
   BUTTON_KEYS,
 } from '../constants';
 import { interpolateVariables } from '../utils/message-interpolator.utils';
+import { isValidHttpsUrl } from '../utils/url-validation.utils';
 
 /**
  * Statistics returned by processExpiredTrials
@@ -216,17 +217,20 @@ export class ReminderSchedulerService {
             )
             .catch(() => 'Buy Subscription 💳');
 
+          // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
+          const extendTrialButton = isValidHttpsUrl(referralUrl)
+            ? { text: extendTrialButtonText, url: referralUrl }
+            : {
+                text: extendTrialButtonText,
+                callback_data: CALLBACK_DATA.EXTEND_TRIAL,
+              };
+
           // Send reminder with action buttons using the bot's Telegraf instance
           await botInstance.bot.telegram.sendMessage(botUser.userId, message, {
             parse_mode: 'HTML',
             reply_markup: {
               inline_keyboard: [
-                [
-                  {
-                    text: extendTrialButtonText,
-                    callback_data: CALLBACK_DATA.EXTEND_TRIAL,
-                  },
-                ],
+                [extendTrialButton],
                 [
                   {
                     text: buySubscriptionButtonText,

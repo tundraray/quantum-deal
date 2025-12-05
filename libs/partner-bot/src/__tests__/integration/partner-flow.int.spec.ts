@@ -374,25 +374,26 @@ describe('Partner Bot Flow Integration Tests', () => {
 
     // Verify success message sent with interpolated variables
     // Note: expiryDate is recalculated in sendTrialUI using current time, so we just check structure
+    // When referralUrl is not configured, buttons use callback_data in separate rows
     expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
       testUserId,
       expect.stringMatching(/Expires:.*days remaining/), // Contains expiry info
       expect.objectContaining({
         reply_markup: expect.objectContaining({
-          inline_keyboard: expect.arrayContaining([
-            expect.arrayContaining([
+          inline_keyboard: [
+            [
               expect.objectContaining({
                 text: expect.stringContaining('Extend Free Period'),
                 callback_data: 'partner_extend_trial',
               }),
-            ]),
-            expect.arrayContaining([
+            ],
+            [
               expect.objectContaining({
                 text: expect.stringContaining('Buy Subscription'),
                 callback_data: 'partner_buy_subscription',
               }),
-            ]),
-          ]),
+            ],
+          ],
         }),
       }),
     );
@@ -410,7 +411,7 @@ describe('Partner Bot Flow Integration Tests', () => {
       testLang,
     );
 
-    // Verify button count === 2 (Extend + Buy)
+    // Verify button rows count === 2 (Extend row + Buy row)
     const keyboard = (mockBot.telegram.sendMessage as jest.Mock).mock
       .calls[0][2].reply_markup.inline_keyboard;
     expect(keyboard).toHaveLength(2);
@@ -823,25 +824,26 @@ describe('Partner Bot Flow Integration Tests', () => {
     expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledTimes(9);
 
     // Verify reminder messages sent via Telegram
+    // When referralUrl is valid HTTPS, the extend button uses url instead of callback_data
     expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
       111,
       expect.stringContaining(referralUrl), // Interpolated referral URL
       expect.objectContaining({
         reply_markup: expect.objectContaining({
-          inline_keyboard: expect.arrayContaining([
-            expect.arrayContaining([
+          inline_keyboard: [
+            [
               expect.objectContaining({
                 text: expect.stringContaining('Extend Free Period'),
-                callback_data: 'partner_extend_trial',
+                url: referralUrl,
               }),
-            ]),
-            expect.arrayContaining([
+            ],
+            [
               expect.objectContaining({
                 text: expect.stringContaining('Buy Subscription'),
                 callback_data: 'partner_buy_subscription',
               }),
-            ]),
-          ]),
+            ],
+          ],
         }),
       }),
     );

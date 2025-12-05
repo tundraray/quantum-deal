@@ -4,6 +4,7 @@ import { Markup } from 'telegraf';
 import {
   BotMessagesRepository,
   BotUsersRepository,
+  BotSettingsRepository,
   UserSubscriptionsRepository,
   BotUser,
   BotUserState,
@@ -17,11 +18,25 @@ import {
 } from '../../constants';
 import type { PartnerFlowSceneData } from '../../types/scene-data.types';
 import { calculateRemainingTimeDisplay } from '../../utils/trial-status.utils';
+import { isValidHttpsUrl } from '../../utils/url-validation.utils';
 
 /**
  * Handles /start command for partner bot flow.
- * Sends welcome message and initiates channel subscription prompt.
- * Only registered on bots where partnerFlowEnabled = true via @RequiresFeature.
+ * Sends welcome message and initiates channel subscription prompt flow.
+ *
+ * This handler is only registered on bots where partnerFlowEnabled = true
+ * in bot_settings.features (via @RequiresFeature decorator).
+ *
+ * Flow:
+ * 1. User sends /start command
+ * 2. Send partner_welcome message
+ * 3. Initialize bot_users.state.verification to 'awaiting_channel_subscription'
+ * 4. Call PartnerFlowService.sendChannelPrompt()
+ *
+ * Integration:
+ * - BotMessagesRepository: Resolve partner_welcome message with fallback chain
+ * - BotUsersRepository: Update verification state
+ * - PartnerFlowService: Send channel subscription prompt
  */
 @Update()
 @RequiresFeature(PARTNER_FLOW_FEATURE_KEY)
@@ -34,6 +49,7 @@ export class StartCommandUpdate {
     private readonly partnerFlowService: PartnerFlowService,
     private readonly botUsersRepository: BotUsersRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
+    private readonly botSettingsRepository: BotSettingsRepository,
   ) {}
 
   /**
@@ -269,6 +285,18 @@ export class StartCommandUpdate {
       // Use fallback text
     }
 
+    // Get referralUrl from bot settings for conditional button
+    const settingsRecord = await this.botSettingsRepository.findByBotId(
+      botId ?? 0,
+    );
+    const referralUrl = (settingsRecord?.settings as { referralUrl?: string })
+      ?.referralUrl;
+
+    // Create trial status button - url if valid referralUrl, otherwise callback
+    const trialStatusButton = isValidHttpsUrl(referralUrl)
+      ? { text: displayText, url: referralUrl }
+      : { text: displayText, callback_data: CALLBACK_DATA.TRIAL_STATUS };
+
     this.logger.log({
       message: 'Showing trial status',
       userId,
@@ -282,12 +310,7 @@ export class StartCommandUpdate {
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [
-            {
-              text: displayText,
-              callback_data: CALLBACK_DATA.TRIAL_STATUS,
-            },
-          ],
+          [trialStatusButton],
           [Markup.button.callback(changeLangButtonText, 'change_lang')],
         ],
       },

@@ -61,3 +61,11 @@ We''re working on this! Stay tuned.', 'partner_coming_soon'),
 	('en', '🔄 Try Again', 'button_try_again'),
 	('en', '🎁 Extend Free Period', 'button_extend_trial'),
 	('en', '💳 Buy Subscription', 'button_buy_subscription');
+
+('en', '📅 This day we achieved:
+
+✔️ Trades: **{TotalOrders}**
+✔️ Profit/Loss: **{TotalProfit} USD**
+✔️ Best asset: #{BestSymbol} (+{BestTradeProfit} USD)
+
+Thanks for moving forward with us. To new victories! 🌟', 'daily_report')

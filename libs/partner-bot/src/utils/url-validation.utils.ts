@@ -7,10 +7,11 @@
 
 /**
  * Validates if a string is a valid HTTPS URL
- * @param url - String to validate
+ * Type guard that narrows url to string when returning true
+ * @param url - String to validate (can be undefined)
  * @returns true if valid HTTPS URL, false otherwise
  */
-export function isValidHttpsUrl(url: string): boolean {
+export function isValidHttpsUrl(url: string | undefined): url is string {
   if (!url || typeof url !== 'string') {
     return false;
   }

@@ -6,6 +6,8 @@ import { BotModule } from '@quantumdeal/bot';
 import { ChannelVerifierService } from './services/channel-verifier.service';
 import { PartnerFlowService } from './services/partner-flow.service';
 import { UserDynamicManagementMiddleware } from './middleware/user-management.middleware';
+import { DailyReportService } from './services/daily-report.service';
+import { ReminderSchedulerService } from './services/reminder-scheduler.service';
 
 // Actions
 import { ChannelVerificationAction } from './actions/channel-verification.action';
@@ -32,7 +34,8 @@ import { LangUpdate } from './commands/lang/lang.update';
     // Services
     ChannelVerifierService,
     PartnerFlowService,
-
+    DailyReportService,
+    ReminderSchedulerService,
     // Actions
     ChannelVerificationAction,
     TrialUIAction,

@@ -712,25 +712,26 @@ describe('PartnerFlowService', () => {
 
       const bot = mockDynamicTelegrafService.getBot!(botId);
       const sendMessage = bot!.telegram.sendMessage as jest.Mock;
+      // When referralUrl is not configured, buttons use callback_data in separate rows
       expect(sendMessage).toHaveBeenCalledWith(
         userId,
         expect.any(String),
         expect.objectContaining({
           reply_markup: expect.objectContaining({
-            inline_keyboard: expect.arrayContaining([
-              expect.arrayContaining([
+            inline_keyboard: [
+              [
                 expect.objectContaining({
                   text: expect.stringContaining('Extend'),
                   callback_data: 'partner_extend_trial',
                 }),
-              ]),
-              expect.arrayContaining([
+              ],
+              [
                 expect.objectContaining({
                   text: expect.stringContaining('Buy'),
                   callback_data: 'partner_buy_subscription',
                 }),
-              ]),
-            ]),
+              ],
+            ],
           }),
         }),
       );
