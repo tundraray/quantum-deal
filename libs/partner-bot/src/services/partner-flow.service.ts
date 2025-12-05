@@ -23,6 +23,7 @@ import { CALLBACK_DATA, MESSAGE_KEYS, BUTTON_KEYS } from '../constants';
 interface PartnerSettings extends BotSettings {
   channelId?: string;
   channelName?: string;
+  referralUrl?: string;
 }
 
 /**

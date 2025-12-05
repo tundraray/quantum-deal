@@ -652,6 +652,11 @@ describe('StartCommandUpdate', () => {
         mockBotUser,
       );
 
+      // Mock botSettingsRepository to return no referralUrl (callback_data mode)
+      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
+        settings: { referralUrl: undefined },
+      });
+
       // Act
       await startCommandUpdate.handleStart(mockContext as PartnerBotContext);
 
