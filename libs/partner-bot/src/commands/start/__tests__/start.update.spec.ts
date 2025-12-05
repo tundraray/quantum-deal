@@ -6,6 +6,7 @@ import type {
   BotMessagesRepository,
   BotUsersRepository,
   UserSubscriptionsRepository,
+  BotSettingsRepository,
   BotUser,
 } from '@quantumdeal/db';
 import type { PartnerFlowService } from '../../../services/partner-flow.service';
@@ -29,6 +30,7 @@ describe('StartCommandUpdate', () => {
     UserSubscriptionsRepository,
     'findActiveByBotUserId'
   >;
+  let mockBotSettingsRepository: Pick<BotSettingsRepository, 'findByBotId'>;
 
   beforeEach(() => {
     // Setup mocks
@@ -50,12 +52,17 @@ describe('StartCommandUpdate', () => {
       findActiveByBotUserId: jest.fn(),
     };
 
+    mockBotSettingsRepository = {
+      findByBotId: jest.fn(),
+    };
+
     // Create instance with mocks
     startCommandUpdate = new StartCommandUpdate(
       mockBotMessagesRepository as BotMessagesRepository,
       mockPartnerFlowService as PartnerFlowService,
       mockBotUsersRepository as BotUsersRepository,
       mockUserSubscriptionsRepository as UserSubscriptionsRepository,
+      mockBotSettingsRepository as BotSettingsRepository,
     );
   });
 

@@ -460,7 +460,10 @@ export class PartnerFlowService {
       // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
       const extendTrialButton = isValidHttpsUrl(referralUrl ?? '')
         ? { text: extendTrialButtonText, url: referralUrl as string }
-        : { text: extendTrialButtonText, callback_data: CALLBACK_DATA.EXTEND_TRIAL };
+        : {
+            text: extendTrialButtonText,
+            callback_data: CALLBACK_DATA.EXTEND_TRIAL,
+          };
 
       // Send message with inline keyboard
       await bot.telegram.sendMessage(userId, message, {
