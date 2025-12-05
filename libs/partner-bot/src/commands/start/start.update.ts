@@ -19,6 +19,7 @@ import {
 import type { PartnerFlowSceneData } from '../../types/scene-data.types';
 import { calculateRemainingTimeDisplay } from '../../utils/trial-status.utils';
 import { isValidHttpsUrl } from '../../utils/url-validation.utils';
+import type { PartnerSettings } from '../../types/partner-settings';
 
 /**
  * Handles /start command for partner bot flow.
@@ -289,7 +290,7 @@ export class StartCommandUpdate {
     const settingsRecord = await this.botSettingsRepository.findByBotId(
       botId ?? 0,
     );
-    const referralUrl = (settingsRecord?.settings as { referralUrl?: string })
+    const referralUrl = (settingsRecord?.settings as PartnerSettings)
       ?.referralUrl;
 
     // Create trial status button - url if valid referralUrl, otherwise callback

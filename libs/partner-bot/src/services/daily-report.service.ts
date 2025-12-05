@@ -20,6 +20,7 @@ import { ConfigService } from '@nestjs/config';
 import { NotificationService } from '@quantumdeal/bot/services/notification.service';
 import { BUTTON_KEYS, CALLBACK_DATA } from '../constants';
 import { isValidHttpsUrl } from '../utils/url-validation.utils';
+import { PartnerSettings } from '../types/partner-settings';
 
 enum ReportType {
   DAILY = 'daily',
@@ -501,9 +502,7 @@ export class DailyReportService {
       const settingsRecord = await this.botSettingsRepository.findByBotId(
         client.botId,
       );
-      const settings = settingsRecord?.settings as
-        | { referralUrl?: string }
-        | undefined;
+      const settings = settingsRecord?.settings as PartnerSettings | undefined;
       const referralUrl = settings?.referralUrl;
 
       const extendTrialButtonText = await this.botMessagesRepository

@@ -10,22 +10,12 @@ import { TrialService, BotCommandsService } from '@quantumdeal/bot';
 import { ChannelVerifierService } from './channel-verifier.service';
 import type { VerificationResult } from '../types/partner-settings';
 import { FeatureFlag } from '@quantumdeal/db/schema';
-import { BotSettings } from '@quantumdeal/telegraf/interfaces/dynamic-telegraf-options.interface';
 import type { PartnerFlowSceneData } from '../types/scene-data.types';
 import { interpolateVariables } from '../utils/message-interpolator.utils';
 import { resolveChannelInfo } from '../utils/channel.utils';
 import { isValidHttpsUrl } from '../utils/url-validation.utils';
 import { CALLBACK_DATA, MESSAGE_KEYS, BUTTON_KEYS } from '../constants';
-
-/**
- * Partner settings structure from bot_settings
- */
-interface PartnerSettings extends BotSettings {
-  channelId?: string;
-  channelName?: string;
-  referralUrl?: string;
-}
-
+import type { PartnerSettings } from '../types/partner-settings';
 /**
  * PartnerFlowService
  *
@@ -444,9 +434,7 @@ export class PartnerFlowService {
       // Get referral URL from settings
       const settingsRecord =
         await this.botSettingsRepository.findByBotId(botId);
-      const settings = settingsRecord?.settings as
-        | (PartnerSettings & { referralUrl?: string })
-        | undefined;
+      const settings = settingsRecord?.settings as PartnerSettings | undefined;
       const referralUrl = settings?.referralUrl;
 
       // Retrieve buttons text

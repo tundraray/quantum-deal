@@ -1,3 +1,5 @@
+import { BotSettings } from '@quantumdeal/db';
+
 // Re-export scene data types for unified import path
 export * from './scene-data.types';
 
@@ -10,18 +12,6 @@ export type VerificationState =
   | 'channel_verified'
   | 'trial_activated'
   | 'trial_expired';
-
-/**
- * Partner bot settings.
- * Extends base bot settings with partner channel identifier.
- */
-export interface PartnerBotSettings {
-  /**
-   * Partner channel identifier (e.g., '@channelname' or channel ID)
-   * Used for verifying user subscription before trial activation
-   */
-  partner: string;
-}
 
 /**
  * User state for partner bot flow.
@@ -93,4 +83,10 @@ export interface ReminderStats {
    * Number of reminders that failed to send
    */
   failed: number;
+}
+
+export interface PartnerSettings extends BotSettings {
+  channelId?: string;
+  channelName?: string;
+  referralUrl?: string;
 }

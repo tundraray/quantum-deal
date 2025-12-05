@@ -10,6 +10,7 @@ import { TelegrafExceptionFilter } from '@quantumdeal/framework';
 import { PARTNER_FLOW_FEATURE_KEY } from '../constants';
 import { isValidHttpsUrl } from '../utils/url-validation.utils';
 import { maskUrl } from '../utils/log-masking.utils';
+import { PartnerSettings } from '../types/partner-settings';
 
 /**
  * Fallback message when database message is not found
@@ -278,7 +279,7 @@ export class TrialUIAction {
   ): Promise<string | null> {
     const settingsRecord = await this.botSettingsRepository.findByBotId(botId);
 
-    const settings = settingsRecord?.settings as { referralUrl?: string };
+    const settings = settingsRecord?.settings as PartnerSettings | undefined;
     if (!settings?.referralUrl) {
       this.logger.error({
         message: 'Referral URL not configured',
