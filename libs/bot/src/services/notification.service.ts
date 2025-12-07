@@ -536,7 +536,9 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       messageText = telegramifyMarkdown(messageText, 'remove');
     }
 
-    await this.bot.telegram.sendMessage(message.telegramId, messageText, {
+    const botInstance = await this.getBot(message.botId);
+
+    await botInstance.telegram.sendMessage(message.telegramId, messageText, {
       parse_mode: parseMode,
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       reply_markup:
@@ -641,12 +643,15 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Bot with id ${botId} not found`);
     }
     if (!bot.isDynamic) {
+      this.logger.log(`Using static bot for bot ${botId}`);
       return this.bot;
     }
     const dynamicBot = this.dynamicTelegrafService.getBot(bot.id);
     if (!dynamicBot) {
       throw new Error(`Bot with id ${botId} not found`);
     }
+    const botInfo = await dynamicBot.telegram.getMe();
+    this.logger.debug(`Using dynamic bot ${botInfo.username} for bot ${botId}`);
     return dynamicBot;
   }
 }

@@ -77,7 +77,6 @@ interface ClientWeeklyReportData {
   readonly client: {
     readonly telegramId: number;
     readonly botId: number;
-    readonly botUserId: number;
     readonly lang?: string | null;
     readonly subscription: {
       readonly id: number;
@@ -411,7 +410,6 @@ export class WeekReportService {
         client: {
           telegramId: client.telegramId,
           botId: client.botId,
-          botUserId: client.botUserId,
           lang: client.lang, // Add language to client data
           subscription: {
             id: client.subscriptionId,
