@@ -643,15 +643,13 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Bot with id ${botId} not found`);
     }
     if (!bot.isDynamic) {
-      this.logger.log(`Using static bot for bot ${botId}`);
       return this.bot;
     }
     const dynamicBot = this.dynamicTelegrafService.getBot(bot.id);
     if (!dynamicBot) {
       throw new Error(`Bot with id ${botId} not found`);
     }
-    const botInfo = await dynamicBot.telegram.getMe();
-    this.logger.debug(`Using dynamic bot ${botInfo.username} for bot ${botId}`);
+
     return dynamicBot;
   }
 }
