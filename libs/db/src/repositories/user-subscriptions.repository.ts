@@ -155,8 +155,8 @@ export class UserSubscriptionsRepository extends BaseRepository<
    * @returns Array of objects containing user, subscription, and userSubscription data
    */
   async findActiveUsersWithActiveSubscription(
+    botId: number,
     subscriptionType?: string,
-    botId?: number,
   ): Promise<
     Array<{
       botUser: BotUser;
@@ -172,7 +172,7 @@ export class UserSubscriptionsRepository extends BaseRepository<
       eq(subscriptions.isActive, true),
       sql`${this.table.expiresAt} IS NOT NULL`,
       sql`${this.table.expiresAt} >= ${now}`,
-      eq(botUsers.botId, botId ?? 0),
+      eq(botUsers.botId, botId),
     ];
 
     // Add optional subscription type filter
@@ -195,7 +195,10 @@ export class UserSubscriptionsRepository extends BaseRepository<
         userSubscription: this.table,
       })
       .from(this.table)
-      .innerJoin(botUsers, eq(this.table.botUserId, botUsers.id))
+      .innerJoin(
+        botUsers,
+        and(eq(this.table.botUserId, botUsers.id), eq(botUsers.botId, botId)),
+      )
       .innerJoin(users, eq(botUsers.userId, users.telegramId))
       .innerJoin(subscriptions, eq(this.table.subscriptionId, subscriptions.id))
       .where(and(...conditions));
@@ -216,7 +219,6 @@ export class UserSubscriptionsRepository extends BaseRepository<
       userSubscription: UserSubscription;
     }>
   > {
-    console.log('subscriptionId', subscriptionId);
     const result = await this.db
       .select({
         botUser: botUsers,

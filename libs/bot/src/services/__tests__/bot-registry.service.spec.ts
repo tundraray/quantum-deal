@@ -79,13 +79,13 @@ describe('BotRegistryService', () => {
   });
 
   describe('getSignalCapableBots', () => {
-    it('AC-008: should include static QuantumDealBot with botId=null when enabled', () => {
+    it('AC-008: should include static QuantumDealBot with botId=1 when enabled', () => {
       const bots = service.getSignalCapableBots();
 
-      const staticBot = bots.find((b) => b.botId === null);
+      const staticBot = bots.find((b) => b.type === 'static');
       expect(staticBot).toBeDefined();
       expect(staticBot?.name).toBe('QuantumDealBot');
-      expect(staticBot?.type).toBe('static');
+      expect(staticBot?.botId).toBe(1);
     });
 
     it('AC-008: should exclude static bot when setStaticBotSignalsEnabled(false)', () => {
@@ -93,7 +93,7 @@ describe('BotRegistryService', () => {
 
       const bots = service.getSignalCapableBots();
 
-      const staticBot = bots.find((b) => b.botId === null);
+      const staticBot = bots.find((b) => b.type === 'static');
       expect(staticBot).toBeUndefined();
     });
 
@@ -221,7 +221,7 @@ describe('BotRegistryService', () => {
       const bot = service.getBot(null);
 
       expect(bot).toBeDefined();
-      expect(bot?.botId).toBeNull();
+      expect(bot?.botId).toBe(1);
       expect(bot?.type).toBe('static');
       expect(bot?.name).toBe('QuantumDealBot');
     });
@@ -349,7 +349,7 @@ describe('BotRegistryService', () => {
 
       const bots = service.getSignalCapableBots();
 
-      expect(bots.find((b) => b.botId === null)).toBeUndefined();
+      expect(bots.find((b) => b.type === 'static')).toBeUndefined();
     });
 
     it('should include static bot from getSignalCapableBots when re-enabled', () => {
@@ -358,7 +358,7 @@ describe('BotRegistryService', () => {
 
       const bots = service.getSignalCapableBots();
 
-      expect(bots.find((b) => b.botId === null)).toBeDefined();
+      expect(bots.find((b) => b.type === 'static')).toBeDefined();
     });
   });
 

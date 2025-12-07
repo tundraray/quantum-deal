@@ -276,8 +276,8 @@ export class MonthReportService {
       // Get all active users with active subscriptions (signals only)
       const results =
         await this.userSubscriptionsRepository.findActiveUsersWithActiveSubscription(
-          'signals',
           1,
+          'signals',
         );
 
       if (results.length === 0) {

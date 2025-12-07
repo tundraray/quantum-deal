@@ -96,13 +96,6 @@ export class StartCommandUpdate {
         | undefined;
       const verificationState = sceneData?.verificationState;
 
-      this.logger.debug({
-        message: 'State check on /start',
-        userId,
-        botId,
-        verificationState,
-      });
-
       // State-aware routing (AC-1)
       // 1. If trial_activated with active subscription -> show trial status
       if (verificationState === 'trial_activated' && botUser) {
@@ -142,21 +135,17 @@ export class StartCommandUpdate {
       );
 
       // Get change language button text
+      /*
       const changeLangButtonText =
         await this.botMessagesRepository.resolveMessage(
           botId,
           'button_change_language',
           lang,
         );
-
+        */
       // Send welcome message with change language button
       await ctx.reply(welcomeMessage, {
         parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [
-            [Markup.button.callback(changeLangButtonText, 'change_lang')],
-          ],
-        },
       });
 
       // Initialize verification state

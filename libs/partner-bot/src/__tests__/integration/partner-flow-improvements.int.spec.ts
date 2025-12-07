@@ -37,6 +37,10 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
   >;
   let mockTrialService: Pick<TrialService, 'activate'>;
   let mockBotCommandsService: Pick<BotCommandsService, 'setUserCommands'>;
+  let mockBotSettingsRepositoryForStart: Pick<
+    BotSettingsRepository,
+    'findByBotId'
+  >;
   let mockDynamicTelegrafService: { getBot: jest.Mock };
   let mockBot: {
     telegram: { sendMessage: jest.Mock; getChatMember: jest.Mock };
@@ -97,6 +101,16 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
       getBot: jest.fn().mockReturnValue(mockBot),
     };
 
+    // Mock BotSettingsRepository for StartCommandUpdate
+    mockBotSettingsRepositoryForStart = {
+      findByBotId: jest.fn().mockResolvedValue({
+        botId: TEST_BOT_ID,
+        settings: {
+          channelId: '@testchannel',
+        },
+      }),
+    };
+
     // Instantiate services
     channelVerifierService = new ChannelVerifierService(
       mockDynamicTelegrafService as never,
@@ -118,6 +132,7 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
       partnerFlowService,
       mockBotUsersRepository as never,
       mockUserSubscriptionsRepository as never,
+      mockBotSettingsRepositoryForStart as never,
     );
   });
 

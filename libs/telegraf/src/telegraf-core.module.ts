@@ -49,6 +49,7 @@ export class TelegrafCoreModule implements OnApplicationShutdown {
       provide: telegrafBotName,
       useFactory: async () => {
         const bot = await createBotFactory(options);
+        bot.use(...(options.middlewares ?? []));
         allBotsMap.set(telegrafBotName, bot);
         return bot;
       },
@@ -89,6 +90,7 @@ export class TelegrafCoreModule implements OnApplicationShutdown {
       provide: telegrafBotName,
       useFactory: async (options: TelegrafModuleOptions) => {
         const bot = await createBotFactory(options);
+        bot.use(...(options.middlewares ?? []));
         allBotsMap.set(telegrafBotName, bot);
         return bot;
       },

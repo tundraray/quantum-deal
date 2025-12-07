@@ -129,7 +129,7 @@ describe('MultiBotSignalService', () => {
     };
 
     const mockUserSubscriptionFeaturesRepository = {
-      getUserFeatureSettings: jest.fn().mockResolvedValue(null),
+      getBotUserFeatureSettings: jest.fn().mockResolvedValue(null),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -199,9 +199,10 @@ describe('MultiBotSignalService', () => {
         'crypto',
         2,
       );
+      // Static bot with null botId will use fallback value 1 per implementation
       expect(subscriptionsRepository.findBySectorForBot).toHaveBeenCalledWith(
         'crypto',
-        null,
+        1,
       );
     });
 

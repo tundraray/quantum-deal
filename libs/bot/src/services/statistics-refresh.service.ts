@@ -51,13 +51,9 @@ export class StatisticsRefreshService {
     }
 
     try {
-      this.logger.debug('Refreshing monthly_bot_statistics view...');
-
       await this.db.execute(sql`
         REFRESH MATERIALIZED VIEW monthly_bot_statistics
       `);
-
-      this.logger.log('Statistics refreshed successfully');
     } catch (error) {
       this.logger.error('Failed to refresh statistics', error);
       // Don't throw - this is a background job, failures should not crash the app

@@ -77,6 +77,7 @@ interface ClientWeeklyReportData {
   readonly client: {
     readonly telegramId: number;
     readonly botId: number;
+    readonly botUserId: number;
     readonly lang?: string | null;
     readonly subscription: {
       readonly id: number;
@@ -308,8 +309,8 @@ export class WeekReportService {
       // Get all active users with active subscriptions (signals only)
       const results =
         await this.userSubscriptionsRepository.findActiveUsersWithActiveSubscription(
-          'signals',
           1,
+          'signals',
         );
 
       if (results.length === 0) {
@@ -325,7 +326,7 @@ export class WeekReportService {
           );
 
           return {
-            telegramId: result.botUser.userId,
+            telegramId: result.user.telegramId,
             botUserId: result.botUser.id,
             botId: result.botUser.botId,
             firstName: result.user.firstName,
@@ -410,6 +411,7 @@ export class WeekReportService {
         client: {
           telegramId: client.telegramId,
           botId: client.botId,
+          botUserId: client.botUserId,
           lang: client.lang, // Add language to client data
           subscription: {
             id: client.subscriptionId,

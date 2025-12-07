@@ -38,6 +38,7 @@ interface TradingActivityStats {
 interface ClientSubscription {
   readonly telegramId: number;
   readonly botId: number;
+  readonly botUserId: number;
   readonly firstName?: string | null;
   readonly lastName?: string | null;
   readonly username?: string | null;
@@ -296,8 +297,8 @@ export class DailyReportService {
       // Get all active users with active subscriptions (signals only)
       const results =
         await this.userSubscriptionsRepository.findActiveUsersWithActiveSubscription(
-          'signals',
           botId,
+          'signals',
         );
 
       if (results.length === 0) {
@@ -309,6 +310,7 @@ export class DailyReportService {
         (result) => ({
           telegramId: result.user.telegramId,
           botId: result.botUser.botId,
+          botUserId: result.botUser.id,
           firstName: result.user.firstName,
           lastName: result.user.lastName,
           username: result.user.username,

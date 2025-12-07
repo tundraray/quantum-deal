@@ -9,7 +9,33 @@ Get ready to:
 ✅ Access exclusive market insights
 ✅ Join a community of winners
 
-<b>Activate your FREE trial now to start profiting!</b> 👇', 'partner_welcome'),
+<b>Activate your FREE trial now to start profiting!</b> 👇', 'partner_welcome_old'),
+
+	(2, 'en', '👋 <b>Welcome to the Inner Circle!</b>
+
+You are just one step away from unlocking our <b>Premium Trading Signals</b>. 🚀
+
+Get ready to:
+✅ Receive high-win-rate signals
+✅ Access exclusive market insights
+✅ Join a community of winners
+
+<b>Activate your FREE trial now to start profiting!</b> 👇
+
+To activate your <b>Exclusive Free Trial</b>, you must join our partner channel first.
+
+This is where the magic happens! 🌟
+👉 {channelUrl}
+
+👇 <b>Click the button below once you've joined:</b>
+/join
+
+Also, if you want to <b>change the language</b>, click this button 👇
+/lang
+', 
+
+'partner_welcome'),
+
 	(2, 'en', '🚀 <b>One Final Step to Profit!</b>
 
 To activate your <b>Exclusive Free Trial</b>, you must join our partner channel first.

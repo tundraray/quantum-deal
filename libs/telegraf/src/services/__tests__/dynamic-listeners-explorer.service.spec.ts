@@ -461,9 +461,10 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
       (mockMetadataAccessor.isComposer as jest.Mock).mockReturnValue(false);
       (mockMetadataAccessor.isScene as jest.Mock).mockReturnValue(false);
 
-      // Mock @ForBot to return undefined (shared handler)
+      // Mock @ForBot to return 1 (handler targets bot ID 1 - matches registerHandlers call)
+      // The implementation requires @ForBot or @RequiresFeature for dynamic bot registration
       (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
-        undefined,
+        1,
       );
       (
         mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
@@ -593,9 +594,9 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
       (mockMetadataAccessor.isComposer as jest.Mock).mockReturnValue(false);
       (mockMetadataAccessor.isScene as jest.Mock).mockReturnValue(false);
 
-      // Mock @ForBot to return undefined (shared handler)
+      // Mock @ForBot to return 1 (handler targets bot ID 1 - matches registerHandlers call)
       (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
-        undefined,
+        1,
       );
       (
         mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
@@ -668,9 +669,9 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
       (mockMetadataAccessor.isComposer as jest.Mock).mockReturnValue(false);
       (mockMetadataAccessor.isScene as jest.Mock).mockReturnValue(false);
 
-      // Mock @ForBot to return undefined (shared handler)
+      // Mock @ForBot to return 1 (handler targets bot ID 1 - matches registerHandlers call)
       (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
-        undefined,
+        1,
       );
       (
         mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
@@ -748,6 +749,14 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
       (mockMetadataAccessor.isUpdate as jest.Mock).mockReturnValue(false);
       (mockMetadataAccessor.isComposer as jest.Mock).mockReturnValue(false);
 
+      // Mock @ForBot to return 1 (handler targets bot ID 1 - matches registerHandlers call)
+      (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
+        1,
+      );
+      (
+        mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
+      ).mockReturnValue(undefined);
+
       // Mock getSceneMetadata to return base scene metadata
       (mockMetadataAccessor.getSceneMetadata as jest.Mock).mockReturnValue({
         sceneId: 'greeting-scene',
@@ -810,6 +819,14 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
       (mockMetadataAccessor.isScene as jest.Mock).mockReturnValue(true);
       (mockMetadataAccessor.isUpdate as jest.Mock).mockReturnValue(false);
       (mockMetadataAccessor.isComposer as jest.Mock).mockReturnValue(false);
+
+      // Mock @ForBot to return 1 (handler targets bot ID 1 - matches registerHandlers call)
+      (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
+        1,
+      );
+      (
+        mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
+      ).mockReturnValue(undefined);
 
       // Mock getSceneMetadata to return wizard scene metadata
       (mockMetadataAccessor.getSceneMetadata as jest.Mock).mockReturnValue({
@@ -885,6 +902,14 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
       (mockMetadataAccessor.isScene as jest.Mock).mockReturnValue(true);
       (mockMetadataAccessor.isUpdate as jest.Mock).mockReturnValue(false);
       (mockMetadataAccessor.isComposer as jest.Mock).mockReturnValue(false);
+
+      // Mock @ForBot to return 1 (handler targets bot ID 1 - matches registerHandlers call)
+      (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
+        1,
+      );
+      (
+        mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
+      ).mockReturnValue(undefined);
 
       // Mock getSceneMetadata to return same sceneId for both
       (mockMetadataAccessor.getSceneMetadata as jest.Mock).mockReturnValue({
@@ -1096,8 +1121,10 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
       expect(registerListenersSpy).toHaveBeenCalled();
     });
 
-    it('Registers shared handler (no @ForBot) on all bots', async () => {
+    it('Skips handler without @ForBot or @RequiresFeature on dynamic bots', async () => {
       // Arrange
+      // Dynamic bots require explicit targeting via @ForBot or feature requirements
+      // Handlers without these decorators are not registered on dynamic bots
       class SharedHandler {}
       const mockModule = {
         providers: new Map([
@@ -1123,7 +1150,7 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
       // Mock isUpdate to identify handler
       (mockMetadataAccessor.isUpdate as jest.Mock).mockReturnValue(true);
 
-      // Mock @ForBot to return undefined (shared handler)
+      // Mock @ForBot to return undefined (no targeting)
       (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
         undefined,
       );
@@ -1146,8 +1173,9 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
       // Act - register on any bot
       await service.registerHandlers(mockBot, 1, mockStage, mockSettings);
 
-      // Assert - should have called registerListeners since no @ForBot restriction
-      expect(registerListenersSpy).toHaveBeenCalled();
+      // Assert - should NOT register handlers without @ForBot or @RequiresFeature
+      // Dynamic bots require explicit targeting for handler registration
+      expect(registerListenersSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -1542,6 +1570,15 @@ describe('DynamicListenersExplorerService Unit Tests', () => {
       );
       (mockMetadataAccessor.isUpdate as jest.Mock).mockReturnValue(false);
       (mockMetadataAccessor.isScene as jest.Mock).mockReturnValue(false);
+
+      // Mock @ForBot to return 1 (targeting bot ID 1 - matches registerHandlers call)
+      // The implementation requires @ForBot or @RequiresFeature for dynamic bot registration
+      (mockMetadataAccessor.getBotTargetMetadata as jest.Mock).mockReturnValue(
+        1,
+      );
+      (
+        mockMetadataAccessor.getFeatureFlagMetadata as jest.Mock
+      ).mockReturnValue(undefined);
 
       // Mock registerListeners to prevent actual listener registration
       jest

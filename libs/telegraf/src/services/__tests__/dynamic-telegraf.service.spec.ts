@@ -22,6 +22,8 @@ const mockBotUse = jest.fn();
 const mockBotCatch = jest.fn();
 const mockBotHandleUpdate = jest.fn();
 
+const mockBotLaunch = jest.fn();
+
 jest.mock('telegraf', () => {
   const originalModule = jest.requireActual('telegraf');
 
@@ -32,6 +34,7 @@ jest.mock('telegraf', () => {
       catch: mockBotCatch,
       telegram: mockTelegram,
       handleUpdate: mockBotHandleUpdate,
+      launch: mockBotLaunch,
     })),
   };
 });
@@ -102,6 +105,8 @@ describe('DynamicTelegrafService Unit Tests', () => {
     });
     mockTelegram.setWebhook.mockResolvedValue(true);
     mockTelegram.deleteWebhook.mockResolvedValue(true);
+    mockBotHandleUpdate.mockResolvedValue(undefined);
+    mockBotLaunch.mockResolvedValue(undefined);
 
     // Reset mocks before each test
     mockBotConfigProvider = {
@@ -409,9 +414,8 @@ describe('DynamicTelegrafService Unit Tests', () => {
       // Act
       await service.onModuleInit();
 
-      // Assert - Global middlewares should be applied via bot.use()
-      expect(mockBotUse).toHaveBeenCalledWith(mockMiddleware1);
-      expect(mockBotUse).toHaveBeenCalledWith(mockMiddleware2);
+      // Assert - Global middlewares should be applied via bot.use() with spread syntax
+      expect(mockBotUse).toHaveBeenCalledWith(mockMiddleware1, mockMiddleware2);
     });
 
     it('applies bot-specific middlewares from factory', async () => {

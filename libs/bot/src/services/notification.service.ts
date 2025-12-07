@@ -247,7 +247,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       this.messageStats.totalScheduled++;
 
       this.logger.debug(
-        `Message scheduled via external bot for user ${telegramId}`,
+        `Message scheduled via external bot #${botId} for user ${telegramId}`,
       );
 
       return messageId;
