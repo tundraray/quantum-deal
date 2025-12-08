@@ -39,7 +39,6 @@ export class TrialAction {
 
       // Send typing indicator
       await ctx.sendChatAction('typing');
-      console.log('Checking eligibility', this.trialService);
       // Check eligibility (double-check)
       const eligible = await this.trialService.isEligible(user.botUserId);
       if (!eligible) {
