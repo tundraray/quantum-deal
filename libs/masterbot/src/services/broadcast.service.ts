@@ -4,11 +4,11 @@ import {
   SubscriptionsRepository,
 } from '@quantumdeal/db';
 import { BroadcastResultDto, MessageValidationResult } from '../dto';
-import { NotificationService } from '@quantumdeal/bot';
+import { NotificationService } from '@quantumdeal/framework/notifications';
 import {
   MessagePriority,
   QueuedMessageType,
-} from '@quantumdeal/bot/interfaces/notification.interface';
+} from '@quantumdeal/framework/notifications/interfaces';
 import { LLMService } from '@quantumdeal/framework';
 import { z } from 'zod';
 import type { MessageEntity } from '../interfaces';

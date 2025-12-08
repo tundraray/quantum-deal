@@ -8,8 +8,8 @@ import {
 import { Reflector } from '@nestjs/core';
 import { FeatureFlag } from '@quantumdeal/db/schema';
 import { REQUIRE_FEATURE_KEY } from '../decorators/require-feature.decorator';
-import { UserContext } from '../interfaces/user-context.interface';
-import { hasFeature } from '../interfaces/user.dto';
+import { UserContext } from '@quantumdeal/framework/interfaces';
+import { hasFeature } from '@quantumdeal/framework/interfaces';
 
 /**
  * Feature Guard

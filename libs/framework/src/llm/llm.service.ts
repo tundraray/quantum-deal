@@ -282,6 +282,11 @@ export class LLMService {
         model: provider(options.model),
         prompt: options.prompt,
         system: options.systemPrompt,
+        providerOptions: {
+          openai: {
+            reasoningEffort: 'low',
+          },
+        },
         temperature: options.temperature ?? config.temperature ?? 0,
         maxOutputTokens: options.maxTokens ?? config.maxTokens,
       });

@@ -18,7 +18,7 @@ import {
   QueueMessageStatus,
   QueueStats,
   BatchSendResult,
-} from '../interfaces/notification.interface';
+} from './interfaces';
 import type { UserContext } from '../interfaces';
 import { BotsRepository, BotUsersRepository } from '@quantumdeal/db';
 import { DynamicTelegrafService } from '@quantumdeal/telegraf';

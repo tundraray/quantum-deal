@@ -9,11 +9,11 @@ import {
   Order,
   MessageType,
 } from '@quantumdeal/db';
-import { NotificationService } from './notification.service';
+import { NotificationService } from '@quantumdeal/framework/notifications';
 import {
   MessagePriority,
   QueuedMessageType,
-} from '../interfaces/notification.interface';
+} from '@quantumdeal/framework/notifications';
 import { ConfigService } from '@nestjs/config';
 
 enum ReportType {

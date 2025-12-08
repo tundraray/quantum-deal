@@ -1,6 +1,6 @@
 import { FeatureFlag } from '@quantumdeal/db/schema';
-import { UserContext } from '../interfaces/user-context.interface';
-import { hasFeature } from '../interfaces/user.dto';
+import { UserContext } from '@quantumdeal/framework/interfaces';
+import { hasFeature } from '@quantumdeal/framework/interfaces';
 
 /**
  * Feature Access Helpers

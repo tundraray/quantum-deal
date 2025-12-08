@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MessageType, MergedOrder } from '@quantumdeal/db/schema';
-import { NotificationResult } from '../interfaces/notification.interface';
-import { NotificationService } from './notification.service';
+import {
+  NotificationResult,
+  NotificationService,
+} from '@quantumdeal/framework/notifications';
 import { MultiBotSignalService } from './multi-bot-signal.service';
 
 @Injectable()

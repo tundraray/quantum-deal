@@ -10,11 +10,11 @@ import {
   BotUser,
 } from '@quantumdeal/db';
 import { LLMService, QuotaExceededException } from '@quantumdeal/framework';
-import { NotificationService } from './notification.service';
+import { NotificationService } from '@quantumdeal/framework/notifications';
 import {
   MessagePriority,
   QueuedMessageType,
-} from '../interfaces/notification.interface';
+} from '@quantumdeal/framework/notifications';
 import {
   ExpirationMessages,
   FALLBACK_MESSAGES,

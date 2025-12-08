@@ -18,7 +18,7 @@ jest.mock('telegramify-markdown', () => ({
 import { Test, TestingModule } from '@nestjs/testing';
 import { MultiBotSignalService } from '../multi-bot-signal.service';
 import { BotRegistryService } from '../bot-registry.service';
-import { NotificationService } from '../notification.service';
+import { NotificationService } from '@quantumdeal/framework/notifications';
 import {
   SubscriptionsRepository,
   BotMessagesRepository,

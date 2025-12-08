@@ -239,7 +239,7 @@ export class StartUpdate {
 
     try {
       const welcomeMessage = await this.llmService.generateText({
-        model: 'gpt-5-mini',
+        model: 'gpt-5-nano',
         systemPrompt: welcome,
         prompt: JSON.stringify(promptData, null, 2),
       });

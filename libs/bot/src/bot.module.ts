@@ -20,7 +20,7 @@ import { UserManagementMiddleware } from './middleware';
 import { WebhookProcessorService } from './services/webhook.service';
 import { WeekReportService } from './services/week-report.service';
 import { MonthReportService } from './services/month-report.service';
-import { NotificationService } from './services/notification.service';
+import { NotificationService } from '@quantumdeal/framework/notifications';
 import { SubscriptionExpirationService } from './services/subscription-expiration.service';
 import { FeatureFlagService } from './services/feature-flag.service';
 import { InstrumentFilterService } from './services/instrument-filter.service';

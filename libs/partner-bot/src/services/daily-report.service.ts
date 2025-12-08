@@ -15,9 +15,9 @@ import {
 import {
   MessagePriority,
   QueuedMessageType,
-} from '@quantumdeal/bot/interfaces';
+} from '@quantumdeal/framework/notifications';
 import { ConfigService } from '@nestjs/config';
-import { NotificationService } from '@quantumdeal/bot/services/notification.service';
+import { NotificationService } from '@quantumdeal/framework/notifications';
 import { BUTTON_KEYS, CALLBACK_DATA } from '../constants';
 import { isValidHttpsUrl } from '../utils/url-validation.utils';
 import { PartnerSettings } from '../types/partner-settings';

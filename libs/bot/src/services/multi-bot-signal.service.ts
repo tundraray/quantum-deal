@@ -7,7 +7,7 @@ import {
 import type { MergedOrder, MessageType } from '@quantumdeal/db/schema';
 import { FeatureFlag } from '@quantumdeal/db/schema';
 import { BotRegistryService } from './bot-registry.service';
-import { NotificationService } from './notification.service';
+import { NotificationService } from '@quantumdeal/framework/notifications';
 import type {
   BroadcastResult,
   BotDeliveryResult,
@@ -18,7 +18,7 @@ import {
   MessagePriority,
   QueuedMessageType,
   NotificationUser,
-} from '../interfaces/notification.interface';
+} from '@quantumdeal/framework/notifications';
 
 /**
  * MultiBotSignalService

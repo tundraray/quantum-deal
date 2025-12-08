@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import Bottleneck from 'bottleneck';
 import { Telegraf } from 'telegraf';
-import { NotificationService } from '../notification.service';
+import { NotificationService } from '@quantumdeal/framework/notifications';
 import { BotsRepository, BotUsersRepository } from '@quantumdeal/db';
 import { getBotToken, DynamicTelegrafService } from '@quantumdeal/telegraf';
 import {
   QueuedMessageType,
   MessagePriority,
-} from '../../interfaces/notification.interface';
+} from '@quantumdeal/framework/notifications';
 import type { UserContext } from '../../interfaces';
 
 // Mock uuid to avoid ESM import issues

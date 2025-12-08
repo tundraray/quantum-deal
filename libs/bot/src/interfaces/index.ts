@@ -1,9 +1,7 @@
 // ============================================================
 // EXISTING EXPORTS (DO NOT REMOVE)
 // ============================================================
-export * from './user-context.interface';
-export * from './user.dto';
-export * from './notification.interface';
+export * from '@quantumdeal/framework/interfaces';
 
 // ============================================================
 // NEW EXPORTS (ADR-007: Multi-bot signal broadcasting)

@@ -10,12 +10,12 @@ import {
   MessageType,
 } from '@quantumdeal/db';
 import { FeatureFlag } from '@quantumdeal/db/schema';
-import { NotificationService } from './notification.service';
+import { NotificationService } from '@quantumdeal/framework/notifications';
 import { InstrumentFilterService } from './instrument-filter.service';
 import {
   MessagePriority,
   QueuedMessageType,
-} from '../interfaces/notification.interface';
+} from '@quantumdeal/framework/notifications';
 import { ConfigService } from '@nestjs/config';
 import { SentryService } from '@quantumdeal/framework';
 import { createUpgradeToVipButton } from '../helpers/upgrade-button.helper';
