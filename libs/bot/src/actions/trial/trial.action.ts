@@ -1,5 +1,5 @@
 import { Injectable, Logger, UseFilters } from '@nestjs/common';
-import { Action, Ctx, InjectBot, Update } from '@quantumdeal/telegraf';
+import { Action, Ctx, Update } from '@quantumdeal/telegraf';
 import { ConfigService } from '@nestjs/config';
 import type { UserContext } from '../../interfaces';
 import { TrialService } from '../../services/trial.service';
@@ -14,7 +14,6 @@ export class TrialAction {
   private readonly logger = new Logger(TrialAction.name);
 
   constructor(
-    @InjectBot('QuantumDealBot')
     private readonly trialService: TrialService,
     private readonly botCommandsService: BotCommandsService,
     private readonly configService: ConfigService,
@@ -40,7 +39,7 @@ export class TrialAction {
 
       // Send typing indicator
       await ctx.sendChatAction('typing');
-
+      console.log('Checking eligibility', this.trialService);
       // Check eligibility (double-check)
       const eligible = await this.trialService.isEligible(user.botUserId);
       if (!eligible) {
