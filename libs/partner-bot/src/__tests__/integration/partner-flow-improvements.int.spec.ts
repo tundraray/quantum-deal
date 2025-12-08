@@ -507,11 +507,7 @@ describe('Partner Bot Flow Improvements Integration Tests', () => {
     );
     expect(mockContext.reply).toHaveBeenCalledWith(
       'Welcome to the partner bot!',
-      expect.objectContaining({
-        reply_markup: expect.objectContaining({
-          inline_keyboard: expect.any(Array),
-        }),
-      }),
+      { parse_mode: 'HTML' },
     );
 
     // Assert - should initialize state to awaiting_channel_subscription

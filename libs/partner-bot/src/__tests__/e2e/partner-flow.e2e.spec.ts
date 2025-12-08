@@ -229,14 +229,10 @@ describe('Partner Bot Flow E2E Tests', () => {
     // Step 1: User sends /start command
     await startCommandUpdate.handleStart(mockStartCtx as any);
 
-    // Verify welcome message sent (with change language button)
+    // Verify welcome message sent (parse_mode only, no inline keyboard)
     expect(mockStartCtx.reply).toHaveBeenCalledWith(
       'Welcome to Partner Bot! 🎉',
-      expect.objectContaining({
-        reply_markup: expect.objectContaining({
-          inline_keyboard: expect.any(Array),
-        }),
-      }),
+      { parse_mode: 'HTML' },
     );
 
     // Verify channel prompt sent with interpolated variables

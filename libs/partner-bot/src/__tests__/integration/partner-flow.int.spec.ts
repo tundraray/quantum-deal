@@ -176,11 +176,14 @@ describe('Partner Bot Flow Integration Tests', () => {
     const channelPromptTemplate =
       'Please subscribe to our channel: {channelUrl} ({channelName})';
 
+    // Note: Implementation calls resolveMessage in this order:
+    // 1. partner_welcome (in handleStart)
+    // 2. partner_channel_prompt (in sendChannelPrompt)
+    // 3. partner_i_subscribed_button (in sendChannelPrompt)
     (mockBotMessagesRepository.resolveMessage as jest.Mock)
       .mockResolvedValueOnce(welcomeMessage) // partner_welcome
-      .mockResolvedValueOnce('🌐 Change language') // change_language_button
       .mockResolvedValueOnce(channelPromptTemplate) // partner_channel_prompt
-      .mockResolvedValueOnce('I subscribed ✅'); // partner_verification_button
+      .mockResolvedValueOnce('I subscribed ✅'); // partner_i_subscribed_button
 
     // Mock Telegram context for /start command
     const mockCtx = {
@@ -202,15 +205,10 @@ describe('Partner Bot Flow Integration Tests', () => {
       testLang,
     );
 
-    // Verify welcome message sent to user (with change language button)
-    expect(mockCtx.reply).toHaveBeenCalledWith(
-      welcomeMessage,
-      expect.objectContaining({
-        reply_markup: expect.objectContaining({
-          inline_keyboard: expect.any(Array),
-        }),
-      }),
-    );
+    // Verify welcome message sent to user (parse_mode only, no inline keyboard)
+    expect(mockCtx.reply).toHaveBeenCalledWith(welcomeMessage, {
+      parse_mode: 'HTML',
+    });
 
     // Verify BotMessagesRepository.resolveMessage() called for partner_channel_prompt
     expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(

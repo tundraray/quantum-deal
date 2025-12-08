@@ -115,10 +115,17 @@ export class DailyReportService {
     try {
       const dynamicsBots = await this.botsRepository.findActiveDynamic();
       const sharedDailyData = await this.generateDailyReportData();
-      for (const bot of dynamicsBots) {
-        await this.generateClientDailyReports(bot.id, sharedDailyData);
+      if (sharedDailyData.tradingActivity.totalOrders === 0) {
+        this.logger.log(
+          'No trading activity data found, skipping daily report generation',
+        );
+        return;
+      } else {
+        for (const bot of dynamicsBots) {
+          await this.generateClientDailyReports(bot.id, sharedDailyData);
+        }
+        this.logger.log('Daily report generation completed successfully');
       }
-      this.logger.log('Daily report generation completed successfully');
     } catch (error) {
       const err = error as Error;
       this.logger.error(
@@ -378,6 +385,19 @@ export class DailyReportService {
         startDate,
         endDate,
       );
+
+      if (allOrders.length === 0) {
+        return {
+          totalOrders: 0,
+          profitableOrders: 0,
+          lossingOrders: 0,
+          totalProfit: 0,
+          totalLoss: 0,
+          ordersBySymbol: {},
+          bestTradeSymbol: undefined,
+          bestTradeProfit: undefined,
+        };
+      }
 
       const closedOrdersOnly = allOrders.filter((order) => !!order.closeTime);
       const totalOrders = closedOrdersOnly.length;
