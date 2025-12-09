@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   SubscriptionsRepository,
-  BotMessagesRepository,
   UserSubscriptionFeaturesRepository,
 } from '@quantumdeal/db';
+import { LocalizationService } from '../localization';
 import type { MergedOrder, MessageType } from '@quantumdeal/db/schema';
 import { FeatureFlag } from '@quantumdeal/db/schema';
 import { BotRegistryService } from './bot-registry.service';
@@ -49,7 +49,7 @@ export class SignalService implements MultiBotSignal {
   constructor(
     private readonly botRegistryService: BotRegistryService,
     private readonly subscriptionsRepository: SubscriptionsRepository,
-    private readonly botMessagesRepository: BotMessagesRepository,
+    private readonly localizationService: LocalizationService,
     private readonly notificationService: NotificationService,
     private readonly userSubscriptionFeaturesRepository: UserSubscriptionFeaturesRepository,
   ) {}
@@ -274,20 +274,20 @@ export class SignalService implements MultiBotSignal {
         const buttons = [] as Array<Array<object>>;
         try {
           // Resolve message template for this bot and user's language
-          const template = await this.botMessagesRepository.resolveMessage(
-            botId,
-            eventType,
-            user.lang || 'en',
-          );
+          const template = await this.localizationService
+            .forBot(botId)
+            .lang(user.lang || 'en')
+            .t(eventType);
 
           // todo: need refactor this
           if (
             bot.settings?.features.partnerFlowEnabled &&
             ['close_plus', 'open'].includes(eventType)
           ) {
-            const extendTrialButtonText = await this.botMessagesRepository
-              .resolveMessage(botId, 'button_extend_trial', user.lang ?? 'en')
-              .catch(() => 'Extend Free Period 🎁');
+            const extendTrialButtonText = await this.localizationService
+              .forBot(botId)
+              .lang(user.lang ?? 'en')
+              .t('button_extend_trial');
             const referralUrl = (bot.settings as PartnerSettings).referralUrl;
 
             // Create trial status button - url if valid referralUrl, otherwise callback
