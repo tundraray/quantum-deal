@@ -8,7 +8,16 @@
 /**
  * Supported language codes
  */
-export type LangCode = 'ru' | 'en' | 'uk' | 'hi' | 'fr' | 'kk' | 'uz' | 'tg' | 'tl';
+export type LangCode =
+  | 'ru'
+  | 'en'
+  | 'uk'
+  | 'hi'
+  | 'fr'
+  | 'kk'
+  | 'uz'
+  | 'tg'
+  | 'tl';
 
 /**
  * i18n message value - can be string or function for parameterized messages
