@@ -528,7 +528,9 @@ export class SubscriptionExpirationService {
       const l10n = this.localizationService
         .forBot(user.botId)
         .lang(user.lang ?? 'en');
-      const changePlanButtonText = await l10n.t(BUTTON_KEYS.BUY_SUBSCRIPTION);
+      const buySubscriptionButtonText = await l10n.t(
+        BUTTON_KEYS.BUY_SUBSCRIPTION,
+      );
       const extendTrialButtonText = await l10n.t(BUTTON_KEYS.EXTEND_TRIAL);
 
       // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
@@ -540,10 +542,10 @@ export class SubscriptionExpirationService {
           };
 
       const renewalButton = [
+        [extendTrialButton],
         [
-          extendTrialButton,
           {
-            text: changePlanButtonText,
+            text: buySubscriptionButtonText,
             callback_data: callbackData,
           },
         ],

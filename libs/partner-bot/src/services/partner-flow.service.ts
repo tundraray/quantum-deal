@@ -465,7 +465,7 @@ export class PartnerFlowService {
       const defaultSubscriptionId = settings?.defaultSubscriptionId;
 
       const subscriptions =
-        await this.userSubscriptionsRepository.findActiveByBotAndTelegramId(
+        await this.userSubscriptionsRepository.findActiveWithExpiredByBotAndTelegramId(
           botId,
           userId,
         );

@@ -99,7 +99,7 @@ export class StartCommandUpdate {
       // 1. If trial_activated with active subscription -> show trial status
       if (verificationState === 'trial_activated' && botUser) {
         const activeSubscriptions =
-          await this.userSubscriptionsRepository.findActiveByBotUserId(
+          await this.userSubscriptionsRepository.findActiveWithExpiredByBotUserId(
             botUser.id,
           );
         if (activeSubscriptions.length > 0) {
@@ -157,7 +157,9 @@ export class StartCommandUpdate {
 
     // Get active subscription to calculate remaining time
     const subscriptions =
-      await this.userSubscriptionsRepository.findActiveByBotUserId(botUser.id);
+      await this.userSubscriptionsRepository.findActiveWithExpiredByBotUserId(
+        botUser.id,
+      );
 
     if (subscriptions.length === 0) {
       // No active subscription, fall back to welcome flow

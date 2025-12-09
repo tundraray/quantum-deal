@@ -413,6 +413,23 @@ export class UserSubscriptionsRepository extends BaseRepository<
   }
 
   /**
+   * Find all active (with-expired) subscriptions for a specific bot user
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
+   * @returns Array of active, with-expired user subscriptions
+   */
+  async findActiveWithExpiredByBotUserId(
+    botUserId: number,
+  ): Promise<UserSubscription[]> {
+    return this.findBy(
+      and(
+        eq(this.table.botUserId, botUserId),
+        eq(this.table.isActive, true),
+        sql`${this.table.expiresAt} IS NOT NULL`,
+      ),
+    );
+  }
+
+  /**
    * Find all active (non-expired) subscriptions for a specific bot user
    * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
    * @returns Array of active, non-expired user subscriptions
@@ -429,6 +446,31 @@ export class UserSubscriptionsRepository extends BaseRepository<
           eq(this.table.isActive, true),
           sql`${this.table.expiresAt} IS NOT NULL`,
           sql`${this.table.expiresAt} >= ${new Date()}`,
+          eq(botUsers.botId, botId),
+          eq(botUsers.userId, telegramId),
+        ),
+      );
+  }
+
+  /**
+   * Find all active (with-expired) subscriptions for a specific bot user
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
+   * @returns Array of active, non-expired user subscriptions
+   */
+  async findActiveWithExpiredByBotAndTelegramId(
+    botId: number,
+    telegramId: number,
+  ) {
+    return this.db
+      .select({
+        userSubscription: this.table,
+      })
+      .from(this.table)
+      .innerJoin(botUsers, eq(this.table.botUserId, botUsers.id))
+      .where(
+        and(
+          eq(this.table.isActive, true),
+          sql`${this.table.expiresAt} IS NOT NULL`,
           eq(botUsers.botId, botId),
           eq(botUsers.userId, telegramId),
         ),
