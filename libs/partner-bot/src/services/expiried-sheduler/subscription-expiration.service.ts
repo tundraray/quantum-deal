@@ -8,6 +8,10 @@ import {
   Subscription,
   UserSubscription,
   BotUser,
+  BotsRepository,
+  BotMessagesRepository,
+  BotSettingsRepository,
+  BotWithSettings,
 } from '@quantumdeal/db';
 import { LLMService, QuotaExceededException } from '@quantumdeal/framework';
 import { NotificationService } from '@quantumdeal/framework/notifications';
@@ -23,10 +27,17 @@ import {
   expirationMessagesSchema,
 } from './subscription-expiration.schemas';
 import {
-  EXPIRATION_NOTIFICATION_SYSTEM_PROMPT,
+  createExpirationSystemPrompt,
   createExpirationPrompt,
 } from './subscription-expiration.prompts';
-import { getRenewalMessage } from '../commands/renew/renewal.i18n';
+import {
+  BUTTON_KEYS,
+  CALLBACK_DATA,
+  EXPIRATION_WARNING_DAYS_FEATURE_KEY,
+  PARTNER_FLOW_FEATURE_KEY,
+  PartnerSettings,
+} from '@quantumdeal/partner-bot';
+import { isValidHttpsUrl } from '@quantumdeal/partner-bot/utils';
 
 /**
  * Result of processing expiration notifications
@@ -54,10 +65,13 @@ export class SubscriptionExpirationService {
   constructor(
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
+    private readonly botMessagesRepository: BotMessagesRepository,
+    private readonly botSettingsRepository: BotSettingsRepository,
     private readonly llmService: LLMService,
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService,
     private readonly schedulerRegistry: SchedulerRegistry,
+    private readonly botsRepository: BotsRepository,
   ) {}
 
   /**
@@ -87,7 +101,10 @@ export class SubscriptionExpirationService {
           timezone,
         );
 
-        this.schedulerRegistry.addCronJob('subscription-expiration', job);
+        this.schedulerRegistry.addCronJob(
+          'partner-subscription-expiration',
+          job,
+        );
         job.start();
 
         this.logger.log(
@@ -115,35 +132,42 @@ export class SubscriptionExpirationService {
     this.logger.log('Starting subscription expiration check');
 
     try {
-      const warningDaysConfig = this.configService.get<string>(
-        'EXPIRATION_WARNING_DAYS',
-        '7,3,0',
-      );
-      const warningDays = warningDaysConfig
-        .split(',')
-        .map((d) => parseInt(d.trim(), 10))
-        .filter((d) => !isNaN(d));
+      const botsWithSettings = await this.botsRepository.findActiveDynamic();
 
-      this.logger.debug(
-        `Checking expiration for days: ${warningDays.join(', ')}`,
-      );
+      const partnerFlowBots = botsWithSettings.filter((bot) => {
+        const features = bot.settings?.features as
+          | Record<string, boolean>
+          | undefined;
+        return features?.[PARTNER_FLOW_FEATURE_KEY] === true;
+      });
 
       let totalSent = 0;
       let totalSkipped = 0;
       let totalErrors = 0;
 
-      for (const days of warningDays) {
-        const result = await this.processExpirationDay(days);
-        totalSent += result.notificationsSent;
-        totalSkipped += result.notificationsSkipped;
-        totalErrors += result.errors.length;
+      for (const bot of partnerFlowBots) {
+        const warningDaysConfig =
+          (bot.settings?.[EXPIRATION_WARNING_DAYS_FEATURE_KEY] as
+            | string
+            | undefined) || '0,-1,-2,-3,-4,-5,-6,-7,-14,-30';
 
-        if (result.errors.length > 0) {
-          result.errors.forEach((err) => {
-            this.logger.warn(
-              `Failed to send notification to user ${err.userId}: ${err.error}`,
-            );
-          });
+        const warningDays = warningDaysConfig
+          .split(',')
+          .map((d) => parseInt(d.trim(), 10))
+          .filter((d) => !isNaN(d));
+        for (const days of warningDays) {
+          const result = await this.processExpirationDay(days, bot);
+          totalSent += result.notificationsSent;
+          totalSkipped += result.notificationsSkipped;
+          totalErrors += result.errors.length;
+
+          if (result.errors.length > 0) {
+            result.errors.forEach((err) => {
+              this.logger.warn(
+                `Failed to send notification to user ${err.userId}: ${err.error}`,
+              );
+            });
+          }
         }
       }
 
@@ -164,6 +188,7 @@ export class SubscriptionExpirationService {
    */
   private async processExpirationDay(
     daysFromNow: number,
+    bot: BotWithSettings,
   ): Promise<NotificationResult> {
     this.logger.debug(
       `Processing users with subscriptions expiring in ${daysFromNow} days`,
@@ -175,7 +200,7 @@ export class SubscriptionExpirationService {
         await this.userSubscriptionsRepository.findExpiring(
           daysFromNow,
           'signals', // Only signals subscriptions (broadcast subscriptions handled separately)
-          1,
+          bot.id,
         );
 
       if (expiringSubscriptions.length === 0) {
@@ -201,6 +226,7 @@ export class SubscriptionExpirationService {
         users,
         daysFromNow,
         expiringSubscriptions,
+        bot,
       );
 
       this.logger.log(
@@ -237,6 +263,7 @@ export class SubscriptionExpirationService {
       subscription: Subscription;
       userSubscription: UserSubscription;
     }>,
+    bot: BotWithSettings,
   ): Promise<NotificationResult> {
     const errors: Array<{ userId: number; error: string }> = [];
     let notificationsSent = 0;
@@ -272,6 +299,7 @@ export class SubscriptionExpirationService {
         daysFromNow,
         expirationDate,
         languages,
+        bot,
       );
 
       // Create a map for fast lookup of userSubscriptionId and subscriptionId by userId
@@ -348,6 +376,7 @@ export class SubscriptionExpirationService {
     daysRemaining: number,
     expirationDate: Date,
     languages: string[],
+    bot: BotWithSettings,
   ): Promise<ExpirationMessages> {
     const data: ExpirationNotificationData = {
       subscriptionName,
@@ -367,8 +396,8 @@ export class SubscriptionExpirationService {
 
       // Schema returns 'any' to match LLMService.generateObject interface
 
-      const prompt = createExpirationPrompt(data, languages);
-
+      const prompt = createExpirationPrompt(data, languages, bot.name);
+      const systemPrompt = createExpirationSystemPrompt(bot.name);
       this.logger.debug(`Generating messages with ${model}`);
 
       // LLM Service returns generic type, typed explicitly via <ExpirationMessages>
@@ -379,7 +408,7 @@ export class SubscriptionExpirationService {
 
           schema: expirationMessagesSchema,
           prompt,
-          systemPrompt: EXPIRATION_NOTIFICATION_SYSTEM_PROMPT,
+          systemPrompt,
           temperature: 0.7,
         },
       );
@@ -450,6 +479,12 @@ export class SubscriptionExpirationService {
       const userLang = user.lang || 'en';
       const message = messages[userLang] || messages['en'];
 
+      const settingsRecord = await this.botSettingsRepository.findByBotId(
+        user.botId,
+      );
+      const settings = settingsRecord?.settings as PartnerSettings | undefined;
+      const referralUrl = settings?.referralUrl;
+
       if (!message) {
         this.logger.error(
           `No message available for user ${user.userId}. User lang: ${userLang}, Available languages: ${Object.keys(messages).join(', ')}`,
@@ -481,15 +516,32 @@ export class SubscriptionExpirationService {
         buttonTextKey = 'renewButton';
       }
 
+      const extendTrialButtonText = await this.botMessagesRepository
+        .resolveMessage(user.botId, BUTTON_KEYS.EXTEND_TRIAL, user.lang ?? 'en')
+        .catch(() => 'Extend Free Period 🎁');
+
+      const changePlanButtonText = await this.botMessagesRepository
+        .resolveMessage(
+          user.botId,
+          BUTTON_KEYS.BUY_SUBSCRIPTION,
+          user.lang ?? 'en',
+        )
+        .catch(() => 'Buy Subscription 💳');
+
+      // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
+      const extendTrialButton = isValidHttpsUrl(referralUrl ?? '')
+        ? { text: extendTrialButtonText, url: referralUrl as string }
+        : {
+            text: extendTrialButtonText,
+            callback_data: CALLBACK_DATA.EXTEND_TRIAL,
+          };
+
       const renewalButton = [
         [
+          extendTrialButton,
           {
-            text: getRenewalMessage(userLang, buttonTextKey),
+            text: changePlanButtonText,
             callback_data: callbackData,
-          },
-          {
-            text: getRenewalMessage(userLang, 'changePlanButton'),
-            callback_data: 'open_renewal_scene',
           },
         ],
       ];

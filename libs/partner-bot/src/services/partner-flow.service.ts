@@ -10,7 +10,10 @@ import { TrialService, BotCommandsService } from '@quantumdeal/bot';
 import { ChannelVerifierService } from './channel-verifier.service';
 import type { VerificationResult } from '../types/partner-settings';
 import { FeatureFlag } from '@quantumdeal/db/schema';
-import type { PartnerFlowSceneData } from '../types/scene-data.types';
+import type {
+  PartnerFlowSceneData,
+  VerificationStateValue,
+} from '../types/scene-data.types';
 import { interpolateVariables } from '../utils/message-interpolator.utils';
 import { resolveChannelInfo } from '../utils/channel.utils';
 import { isValidHttpsUrl } from '../utils/url-validation.utils';
@@ -61,6 +64,7 @@ export class PartnerFlowService {
     userId: number,
     botId: number,
     lang: string,
+    state?: VerificationStateValue,
   ): Promise<void> {
     try {
       // Get partner settings
@@ -102,26 +106,85 @@ export class PartnerFlowService {
         });
         throw new Error(`Bot with ID ${botId} not found`);
       }
-
-      // Retrieve buttons text
       const iSubscribedButtonText = await this.botMessagesRepository
         .resolveMessage(botId, BUTTON_KEYS.I_SUBSCRIBED, lang)
         .catch(() => 'I subscribed ✅');
 
-      // Send message with inline keyboard
-      await bot.telegram.sendMessage(userId, message, {
-        parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: iSubscribedButtonText,
-                callback_data: CALLBACK_DATA.VERIFY_SUBSCRIPTION,
-              },
+      const changeLangButtonText = await this.botMessagesRepository
+        .resolveMessage(botId, BUTTON_KEYS.CHANGE_LANGUAGE, lang)
+        .catch(() => '🌐 Change language');
+
+      if (state === 'awaiting_channel_subscription') {
+        // Send message with inline keyboard
+        await bot.telegram.sendMessage(userId, message, {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: iSubscribedButtonText,
+                  callback_data: CALLBACK_DATA.VERIFY_SUBSCRIPTION,
+                },
+              ],
             ],
-          ],
-        },
-      });
+          },
+        });
+      } else {
+        // 3. Default flow: No state or trial_expired -> send welcome + channel prompt
+        // Retrieve welcome message
+        const welcomeMessage = await this.botMessagesRepository.resolveMessage(
+          botId,
+          'partner_welcome',
+          lang,
+        );
+
+        const welcomeMessageLang =
+          await this.botMessagesRepository.resolveMessage(
+            botId,
+            'partner_welcome_lang',
+            lang,
+          );
+
+        // Get change language button text
+
+        const interpolatedWelcomeMessage = interpolateVariables(
+          welcomeMessage,
+          {
+            channelName: channel.name,
+            channelUrl: channel.url,
+          },
+        );
+        // Send welcome message with change language button
+        await bot.telegram.sendMessage(userId, interpolatedWelcomeMessage, {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: iSubscribedButtonText,
+                  callback_data: CALLBACK_DATA.VERIFY_SUBSCRIPTION,
+                },
+              ],
+            ],
+          },
+        });
+
+        await bot.telegram.sendMessage(userId, welcomeMessageLang, {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: changeLangButtonText,
+                  callback_data: CALLBACK_DATA.CHANGE_LANGUAGE as string,
+                },
+              ],
+            ],
+          },
+        });
+      }
+
+      // Retrieve buttons text
 
       // Update state (store partner flow data in sceneData)
       const initialState: BotUserState = {

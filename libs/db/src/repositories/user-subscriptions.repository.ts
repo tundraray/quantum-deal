@@ -67,6 +67,7 @@ export class UserSubscriptionsRepository extends BaseRepository<
   async findExpiring(
     daysFromNow: number,
     subscriptionType?: string,
+    botId?: number,
   ): Promise<
     Array<{
       botUser: BotUser;
@@ -80,6 +81,10 @@ export class UserSubscriptionsRepository extends BaseRepository<
       sql`${this.table.expiresAt} IS NOT NULL`,
       sql`${this.table.expiresAt}::date = CURRENT_DATE + ${daysFromNow}::int`,
     ];
+
+    if (botId) {
+      conditions.push(eq(this.table.botId, botId));
+    }
 
     // Add optional subscription type filter
     if (subscriptionType) {

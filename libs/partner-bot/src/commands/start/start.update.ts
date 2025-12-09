@@ -15,11 +15,13 @@ import {
   PARTNER_FLOW_FEATURE_KEY,
   CALLBACK_DATA,
   MESSAGE_KEYS,
+  BUTTON_KEYS,
 } from '../../constants';
 import type { PartnerFlowSceneData } from '../../types/scene-data.types';
 import { calculateRemainingTimeDisplay } from '../../utils/trial-status.utils';
 import { isValidHttpsUrl } from '../../utils/url-validation.utils';
 import type { PartnerSettings } from '../../types/partner-settings';
+import { interpolateVariables } from '@quantumdeal/partner-bot/utils';
 
 /**
  * Handles /start command for partner bot flow.
@@ -111,59 +113,12 @@ export class StartCommandUpdate {
         // Trial expired, continue to welcome flow
       }
 
-      // 2. If awaiting_channel_subscription -> re-send channel prompt (no welcome)
-      if (verificationState === 'awaiting_channel_subscription') {
-        // Re-show channel prompt without welcome message
-        // Preserve existing verification attempt counter (no state reset)
-        await this.partnerFlowService.sendChannelPrompt(userId, botId, lang);
-
-        this.logger.log({
-          message: '/start command completed (re-sent channel prompt)',
-          userId,
-          botId,
-          lang,
-        });
-        return;
-      }
-
-      // 3. Default flow: No state or trial_expired -> send welcome + channel prompt
-      // Retrieve welcome message
-      const welcomeMessage = await this.botMessagesRepository.resolveMessage(
-        botId,
-        'partner_welcome',
-        lang,
-      );
-
-      // Get change language button text
-      /*
-      const changeLangButtonText =
-        await this.botMessagesRepository.resolveMessage(
-          botId,
-          'button_change_language',
-          lang,
-        );
-        */
-      // Send welcome message with change language button
-      await ctx.reply(welcomeMessage, {
-        parse_mode: 'HTML',
-      });
-
-      // Initialize verification state
-      await this.botUsersRepository.updateState(userId, botId, {
-        verificationState: 'awaiting_channel_subscription',
-        verificationAttempts: 0,
-        lastVerificationAttempt: new Date(),
-      } as BotUserState);
-
-      // Send channel subscription prompt
-      await this.partnerFlowService.sendChannelPrompt(userId, botId, lang);
-
-      this.logger.log({
-        message: '/start command completed',
+      await this.partnerFlowService.sendChannelPrompt(
         userId,
         botId,
         lang,
-      });
+        verificationState,
+      );
     } catch (error) {
       this.logger.error({
         message: 'Error in /start command',

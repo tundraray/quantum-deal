@@ -27,14 +27,18 @@ To activate your <b>Exclusive Free Trial</b>, you must join our partner channel 
 This is where the magic happens! 🌟
 👉 {channelUrl}
 
-👇 <b>Click the button below once you've joined:</b>
-/join
+👇 <b>Click the button below once you''ve joined:</b>
 
 Also, if you want to <b>change the language</b>, click this button 👇
 /lang
 ', 
 
 'partner_welcome'),
+	(2, 'en', '
+Also, if you want to <b>change the language</b>, click this button 👇
+', 
+
+'partner_welcome_lang'),
 
 	(2, 'en', '🚀 <b>One Final Step to Profit!</b>
 

@@ -7,7 +7,6 @@ import { ChannelVerifierService } from './services/channel-verifier.service';
 import { PartnerFlowService } from './services/partner-flow.service';
 import { UserDynamicManagementMiddleware } from './middleware/user-management.middleware';
 import { DailyReportService } from './services/daily-report.service';
-import { ReminderSchedulerService } from './services/reminder-scheduler.service';
 
 // Actions
 import { ChannelVerificationAction } from './actions/channel-verification.action';
@@ -16,6 +15,8 @@ import { TrialUIAction } from './actions/trial-ui.action';
 // Commands
 import { StartCommandUpdate } from './commands/start/start.update';
 import { LangUpdate } from './commands/lang/lang.update';
+import { SubscriptionExpirationService } from './services/expiried-sheduler/subscription-expiration.service';
+import { FrameworkModule } from '@quantumdeal/framework';
 
 /**
  * PartnerBotModule
@@ -29,13 +30,13 @@ import { LangUpdate } from './commands/lang/lang.update';
  * and supports dynamic bot loading via DynamicTelegrafModule.
  */
 @Module({
-  imports: [DbModule, BotModule],
+  imports: [DbModule, FrameworkModule, BotModule],
   providers: [
     // Services
     ChannelVerifierService,
     PartnerFlowService,
     DailyReportService,
-    ReminderSchedulerService,
+    SubscriptionExpirationService,
     // Actions
     ChannelVerificationAction,
     TrialUIAction,
@@ -51,6 +52,7 @@ import { LangUpdate } from './commands/lang/lang.update';
     // Export PartnerFlowService for potential external usage
     PartnerFlowService,
     UserDynamicManagementMiddleware,
+    SubscriptionExpirationService,
   ],
 })
 export class PartnerBotModule {}
