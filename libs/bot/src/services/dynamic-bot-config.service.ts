@@ -96,6 +96,7 @@ export class DynamicBotConfigService implements BotConfigurationProvider {
     }
 
     return {
+      ...settings,
       features: {
         trialEnabled: Boolean(
           (settings.features as Record<string, unknown>).trialEnabled,
