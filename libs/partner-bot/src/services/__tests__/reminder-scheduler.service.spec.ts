@@ -6,8 +6,12 @@ describe('ReminderSchedulerService', () => {
   let mockUserSubscriptionsRepository: {
     findExpiredTrials: jest.Mock;
   };
-  let mockBotMessagesRepository: {
-    resolveMessage: jest.Mock;
+  let mockLocalizationService: {
+    forBot: jest.Mock;
+  };
+  let mockLocalizationContext: {
+    lang: jest.Mock;
+    t: jest.Mock;
   };
   let mockBotSettingsRepository: {
     findByBotId: jest.Mock;
@@ -29,8 +33,13 @@ describe('ReminderSchedulerService', () => {
       findExpiredTrials: jest.fn(),
     };
 
-    mockBotMessagesRepository = {
-      resolveMessage: jest.fn(),
+    mockLocalizationContext = {
+      lang: jest.fn().mockReturnThis(),
+      t: jest.fn(),
+    };
+
+    mockLocalizationService = {
+      forBot: jest.fn().mockReturnValue(mockLocalizationContext),
     };
 
     mockBotSettingsRepository = {
@@ -67,7 +76,7 @@ describe('ReminderSchedulerService', () => {
           useFactory: () =>
             new ReminderSchedulerService(
               mockUserSubscriptionsRepository as never,
-              mockBotMessagesRepository as never,
+              mockLocalizationService as never,
               mockBotSettingsRepository as never,
               mockBotsRepository as never,
               mockDynamicTelegrafService as never,
@@ -122,8 +131,8 @@ describe('ReminderSchedulerService', () => {
       mockUserSubscriptionsRepository.findExpiredTrials.mockResolvedValue(
         mockExpiredTrials,
       );
-      mockBotMessagesRepository.resolveMessage.mockResolvedValue(
-        'Your trial has expired. Click "Extend" to get more free days via referral link: {referralUrl}',
+      mockLocalizationContext.t.mockResolvedValue(
+        'Your trial has expired. Click "Extend" to get more free days via referral link: https://t.me/partner_referral',
       );
       mockBotSettingsRepository.findByBotId.mockResolvedValue({
         id: 1,
@@ -143,6 +152,7 @@ describe('ReminderSchedulerService', () => {
         mockUserSubscriptionsRepository.findExpiredTrials,
       ).toHaveBeenCalledWith(botId);
       expect(mockBot.telegram.sendMessage).toHaveBeenCalledTimes(2);
+      expect(mockLocalizationService.forBot).toHaveBeenCalledWith(botId);
     });
 
     it('should handle bot blocked errors gracefully', async () => {
@@ -170,9 +180,7 @@ describe('ReminderSchedulerService', () => {
       mockUserSubscriptionsRepository.findExpiredTrials.mockResolvedValue(
         mockExpiredTrials,
       );
-      mockBotMessagesRepository.resolveMessage.mockResolvedValue(
-        'Your trial has expired',
-      );
+      mockLocalizationContext.t.mockResolvedValue('Your trial has expired');
       mockBotSettingsRepository.findByBotId.mockResolvedValue({
         id: 1,
         botId: 1,
@@ -219,9 +227,7 @@ describe('ReminderSchedulerService', () => {
       mockUserSubscriptionsRepository.findExpiredTrials.mockResolvedValue(
         mockExpiredTrials,
       );
-      mockBotMessagesRepository.resolveMessage.mockResolvedValue(
-        'Your trial expired',
-      );
+      mockLocalizationContext.t.mockResolvedValue('Your trial expired');
       mockBotSettingsRepository.findByBotId.mockResolvedValue({
         id: 1,
         botId: 1,

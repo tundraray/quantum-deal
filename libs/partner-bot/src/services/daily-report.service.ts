@@ -9,7 +9,6 @@ import {
   Order,
   MessageType,
   BotsRepository,
-  BotMessagesRepository,
   BotSettingsRepository,
 } from '@quantumdeal/db';
 import {
@@ -18,6 +17,7 @@ import {
 } from '@quantumdeal/framework/notifications';
 import { ConfigService } from '@nestjs/config';
 import { NotificationService } from '@quantumdeal/framework/notifications';
+import { LocalizationService } from '@quantumdeal/framework';
 import { BUTTON_KEYS, CALLBACK_DATA } from '../constants';
 import { isValidHttpsUrl } from '../utils/url-validation.utils';
 import { PartnerSettings } from '../types/partner-settings';
@@ -101,7 +101,7 @@ export class DailyReportService {
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly configService: ConfigService,
     private readonly botsRepository: BotsRepository,
-    private readonly botMessagesRepository: BotMessagesRepository,
+    private readonly localizationService: LocalizationService,
     private readonly botSettingsRepository: BotSettingsRepository,
   ) {}
 
@@ -527,13 +527,10 @@ export class DailyReportService {
       const settings = settingsRecord?.settings as PartnerSettings | undefined;
       const referralUrl = settings?.referralUrl;
 
-      const extendTrialButtonText = await this.botMessagesRepository
-        .resolveMessage(
-          client.botId,
-          BUTTON_KEYS.EXTEND_TRIAL,
-          client.lang ?? 'en',
-        )
-        .catch(() => 'Extend Free Period 🎁');
+      const extendTrialButtonText = await this.localizationService
+        .forBot(client.botId)
+        .lang(client.lang ?? 'en')
+        .t(BUTTON_KEYS.EXTEND_TRIAL);
 
       // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
       const extendTrialButton = isValidHttpsUrl(referralUrl ?? '')

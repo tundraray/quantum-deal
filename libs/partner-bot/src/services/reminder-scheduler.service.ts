@@ -2,17 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import {
   UserSubscriptionsRepository,
-  BotMessagesRepository,
   BotSettingsRepository,
   BotsRepository,
 } from '@quantumdeal/db';
+import { LocalizationService } from '@quantumdeal/framework';
 import { DynamicTelegrafService } from '@quantumdeal/telegraf';
 import {
   PARTNER_FLOW_FEATURE_KEY,
   CALLBACK_DATA,
   BUTTON_KEYS,
 } from '../constants';
-import { interpolateVariables } from '../utils/message-interpolator.utils';
 import { isValidHttpsUrl } from '../utils/url-validation.utils';
 
 /**
@@ -61,7 +60,7 @@ export class ReminderSchedulerService {
 
   constructor(
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
-    private readonly botMessagesRepository: BotMessagesRepository,
+    private readonly localizationService: LocalizationService,
     private readonly botSettingsRepository: BotSettingsRepository,
     private readonly botsRepository: BotsRepository,
     private readonly dynamicTelegrafService: DynamicTelegrafService,
@@ -187,35 +186,20 @@ export class ReminderSchedulerService {
       // Process each expired user
       for (const { botUser } of expiredTrials) {
         try {
-          // Retrieve message
-          const messageTemplate =
-            await this.botMessagesRepository.resolveMessage(
-              botId,
-              'partner_trial_expired',
-              botUser.lang ?? 'en',
-            );
+          const lang = botUser.lang ?? 'en';
+          const l10n = this.localizationService.forBot(botId).lang(lang);
 
-          // Interpolate referral URL
-          const message = interpolateVariables(messageTemplate, {
+          // Retrieve message with referral URL interpolation
+          const message = await l10n.t('partner_trial_expired', {
             referralUrl,
           });
 
           // Retrieve buttons text
-          const extendTrialButtonText = await this.botMessagesRepository
-            .resolveMessage(
-              botId,
-              BUTTON_KEYS.EXTEND_TRIAL,
-              botUser.lang ?? 'en',
-            )
-            .catch(() => 'Extend Free Period 🎁');
+          const extendTrialButtonText = await l10n.t(BUTTON_KEYS.EXTEND_TRIAL);
 
-          const buySubscriptionButtonText = await this.botMessagesRepository
-            .resolveMessage(
-              botId,
-              BUTTON_KEYS.BUY_SUBSCRIPTION,
-              botUser.lang ?? 'en',
-            )
-            .catch(() => 'Buy Subscription 💳');
+          const buySubscriptionButtonText = await l10n.t(
+            BUTTON_KEYS.BUY_SUBSCRIPTION,
+          );
 
           // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
           const extendTrialButton = isValidHttpsUrl(referralUrl)
