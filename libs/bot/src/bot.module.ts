@@ -19,11 +19,11 @@ import { UserManagementMiddleware } from './middleware';
 // Services
 import { WeekReportService } from './services/week-report.service';
 import { MonthReportService } from './services/month-report.service';
-import { NotificationService } from '@quantumdeal/framework/notifications';
 import { SubscriptionExpirationService } from './services/subscription-expiration.service';
 import { FeatureFlagService } from './services/feature-flag.service';
 import { InstrumentFilterService } from './services/instrument-filter.service';
 import { FilterSessionService } from './services/filter-session.service';
+import { NotificationService } from '@quantumdeal/framework/notifications';
 import { PaymentService } from './services/payment.service';
 import { BotCommandsService } from './services/bot-commands.service';
 import { BotInitService } from './services/bot-init.service';
@@ -66,7 +66,6 @@ import { RenewalAction } from './actions/renewal/renewal.action';
     // Services
     WeekReportService,
     MonthReportService,
-    NotificationService,
     SubscriptionExpirationService,
 
     // Feature flags services
@@ -119,7 +118,6 @@ import { RenewalAction } from './actions/renewal/renewal.action';
     // Services
     WeekReportService,
     MonthReportService,
-    NotificationService,
     SubscriptionExpirationService,
 
     // Feature flags services

@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import {
   SubscriptionsRepository,
@@ -21,6 +19,7 @@ import {
   QueuedMessageType,
   NotificationUser,
 } from '../notifications';
+import type { PartnerSettings } from '@quantumdeal/partner-bot';
 
 /**
  * MultiBotSignalService
@@ -239,6 +238,8 @@ export class SignalService implements MultiBotSignal {
         return this.createBotResult(bot, true, 0, 0, startTime);
       }
 
+      const buttons = [] as Array<Array<object>>;
+
       // Step 2: Map to NotificationUser format
       const users: NotificationUser[] = subscriptions.map((sub) => ({
         botUserId: sub.botUserId,
@@ -279,6 +280,26 @@ export class SignalService implements MultiBotSignal {
             user.lang || 'en',
           );
 
+          // todo: need refactor this
+          if (
+            bot.settings?.features.partnerFlowEnabled &&
+            ['close_plus', 'open'].includes(eventType)
+          ) {
+            const extendTrialButtonText = await this.botMessagesRepository
+              .resolveMessage(botId, 'button_extend_trial', user.lang ?? 'en')
+              .catch(() => 'Extend Free Period 🎁');
+            const referralUrl = (bot.settings as PartnerSettings).referralUrl;
+
+            // Create trial status button - url if valid referralUrl, otherwise callback
+            const trialStatusButton = referralUrl
+              ? { text: extendTrialButtonText, url: referralUrl }
+              : {
+                  text: extendTrialButtonText,
+                  callback_data: 'partner_extend_trial',
+                };
+            buttons.push([trialStatusButton]);
+          }
+
           // Replace placeholders
           const messageText = this.replacePlaceholders(
             template,
@@ -295,6 +316,7 @@ export class SignalService implements MultiBotSignal {
               messageType: QueuedMessageType.MARKDOWN,
               priority: MessagePriority.HIGH,
               maxRetries: 3,
+              buttons: buttons,
             },
           );
 
