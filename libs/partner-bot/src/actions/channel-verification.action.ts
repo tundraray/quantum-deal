@@ -1,20 +1,18 @@
 import { Injectable, Logger, UseFilters } from '@nestjs/common';
 import { Action, Ctx, Update, RequiresFeature } from '@quantumdeal/telegraf';
 import type { PartnerBotContext } from '../interfaces';
-import {
-  BotMessagesRepository,
-  BotUsersRepository,
-  BotSettingsRepository,
-} from '@quantumdeal/db';
+import { BotUsersRepository, BotSettingsRepository } from '@quantumdeal/db';
 import { ChannelVerifierService } from '../services/channel-verifier.service';
 import { PartnerFlowService } from '../services/partner-flow.service';
-import { TelegrafExceptionFilter } from '@quantumdeal/framework';
+import {
+  TelegrafExceptionFilter,
+  LocalizationService,
+} from '@quantumdeal/framework';
 import {
   PARTNER_FLOW_FEATURE_KEY,
   CALLBACK_DATA,
   MESSAGE_KEYS,
 } from '../constants';
-import { interpolateVariables } from '../utils/message-interpolator.utils';
 import { resolveChannelInfo } from '../utils/channel.utils';
 
 /**
@@ -43,7 +41,7 @@ export class ChannelVerificationAction {
   constructor(
     private readonly channelVerifierService: ChannelVerifierService,
     private readonly partnerFlowService: PartnerFlowService,
-    private readonly botMessagesRepository: BotMessagesRepository,
+    private readonly localizationService: LocalizationService,
     private readonly botUsersRepository: BotUsersRepository,
     private readonly botSettingsRepository: BotSettingsRepository,
   ) {}
@@ -176,16 +174,12 @@ export class ChannelVerificationAction {
     channelId: string,
     ctx: PartnerBotContext,
   ): Promise<void> {
-    const failureMessageTemplate =
-      await this.botMessagesRepository.resolveMessage(
-        botId,
-        MESSAGE_KEYS.VERIFICATION_FAILED,
-        lang,
-      );
+    // Get localization context
+    const l10n = this.localizationService.forBot(botId).lang(lang);
 
     // Calculate channel name and URL for interpolation
     const channel = resolveChannelInfo(channelId);
-    const failureMessage = interpolateVariables(failureMessageTemplate, {
+    const failureMessage = await l10n.t(MESSAGE_KEYS.VERIFICATION_FAILED, {
       channelName: channel.name,
       channelUrl: channel.url,
     });

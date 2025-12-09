@@ -9,11 +9,14 @@ import {
   UserSubscription,
   BotUser,
   BotsRepository,
-  BotMessagesRepository,
   BotSettingsRepository,
   BotWithSettings,
 } from '@quantumdeal/db';
-import { LLMService, QuotaExceededException } from '@quantumdeal/framework';
+import {
+  LLMService,
+  QuotaExceededException,
+  LocalizationService,
+} from '@quantumdeal/framework';
 import { NotificationService } from '@quantumdeal/framework/notifications';
 import {
   MessagePriority,
@@ -65,7 +68,7 @@ export class SubscriptionExpirationService {
   constructor(
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
-    private readonly botMessagesRepository: BotMessagesRepository,
+    private readonly localizationService: LocalizationService,
     private readonly botSettingsRepository: BotSettingsRepository,
     private readonly llmService: LLMService,
     private readonly notificationService: NotificationService,
@@ -521,17 +524,12 @@ export class SubscriptionExpirationService {
         buttonTextKey = 'renewButton';
       }
 
-      const changePlanButtonText = await this.botMessagesRepository
-        .resolveMessage(
-          user.botId,
-          BUTTON_KEYS.BUY_SUBSCRIPTION,
-          user.lang ?? 'en',
-        )
-        .catch(() => 'Buy Subscription 💳');
-
-      const extendTrialButtonText = await this.botMessagesRepository
-        .resolveMessage(user.botId, BUTTON_KEYS.EXTEND_TRIAL, user.lang ?? 'en')
-        .catch(() => 'Extend Free Period 🎁');
+      // Get button texts via LocalizationService
+      const l10n = this.localizationService
+        .forBot(user.botId)
+        .lang(user.lang ?? 'en');
+      const changePlanButtonText = await l10n.t(BUTTON_KEYS.BUY_SUBSCRIPTION);
+      const extendTrialButtonText = await l10n.t(BUTTON_KEYS.EXTEND_TRIAL);
 
       // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
       const extendTrialButton = isValidHttpsUrl(referralUrl ?? '')

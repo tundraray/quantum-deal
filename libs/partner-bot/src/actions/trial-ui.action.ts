@@ -1,12 +1,11 @@
 import { Injectable, Logger, UseFilters } from '@nestjs/common';
 import { Action, Ctx, Update, RequiresFeature } from '@quantumdeal/telegraf';
 import type { PartnerBotContext } from '../interfaces';
+import { BotUsersRepository, BotSettingsRepository } from '@quantumdeal/db';
 import {
-  BotMessagesRepository,
-  BotUsersRepository,
-  BotSettingsRepository,
-} from '@quantumdeal/db';
-import { TelegrafExceptionFilter } from '@quantumdeal/framework';
+  TelegrafExceptionFilter,
+  LocalizationService,
+} from '@quantumdeal/framework';
 import { PARTNER_FLOW_FEATURE_KEY } from '../constants';
 import { isValidHttpsUrl } from '../utils/url-validation.utils';
 import { maskUrl } from '../utils/log-masking.utils';
@@ -39,7 +38,7 @@ export class TrialUIAction {
   private readonly logger = new Logger(TrialUIAction.name);
 
   constructor(
-    private readonly botMessagesRepository: BotMessagesRepository,
+    private readonly localizationService: LocalizationService,
     private readonly botUsersRepository: BotUsersRepository,
     private readonly botSettingsRepository: BotSettingsRepository,
   ) {}
@@ -205,22 +204,9 @@ export class TrialUIAction {
         ctx.from?.language_code,
       );
 
-      // Retrieve coming soon message with fallback
-      let message: string;
-      try {
-        message = await this.botMessagesRepository.resolveMessage(
-          botId,
-          'partner_coming_soon',
-          lang,
-        );
-      } catch {
-        this.logger.debug({
-          message: 'Coming soon message not found in database, using fallback',
-          userId,
-          botId,
-        });
-        message = FALLBACK_COMING_SOON;
-      }
+      // Retrieve coming soon message via LocalizationService
+      const l10n = this.localizationService.forBot(botId).lang(lang);
+      const message = await l10n.t('partner_coming_soon');
 
       // Send message
       await ctx.reply(message);

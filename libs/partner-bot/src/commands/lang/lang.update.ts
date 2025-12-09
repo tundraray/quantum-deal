@@ -17,9 +17,9 @@ import {
   TelegrafExceptionFilter,
   CallbackQueryData,
   SplitCommandPipe,
+  LocalizationService,
 } from '@quantumdeal/framework';
 import {
-  BotMessagesRepository,
   BotUsersRepository,
   BotSettingsRepository,
   DEFAULT_LANGS,
@@ -50,7 +50,7 @@ export class LangUpdate {
   private readonly logger = new Logger(LangUpdate.name);
 
   constructor(
-    private readonly botMessagesRepository: BotMessagesRepository,
+    private readonly localizationService: LocalizationService,
     private readonly botUsersRepository: BotUsersRepository,
     private readonly botSettingsRepository: BotSettingsRepository,
   ) {}
@@ -198,16 +198,8 @@ export class LangUpdate {
     botId: number | undefined,
     lang: string,
   ): Promise<string> {
-    try {
-      return await this.botMessagesRepository.resolveMessage(
-        botId ?? 0,
-        'lang_select_prompt',
-        lang,
-      );
-    } catch (error) {
-      this.logger.error('Error getting language selection message', error);
-      return 'Please select your preferred language / Выберите предпочитаемый язык';
-    }
+    const l10n = this.localizationService.forBot(botId ?? null).lang(lang);
+    return l10n.t('lang_select_prompt');
   }
 
   /**
@@ -221,16 +213,8 @@ export class LangUpdate {
     botId: number | undefined,
     lang: string,
   ): Promise<string> {
-    try {
-      return await this.botMessagesRepository.resolveMessage(
-        botId ?? 0,
-        'lang_changed',
-        lang,
-      );
-    } catch (error) {
-      this.logger.error('Error getting language changed message', error);
-      return `Language changed to ${lang} successfully!`;
-    }
+    const l10n = this.localizationService.forBot(botId ?? null).lang(lang);
+    return l10n.t('lang_changed');
   }
 
   /**

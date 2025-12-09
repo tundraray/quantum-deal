@@ -9,14 +9,16 @@ import {
 import {
   ResponseTimeInterceptor,
   TelegrafExceptionFilter,
+  LocalizationService,
+  ILocalizationContext,
 } from '@quantumdeal/framework';
-import type { UserContext } from '../../interfaces';
+import type { PartnerBotContext } from '../../interfaces';
 import { RENEWAL_SCENE_ID } from './renewal.scene';
 import {
   PaymentService,
   RenewalInvoicePayload,
 } from '@quantumdeal/bot/services/payment.service';
-import { getRenewalMessage } from './renewal.i18n';
+import { RENEWAL_I18N_NAMESPACE } from '../../i18n/renewal.i18n';
 import { PARTNER_FLOW_FEATURE_KEY } from '@quantumdeal/partner-bot/constants';
 
 /**
@@ -35,7 +37,22 @@ import { PARTNER_FLOW_FEATURE_KEY } from '@quantumdeal/partner-bot/constants';
 export class RenewUpdate {
   private readonly logger = new Logger(RenewUpdate.name);
 
-  constructor(private readonly paymentService: PaymentService) {}
+  constructor(
+    private readonly paymentService: PaymentService,
+    private readonly localizationService: LocalizationService,
+  ) {}
+
+  /**
+   * Get localization context for the current request
+   */
+  private getL10n(ctx: PartnerBotContext): ILocalizationContext {
+    const botId = ctx.botId ?? null;
+    const lang = ctx.user?.lang ?? 'en';
+    return this.localizationService
+      .forBot(botId)
+      .use(RENEWAL_I18N_NAMESPACE)
+      .lang(lang);
+  }
 
   /**
    * Handle /renew command
@@ -48,9 +65,10 @@ export class RenewUpdate {
    * @param ctx - Telegram context
    */
   @Command('renew')
-  async onRenew(@Ctx() ctx: UserContext): Promise<void> {
+  async onRenew(@Ctx() ctx: PartnerBotContext): Promise<void> {
     if (!ctx.user) {
-      await ctx.reply('Сначала нужно зарегистрироваться. Используйте /start');
+      const l10n = this.getL10n(ctx);
+      await ctx.reply(await l10n.t('renewal_error_userNotFound'));
       return;
     }
 
@@ -59,9 +77,8 @@ export class RenewUpdate {
       await ctx.scene.enter(RENEWAL_SCENE_ID);
     } catch (error) {
       this.logger.error('Error entering renewal scene', error);
-      await ctx.reply(
-        'An error occurred while opening renewal options. Please try again later.',
-      );
+      const l10n = this.getL10n(ctx);
+      await ctx.reply(await l10n.t('renewal_error_genericError'));
     }
   }
 
@@ -74,7 +91,7 @@ export class RenewUpdate {
    * @param ctx - Telegram context
    */
   @On('pre_checkout_query')
-  async onPreCheckoutQuery(@Ctx() ctx: UserContext): Promise<void> {
+  async onPreCheckoutQuery(@Ctx() ctx: PartnerBotContext): Promise<void> {
     const query = ctx.preCheckoutQuery;
 
     if (!query) {
@@ -102,9 +119,10 @@ export class RenewUpdate {
         );
       } else {
         // Reject payment
+        const l10n = this.getL10n(ctx);
         await ctx.answerPreCheckoutQuery(
           false,
-          'Payment validation failed. Please try again or contact support.',
+          await l10n.t('renewal_error_genericError'),
         );
         this.logger.warn(
           `Pre-checkout rejected for bot user ${ctx.user?.botUserId}`,
@@ -112,9 +130,10 @@ export class RenewUpdate {
       }
     } catch (error) {
       this.logger.error('Pre-checkout query error:', error);
+      const l10n = this.getL10n(ctx);
       await ctx.answerPreCheckoutQuery(
         false,
-        'An error occurred. Please try again or contact support.',
+        await l10n.t('renewal_error_genericError'),
       );
     }
   }
@@ -128,13 +147,15 @@ export class RenewUpdate {
    * @param ctx - Telegram context
    */
   @On('successful_payment')
-  async onSuccessfulPayment(@Ctx() ctx: UserContext): Promise<void> {
+  async onSuccessfulPayment(@Ctx() ctx: PartnerBotContext): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const payment = (ctx.message as any)?.successful_payment;
 
     if (!payment) {
       return;
     }
+
+    const l10n = this.getL10n(ctx);
 
     try {
       // Parse payload
@@ -157,17 +178,14 @@ export class RenewUpdate {
       );
 
       // Send confirmation to user
-      const lang = ctx.user?.lang || 'en';
-      await ctx.reply(getRenewalMessage(lang, 'paymentSuccess'));
+      await ctx.reply(await l10n.t('renewal_text_paymentSuccess'));
 
       this.logger.log(
         `Payment ${payload.transactionId} completed successfully for bot user ${ctx.user?.botUserId}`,
       );
     } catch (error) {
       this.logger.error('Payment processing error:', error);
-
-      const lang = ctx.user?.lang || 'en';
-      await ctx.reply(getRenewalMessage(lang, 'paymentError'));
+      await ctx.reply(await l10n.t('renewal_error_paymentError'));
     }
   }
 }

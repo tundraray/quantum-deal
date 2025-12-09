@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  BotMessagesRepository,
   BotSettingsRepository,
   BotUsersRepository,
+  UserSubscriptionsRepository,
 } from '@quantumdeal/db';
+import { LocalizationService } from '@quantumdeal/framework';
 import type { BotUserState } from '@quantumdeal/db/schema';
 import { DynamicTelegrafService } from '@quantumdeal/telegraf';
 import { TrialService, BotCommandsService } from '@quantumdeal/bot';
@@ -14,7 +15,6 @@ import type {
   PartnerFlowSceneData,
   VerificationStateValue,
 } from '../types/scene-data.types';
-import { interpolateVariables } from '../utils/message-interpolator.utils';
 import { resolveChannelInfo } from '../utils/channel.utils';
 import { isValidHttpsUrl } from '../utils/url-validation.utils';
 import { CALLBACK_DATA, MESSAGE_KEYS, BUTTON_KEYS } from '../constants';
@@ -41,13 +41,14 @@ export class PartnerFlowService {
   private readonly logger = new Logger(PartnerFlowService.name);
 
   constructor(
-    private readonly botMessagesRepository: BotMessagesRepository,
+    private readonly localizationService: LocalizationService,
     private readonly botSettingsRepository: BotSettingsRepository,
     private readonly botUsersRepository: BotUsersRepository,
     private readonly trialService: TrialService,
     private readonly botCommandsService: BotCommandsService,
     private readonly channelVerifierService: ChannelVerifierService,
     private readonly dynamicTelegrafService: DynamicTelegrafService,
+    private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
   ) {}
 
   /**
@@ -82,16 +83,12 @@ export class PartnerFlowService {
 
       const channelId: string = settings.channelId;
 
-      // Retrieve message
-      const messageTemplate = await this.botMessagesRepository.resolveMessage(
-        botId,
-        MESSAGE_KEYS.CHANNEL_PROMPT,
-        lang,
-      );
+      // Get localization context
+      const l10n = this.localizationService.forBot(botId).lang(lang);
 
-      // Interpolate variables
+      // Retrieve channel info and message
       const channel = resolveChannelInfo(channelId, settings.channelName);
-      const message = interpolateVariables(messageTemplate, {
+      const message = await l10n.t(MESSAGE_KEYS.CHANNEL_PROMPT, {
         channelUrl: channel.url,
         channelName: channel.name,
       });
@@ -106,13 +103,8 @@ export class PartnerFlowService {
         });
         throw new Error(`Bot with ID ${botId} not found`);
       }
-      const iSubscribedButtonText = await this.botMessagesRepository
-        .resolveMessage(botId, BUTTON_KEYS.I_SUBSCRIBED, lang)
-        .catch(() => 'I subscribed ✅');
-
-      const changeLangButtonText = await this.botMessagesRepository
-        .resolveMessage(botId, BUTTON_KEYS.CHANGE_LANGUAGE, lang)
-        .catch(() => '🌐 Change language');
+      const iSubscribedButtonText = await l10n.t(BUTTON_KEYS.I_SUBSCRIBED);
+      const changeLangButtonText = await l10n.t(BUTTON_KEYS.CHANGE_LANGUAGE);
 
       if (state === 'awaiting_channel_subscription') {
         // Send message with inline keyboard
@@ -131,31 +123,15 @@ export class PartnerFlowService {
         });
       } else {
         // 3. Default flow: No state or trial_expired -> send welcome + channel prompt
-        // Retrieve welcome message
-        const welcomeMessage = await this.botMessagesRepository.resolveMessage(
-          botId,
-          'partner_welcome',
-          lang,
-        );
+        // Retrieve welcome messages via LocalizationService
+        const welcomeMessage = await l10n.t('partner_welcome', {
+          channelName: channel.name,
+          channelUrl: channel.url,
+        });
 
-        const welcomeMessageLang =
-          await this.botMessagesRepository.resolveMessage(
-            botId,
-            'partner_welcome_lang',
-            lang,
-          );
-
-        // Get change language button text
-
-        const interpolatedWelcomeMessage = interpolateVariables(
-          welcomeMessage,
-          {
-            channelName: channel.name,
-            channelUrl: channel.url,
-          },
-        );
+        const welcomeMessageLang = await l10n.t('partner_welcome_lang');
         // Send welcome message with change language button
-        await bot.telegram.sendMessage(userId, interpolatedWelcomeMessage, {
+        await bot.telegram.sendMessage(userId, welcomeMessage, {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
@@ -300,22 +276,13 @@ export class PartnerFlowService {
           };
         }
 
-        // Retrieve buttons text
-        const tryAgainButtonText = await this.botMessagesRepository
-          .resolveMessage(botId, BUTTON_KEYS.TRY_AGAIN, lang)
-          .catch(() => 'Try Again');
+        // Get localization context and retrieve texts
+        const l10n = this.localizationService.forBot(botId).lang(lang);
+        const tryAgainButtonText = await l10n.t(BUTTON_KEYS.TRY_AGAIN);
 
-        // Send failure message with interpolated channel info
-        const failureMessageTemplate =
-          await this.botMessagesRepository.resolveMessage(
-            botId,
-            MESSAGE_KEYS.VERIFICATION_FAILED,
-            lang,
-          );
-
-        // Calculate channel name and URL for interpolation
+        // Get failure message with interpolated channel info
         const channel = resolveChannelInfo(channelId, settings.channelName);
-        const failureMessage = interpolateVariables(failureMessageTemplate, {
+        const failureMessage = await l10n.t(MESSAGE_KEYS.VERIFICATION_FAILED, {
           channelName: channel.name,
           channelUrl: channel.url,
         });
@@ -465,20 +432,16 @@ export class PartnerFlowService {
     expiresAt: Date,
   ): Promise<void> {
     try {
-      // Retrieve message
-      const messageTemplate = await this.botMessagesRepository.resolveMessage(
-        botId,
-        MESSAGE_KEYS.TRIAL_ACTIVATED,
-        lang,
-      );
+      // Get localization context
+      const l10n = this.localizationService.forBot(botId).lang(lang);
 
       // Calculate days remaining
       const now = new Date();
       const diffMs = expiresAt.getTime() - now.getTime();
       const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-      // Interpolate variables
-      const message = interpolateVariables(messageTemplate, {
+      // Retrieve message with interpolation
+      const message = await l10n.t(MESSAGE_KEYS.TRIAL_ACTIVATED, {
         expiryDate: expiresAt.toISOString().split('T')[0],
         daysRemaining: daysRemaining.toString(),
       });
@@ -499,15 +462,21 @@ export class PartnerFlowService {
         await this.botSettingsRepository.findByBotId(botId);
       const settings = settingsRecord?.settings as PartnerSettings | undefined;
       const referralUrl = settings?.referralUrl;
+      const defaultSubscriptionId = settings?.defaultSubscriptionId;
 
-      // Retrieve buttons text
-      const extendTrialButtonText = await this.botMessagesRepository
-        .resolveMessage(botId, BUTTON_KEYS.EXTEND_TRIAL, lang)
-        .catch(() => 'Extend Free Period 🎁');
+      const subscriptions =
+        await this.userSubscriptionsRepository.findActiveByBotAndTelegramId(
+          botId,
+          userId,
+        );
 
-      const buySubscriptionButtonText = await this.botMessagesRepository
-        .resolveMessage(botId, BUTTON_KEYS.BUY_SUBSCRIPTION, lang)
-        .catch(() => 'Buy Subscription 💳');
+      // Retrieve buttons text via LocalizationService
+      const extendTrialButtonText = await l10n.t(BUTTON_KEYS.EXTEND_TRIAL);
+      const buySubscriptionButtonText = await l10n.t(
+        BUTTON_KEYS.BUY_SUBSCRIPTION,
+      );
+
+      const callbackData = `renew_now:${subscriptions[0].userSubscription.id}:${defaultSubscriptionId}`;
 
       // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
       const extendTrialButton = isValidHttpsUrl(referralUrl ?? '')
@@ -526,7 +495,7 @@ export class PartnerFlowService {
             [
               {
                 text: buySubscriptionButtonText,
-                callback_data: CALLBACK_DATA.BUY_SUBSCRIPTION,
+                callback_data: callbackData,
               },
             ],
           ],

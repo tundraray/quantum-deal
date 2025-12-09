@@ -2,13 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Update, Command, Ctx, RequiresFeature } from '@quantumdeal/telegraf';
 import { Markup } from 'telegraf';
 import {
-  BotMessagesRepository,
   BotUsersRepository,
   BotSettingsRepository,
   UserSubscriptionsRepository,
   BotUser,
-  BotUserState,
 } from '@quantumdeal/db';
+import { LocalizationService } from '@quantumdeal/framework';
 import { PartnerFlowService } from '../../services/partner-flow.service';
 import type { PartnerBotContext } from '../../interfaces';
 import {
@@ -18,10 +17,8 @@ import {
   BUTTON_KEYS,
 } from '../../constants';
 import type { PartnerFlowSceneData } from '../../types/scene-data.types';
-import { calculateRemainingTimeDisplay } from '../../utils/trial-status.utils';
 import { isValidHttpsUrl } from '../../utils/url-validation.utils';
 import type { PartnerSettings } from '../../types/partner-settings';
-import { interpolateVariables } from '@quantumdeal/partner-bot/utils';
 
 /**
  * Handles /start command for partner bot flow.
@@ -48,7 +45,7 @@ export class StartCommandUpdate {
   private readonly logger = new Logger(StartCommandUpdate.name);
 
   constructor(
-    private readonly botMessagesRepository: BotMessagesRepository,
+    private readonly localizationService: LocalizationService,
     private readonly partnerFlowService: PartnerFlowService,
     private readonly botUsersRepository: BotUsersRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
@@ -156,7 +153,7 @@ export class StartCommandUpdate {
     lang: string,
   ): Promise<void> {
     const userId = ctx.from?.id;
-    const botId = ctx.botId;
+    const botId = ctx.botId!;
 
     // Get active subscription to calculate remaining time
     const subscriptions =
@@ -186,56 +183,32 @@ export class StartCommandUpdate {
     }
     const expiresAt = new Date(subscription.expiresAt);
 
-    // Get trial status message from bot_messages with fallback
-    let messageContent: string;
-    try {
-      messageContent = await this.botMessagesRepository.resolveMessage(
-        botId ?? 0,
-        MESSAGE_KEYS.TRIAL_ACTIVATED,
-        lang,
-      );
-    } catch {
-      messageContent =
-        'Your trial is active until {expiryDate}. Days remaining: {daysRemaining}.';
-    }
+    // Get trial status message via LocalizationService
+    const l10n = this.localizationService.forBot(botId).lang(lang);
+    const messageContent = await l10n.t(MESSAGE_KEYS.TRIAL_ACTIVATED, {
+      expiryDate: expiresAt.toLocaleDateString(lang),
+      daysRemaining: Math.max(
+        0,
+        Math.ceil(
+          (expiresAt.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24),
+        ),
+      ).toString(),
+    });
 
-    // Format values for message placeholders
-    const now = new Date();
-    const remainingMs = expiresAt.getTime() - now.getTime();
-    const daysRemaining = Math.max(
-      0,
-      Math.ceil(remainingMs / (1000 * 60 * 60 * 24)),
+    // Get button texts via LocalizationService
+    const changeLangButtonText = await l10n.t(BUTTON_KEYS.CHANGE_LANGUAGE);
+    const buySubscriptionButtonText = await l10n.t(
+      BUTTON_KEYS.BUY_SUBSCRIPTION,
     );
-    const expiryDateStr = expiresAt.toLocaleDateString(lang);
-
-    // Replace placeholders
-    messageContent = messageContent
-      .replace('{daysRemaining}', daysRemaining.toString())
-      .replace('{expiryDate}', expiryDateStr);
-
-    // Get change language button text
-    let changeLangButtonText = '🌐 Change language';
-    try {
-      changeLangButtonText = await this.botMessagesRepository.resolveMessage(
-        botId ?? 0,
-        'button_change_language',
-        lang,
-      );
-    } catch {
-      // Use fallback text
-    }
+    const extendTrialButtonText = await l10n.t(BUTTON_KEYS.EXTEND_TRIAL);
 
     // Get referralUrl from bot settings for conditional button
     const settingsRecord = await this.botSettingsRepository.findByBotId(
       botId ?? 0,
     );
-    const referralUrl = (settingsRecord?.settings as PartnerSettings)
-      ?.referralUrl;
-
-    // Create trial status button - url if valid referralUrl, otherwise callback
-    const extendTrialButtonText = await this.botMessagesRepository
-      .resolveMessage(botId ?? 0, BUTTON_KEYS.EXTEND_TRIAL, lang)
-      .catch(() => 'Extend Free Period 🎁');
+    const botSettings = settingsRecord?.settings as PartnerSettings;
+    const referralUrl = botSettings?.referralUrl;
+    const defaultSubscriptionId = botSettings?.defaultSubscriptionId;
 
     // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
     const extendTrialButton = isValidHttpsUrl(referralUrl ?? '')
@@ -251,7 +224,13 @@ export class StartCommandUpdate {
       reply_markup: {
         inline_keyboard: [
           [extendTrialButton],
-          [Markup.button.callback(changeLangButtonText, 'change_lang')],
+          [
+            Markup.button.callback(changeLangButtonText, 'change_lang'),
+            Markup.button.callback(
+              buySubscriptionButtonText,
+              `renew_now:${subscription.id}:${defaultSubscriptionId}`,
+            ),
+          ],
         ],
       },
     });

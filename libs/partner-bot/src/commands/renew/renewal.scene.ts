@@ -7,14 +7,18 @@ import {
   RequiresFeature,
 } from '@quantumdeal/telegraf';
 import { Markup, Context } from 'telegraf';
-import type { UserContext } from '../../interfaces';
+import type { PartnerBotContext } from '../../interfaces';
 import { PaymentService } from '@quantumdeal/bot/services/payment.service';
 import {
   RenewalTariffsRepository,
   UserSubscriptionsRepository,
 } from '@quantumdeal/db';
-import { getRenewalMessage, formatDays } from './renewal.i18n';
+import { formatDays, RENEWAL_I18N_NAMESPACE } from '../../i18n/renewal.i18n';
 import { PARTNER_FLOW_FEATURE_KEY } from '../../constants';
+import {
+  LocalizationService,
+  ILocalizationContext,
+} from '@quantumdeal/framework';
 
 export const RENEWAL_SCENE_ID = 'renewal';
 
@@ -36,17 +40,31 @@ export class RenewalScene {
     private readonly paymentService: PaymentService,
     private readonly renewalTariffsRepo: RenewalTariffsRepository,
     private readonly userSubscriptionsRepo: UserSubscriptionsRepository,
+    private readonly localizationService: LocalizationService,
   ) {}
+
+  /**
+   * Get localization context for the current request
+   */
+  private getL10n(ctx: PartnerBotContext): ILocalizationContext {
+    const botId = ctx.botId ?? null;
+    const lang = ctx.user?.lang ?? 'en';
+    return this.localizationService
+      .forBot(botId)
+      .use(RENEWAL_I18N_NAMESPACE)
+      .lang(lang);
+  }
 
   /**
    * Scene entry point
    * Shows all available tariffs grouped by subscription
    */
   @SceneEnter()
-  async onSceneEnter(@Ctx() ctx: UserContext): Promise<void> {
+  async onSceneEnter(@Ctx() ctx: PartnerBotContext): Promise<void> {
     const botUserId = ctx.user?.botUserId;
     if (!botUserId) {
-      await ctx.reply('Ошибка: пользователь не найден');
+      const l10n = this.getL10n(ctx);
+      await ctx.reply(await l10n.t('renewal_error_userNotFound'));
       await ctx.scene.leave();
       return;
     }
@@ -55,8 +73,8 @@ export class RenewalScene {
       await this.showAllTariffs(ctx, botUserId);
     } catch (error) {
       this.logger.error('Error entering renewal scene:', error);
-      const lang = ctx.user?.lang || 'en';
-      await ctx.replyWithHTML(getRenewalMessage(lang, 'genericError'));
+      const l10n = this.getL10n(ctx);
+      await ctx.replyWithHTML(await l10n.t('renewal_error_genericError'));
       await ctx.scene.leave();
     }
   }
@@ -65,16 +83,17 @@ export class RenewalScene {
    * Show all available tariffs grouped by subscription
    */
   private async showAllTariffs(
-    ctx: UserContext,
+    ctx: PartnerBotContext,
     botUserId: number,
   ): Promise<void> {
-    const lang = ctx.user?.lang || 'en';
+    const lang = ctx.user?.lang ?? 'en';
+    const l10n = this.getL10n(ctx);
 
     // Get all active tariffs with subscription info
     const allTariffs = await this.renewalTariffsRepo.findAllWithSubscriptions();
 
     if (allTariffs.length === 0) {
-      await ctx.reply(getRenewalMessage(lang, 'noTariffsAvailable'));
+      await ctx.reply(await l10n.t('renewal_error_noTariffsAvailable'));
       await ctx.scene.leave();
       return;
     }
@@ -92,11 +111,12 @@ export class RenewalScene {
     }
 
     // Build message text with subscription status
-    let messageText = getRenewalMessage(lang, 'selectTariffHeader') + '\n\n';
+    let messageText =
+      (await l10n.t('renewal_text_selectTariffHeader')) + '\n\n';
 
     // Add current subscriptions info
     if (userSubscriptions.length > 0) {
-      messageText += getRenewalMessage(lang, 'yourSubscriptions') + '\n';
+      messageText += (await l10n.t('renewal_text_yourSubscriptions')) + '\n';
       for (const userSub of userSubscriptions) {
         const subscription = allTariffs.find(
           (t) => t.subscriptionId === userSub.subscriptionId,
@@ -107,17 +127,19 @@ export class RenewalScene {
             ? new Date(userSub.expiresAt).toLocaleDateString(
                 lang === 'ru' ? 'ru-RU' : 'en-US',
               )
-            : getRenewalMessage(lang, 'noExpiry');
-          messageText += `${status} ${subscription.name} - ${getRenewalMessage(lang, 'until')} ${expiryText}\n`;
+            : await l10n.t('renewal_text_noExpiry');
+          const untilText = await l10n.t('renewal_text_until');
+          messageText += `${status} ${subscription.name} - ${untilText} ${expiryText}\n`;
         }
       }
-      messageText += '\n' + getRenewalMessage(lang, 'availableTariffs') + ':';
+      messageText +=
+        '\n' + (await l10n.t('renewal_text_availableTariffs')) + ':';
     } else {
-      messageText += getRenewalMessage(lang, 'noActiveSubscriptionsShort');
+      messageText += await l10n.t('renewal_text_noActiveSubscriptionsShort');
     }
 
     // Build tariff buttons grouped by subscription
-    const buttons: any[] = [];
+    const buttons: ReturnType<typeof Markup.button.callback>[][] = [];
 
     for (const [, tariffs] of subscriptionGroups) {
       const subscription = tariffs[0].subscription;
@@ -153,9 +175,8 @@ export class RenewalScene {
       }
     }
 
-    buttons.push([
-      Markup.button.callback(getRenewalMessage(lang, 'cancel'), 'renew_cancel'),
-    ]);
+    const cancelButtonText = await l10n.t('renewal_button_cancel');
+    buttons.push([Markup.button.callback(cancelButtonText, 'renew_cancel')]);
 
     const keyboard = Markup.inlineKeyboard(buttons);
 
@@ -171,18 +192,19 @@ export class RenewalScene {
    * Show tariff selection menu for a specific subscription
    */
   private async showTariffSelection(
-    ctx: UserContext,
+    ctx: PartnerBotContext,
     userSubscriptionId: number,
     subscriptionName: string,
   ): Promise<void> {
-    const lang = ctx.user?.lang || 'en';
+    const lang = ctx.user?.lang ?? 'en';
+    const l10n = this.getL10n(ctx);
 
     // Get subscription details
     const subscription =
       await this.userSubscriptionsRepo.findById(userSubscriptionId);
 
     if (!subscription) {
-      await ctx.reply(getRenewalMessage(lang, 'subscriptionNotFound'));
+      await ctx.reply(await l10n.t('renewal_error_subscriptionNotFound'));
       await ctx.scene.leave();
       return;
     }
@@ -193,7 +215,7 @@ export class RenewalScene {
     );
 
     if (tariffs.length === 0) {
-      await ctx.reply(getRenewalMessage(lang, 'noTariffsAvailable'));
+      await ctx.reply(await l10n.t('renewal_error_noTariffsAvailable'));
       await ctx.scene.leave();
       return;
     }
@@ -205,36 +227,36 @@ export class RenewalScene {
     const isExpired = currentExpiry < new Date();
 
     // Build tariff buttons
-    const buttons = tariffs.map((tariff) => {
-      return [
+    const buttons: ReturnType<typeof Markup.button.callback>[][] = [];
+    for (const tariff of tariffs) {
+      const buttonText = await l10n.t('renewal_button_tariff', {
+        displayName: tariff.displayName,
+        stars: tariff.priceStars,
+      });
+      buttons.push([
         Markup.button.callback(
-          getRenewalMessage(
-            lang,
-            'tariffButton',
-            tariff.displayName,
-            tariff.priceStars,
-          ),
+          buttonText,
           `renew_select_tariff:${userSubscriptionId}:${tariff.id}`,
         ),
-      ];
-    });
+      ]);
+    }
 
-    buttons.push([
-      Markup.button.callback(getRenewalMessage(lang, 'cancel'), 'renew_cancel'),
-    ]);
+    const cancelButtonText = await l10n.t('renewal_button_cancel');
+    buttons.push([Markup.button.callback(cancelButtonText, 'renew_cancel')]);
 
     const currentExpiryText = isExpired
-      ? getRenewalMessage(lang, 'subscriptionExpired')
-      : getRenewalMessage(
-          lang,
-          'currentExpiry',
-          currentExpiry.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US'),
-        );
+      ? await l10n.t('renewal_text_subscriptionExpired')
+      : await l10n.t('renewal_text_currentExpiry', {
+          date: currentExpiry.toLocaleDateString(
+            lang === 'ru' ? 'ru-RU' : 'en-US',
+          ),
+        });
 
-    const messageText =
-      `${getRenewalMessage(lang, 'renewalTitle', subscriptionName)}\n\n` +
-      `${currentExpiryText}\n\n` +
-      getRenewalMessage(lang, 'selectPeriod');
+    const renewalTitle = await l10n.t('renewal_text_renewalTitle', {
+      subscriptionName,
+    });
+    const selectPeriod = await l10n.t('renewal_text_selectPeriod');
+    const messageText = `${renewalTitle}\n\n${currentExpiryText}\n\n${selectPeriod}`;
 
     const keyboard = Markup.inlineKeyboard(buttons);
 
@@ -250,7 +272,9 @@ export class RenewalScene {
    * Handle subscription selection (when user has multiple subscriptions)
    */
   @Action(/^renew_select_sub:(.+)$/)
-  async onSelectSubscription(@Ctx() ctx: Context & UserContext): Promise<void> {
+  async onSelectSubscription(
+    @Ctx() ctx: Context & PartnerBotContext,
+  ): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const match = (ctx as any).match;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
@@ -258,7 +282,7 @@ export class RenewalScene {
       return;
     }
 
-    const lang = ctx.user?.lang || 'en';
+    const l10n = this.getL10n(ctx);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const userSubscriptionId = parseInt(match[1]);
 
@@ -267,15 +291,17 @@ export class RenewalScene {
       await this.userSubscriptionsRepo.findById(userSubscriptionId);
 
     if (!subscription) {
-      await ctx.answerCbQuery(getRenewalMessage(lang, 'subscriptionNotFound'));
+      await ctx.answerCbQuery(
+        await l10n.t('renewal_error_subscriptionNotFound'),
+      );
       return;
     }
 
-    await this.showTariffSelection(
-      ctx,
-      userSubscriptionId,
-      getRenewalMessage(lang, 'subscriptionName', subscription.subscriptionId),
-    );
+    const subscriptionName = await l10n.t('renewal_text_subscriptionName', {
+      subscriptionId: subscription.subscriptionId,
+    });
+
+    await this.showTariffSelection(ctx, userSubscriptionId, subscriptionName);
   }
 
   /**
@@ -283,7 +309,7 @@ export class RenewalScene {
    * Creates payment invoice and sends to user
    */
   @Action(/^renew_select_tariff:(\d+):(\d+):(\d+)$/)
-  async onSelectTariff(@Ctx() ctx: Context & UserContext): Promise<void> {
+  async onSelectTariff(@Ctx() ctx: Context & PartnerBotContext): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const match = (ctx as any).match;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
@@ -291,7 +317,7 @@ export class RenewalScene {
       return;
     }
 
-    const lang = ctx.user?.lang || 'en';
+    const l10n = this.getL10n(ctx);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const botUserId = parseInt(match[1]);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
@@ -300,7 +326,7 @@ export class RenewalScene {
     const tariffId = parseInt(match[3]);
 
     if (!ctx.from?.id || ctx.from.id !== botUserId) {
-      await ctx.answerCbQuery(getRenewalMessage(lang, 'userNotFound'));
+      await ctx.answerCbQuery(await l10n.t('renewal_error_userNotFound'));
       return;
     }
 
@@ -309,7 +335,7 @@ export class RenewalScene {
       await ctx.deleteMessage();
 
       // Show processing indicator
-      await ctx.answerCbQuery(getRenewalMessage(lang, 'creatingInvoice'));
+      await ctx.answerCbQuery(await l10n.t('renewal_text_creatingInvoice'));
 
       // Create invoice
       const { transactionId, invoiceMessageId } =
@@ -330,7 +356,7 @@ export class RenewalScene {
       await ctx.scene.leave();
     } catch (error) {
       this.logger.error('Error creating renewal invoice:', error);
-      await ctx.reply(getRenewalMessage(lang, 'paymentCreationFailed'));
+      await ctx.reply(await l10n.t('renewal_error_paymentCreationFailed'));
       await ctx.scene.leave();
     }
   }
@@ -339,10 +365,10 @@ export class RenewalScene {
    * Handle renewal cancellation
    */
   @Action('renew_cancel')
-  async onCancel(@Ctx() ctx: UserContext): Promise<void> {
-    const lang = ctx.user?.lang || 'en';
+  async onCancel(@Ctx() ctx: PartnerBotContext): Promise<void> {
+    const l10n = this.getL10n(ctx);
     await ctx.deleteMessage();
-    await ctx.answerCbQuery(getRenewalMessage(lang, 'renewalCancelled'));
+    await ctx.answerCbQuery(await l10n.t('renewal_text_renewalCancelled'));
     await ctx.scene.leave();
   }
 }
