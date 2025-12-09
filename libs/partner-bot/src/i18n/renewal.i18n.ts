@@ -500,7 +500,8 @@ export const renewalMessages: I18nMessages = {
     // Tariff selection (text)
     renewal_text_renewalTitle: (subscriptionName: string) =>
       `🎯 I-renew ang Subscription: ${subscriptionName}`,
-    renewal_text_currentExpiry: (date: string) => `Kasalukuyang expiration: ${date}`,
+    renewal_text_currentExpiry: (date: string) =>
+      `Kasalukuyang expiration: ${date}`,
     renewal_text_subscriptionExpired: 'Nag-expire na ang subscription',
     renewal_text_selectPeriod: 'Pumili ng renewal period:',
 
