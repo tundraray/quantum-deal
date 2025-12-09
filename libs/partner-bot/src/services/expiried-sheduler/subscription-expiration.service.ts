@@ -521,10 +521,6 @@ export class SubscriptionExpirationService {
         buttonTextKey = 'renewButton';
       }
 
-      const extendTrialButtonText = await this.botMessagesRepository
-        .resolveMessage(user.botId, BUTTON_KEYS.EXTEND_TRIAL, user.lang ?? 'en')
-        .catch(() => 'Extend Free Period 🎁');
-
       const changePlanButtonText = await this.botMessagesRepository
         .resolveMessage(
           user.botId,
@@ -532,6 +528,10 @@ export class SubscriptionExpirationService {
           user.lang ?? 'en',
         )
         .catch(() => 'Buy Subscription 💳');
+
+      const extendTrialButtonText = await this.botMessagesRepository
+        .resolveMessage(user.botId, BUTTON_KEYS.EXTEND_TRIAL, user.lang ?? 'en')
+        .catch(() => 'Extend Free Period 🎁');
 
       // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
       const extendTrialButton = isValidHttpsUrl(referralUrl ?? '')

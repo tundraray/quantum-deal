@@ -185,11 +185,6 @@ export class StartCommandUpdate {
       return;
     }
     const expiresAt = new Date(subscription.expiresAt);
-    const remainingTime = calculateRemainingTimeDisplay(expiresAt);
-    const displayText =
-      remainingTime === 'Expired'
-        ? 'Trial: 0 hours remaining'
-        : `Trial: ${remainingTime} remaining`;
 
     // Get trial status message from bot_messages with fallback
     let messageContent: string;
@@ -238,24 +233,24 @@ export class StartCommandUpdate {
       ?.referralUrl;
 
     // Create trial status button - url if valid referralUrl, otherwise callback
-    const trialStatusButton = isValidHttpsUrl(referralUrl)
-      ? { text: displayText, url: referralUrl }
-      : { text: displayText, callback_data: CALLBACK_DATA.TRIAL_STATUS };
+    const extendTrialButtonText = await this.botMessagesRepository
+      .resolveMessage(botId ?? 0, BUTTON_KEYS.EXTEND_TRIAL, lang)
+      .catch(() => 'Extend Free Period 🎁');
 
-    this.logger.log({
-      message: 'Showing trial status',
-      userId,
-      botId,
-      botUserId: botUser.id,
-      displayText,
-    });
+    // Create extend trial button conditionally (url if valid HTTPS, callback_data otherwise)
+    const extendTrialButton = isValidHttpsUrl(referralUrl ?? '')
+      ? Markup.button.url(extendTrialButtonText, referralUrl!)
+      : Markup.button.callback(
+          extendTrialButtonText,
+          CALLBACK_DATA.EXTEND_TRIAL,
+        );
 
     // Send message with inline keyboard buttons
     await ctx.reply(messageContent, {
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [trialStatusButton],
+          [extendTrialButton],
           [Markup.button.callback(changeLangButtonText, 'change_lang')],
         ],
       },
