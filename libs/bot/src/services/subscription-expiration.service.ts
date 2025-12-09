@@ -165,10 +165,6 @@ export class SubscriptionExpirationService {
   private async processExpirationDay(
     daysFromNow: number,
   ): Promise<NotificationResult> {
-    this.logger.debug(
-      `Processing users with subscriptions expiring in ${daysFromNow} days`,
-    );
-
     try {
       // Find user-subscription pairs expiring in N days (signals only)
       const expiringSubscriptions =
@@ -179,7 +175,7 @@ export class SubscriptionExpirationService {
         );
 
       if (expiringSubscriptions.length === 0) {
-        this.logger.debug(`No users found expiring in ${daysFromNow} days`);
+        //this.logger.debug(`No users found expiring in ${daysFromNow} days`);
         return {
           success: true,
           totalUsers: 0,
@@ -188,6 +184,10 @@ export class SubscriptionExpirationService {
           errors: [],
         };
       }
+
+      this.logger.debug(
+        `Processing users with subscriptions expiring in ${daysFromNow} days`,
+      );
 
       // Extract users from results
       const users = expiringSubscriptions.map((result) => result.botUser);

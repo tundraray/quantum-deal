@@ -17,6 +17,9 @@ import { StartCommandUpdate } from './commands/start/start.update';
 import { LangUpdate } from './commands/lang/lang.update';
 import { SubscriptionExpirationService } from './services/expiried-sheduler/subscription-expiration.service';
 import { FrameworkModule } from '@quantumdeal/framework';
+import { RenewUpdate } from './commands/renew/renew.update';
+import { RenewalScene } from './commands/renew/renewal.scene';
+import { RenewalAction } from './actions/renewal/renewal.action';
 
 /**
  * PartnerBotModule
@@ -44,9 +47,14 @@ import { FrameworkModule } from '@quantumdeal/framework';
     // Middlewares
     UserDynamicManagementMiddleware,
 
+    // Actions
+    RenewalAction,
+
     // Commands
     StartCommandUpdate,
     LangUpdate,
+    RenewUpdate,
+    RenewalScene,
   ],
   exports: [
     // Export PartnerFlowService for potential external usage

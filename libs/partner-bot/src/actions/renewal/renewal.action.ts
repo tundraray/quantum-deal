@@ -1,12 +1,13 @@
 import { Injectable, Logger, UseFilters } from '@nestjs/common';
-import { Action, Ctx, Update } from '@quantumdeal/telegraf';
-import type { UserContext } from '../../interfaces';
+import { Action, Ctx, RequiresFeature, Update } from '@quantumdeal/telegraf';
+import type { PartnerBotContext } from '../../interfaces';
 import {
   UserSubscriptionsRepository,
   SubscriptionsRepository,
   RenewalTariffsRepository,
 } from '@quantumdeal/db';
 import { TelegrafExceptionFilter } from '@quantumdeal/framework';
+import { PARTNER_FLOW_FEATURE_KEY } from '@quantumdeal/partner-bot/constants';
 import { PaymentService } from '@quantumdeal/bot/services/payment.service';
 
 /**
@@ -16,16 +17,17 @@ import { PaymentService } from '@quantumdeal/bot/services/payment.service';
  * Sends Telegram Stars invoice immediately with pre-filled subscription details
  */
 @Update()
+@RequiresFeature(PARTNER_FLOW_FEATURE_KEY)
 @UseFilters(TelegrafExceptionFilter)
 @Injectable()
 export class RenewalAction {
   private readonly logger = new Logger(RenewalAction.name);
 
   constructor(
-    private readonly paymentService: PaymentService,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly renewalTariffsRepository: RenewalTariffsRepository,
+    private readonly paymentService: PaymentService,
   ) {}
 
   /**
@@ -39,7 +41,7 @@ export class RenewalAction {
    * 4. Send Telegram Stars invoice
    */
   @Action(/^renew_now:(\d+):(\d+)$/)
-  async handleRenewNow(@Ctx() ctx: UserContext): Promise<void> {
+  async handleRenewNow(@Ctx() ctx: PartnerBotContext): Promise<void> {
     const user = ctx.user;
     if (!user) {
       await ctx.answerCbQuery('User not found');
@@ -139,7 +141,7 @@ export class RenewalAction {
    * 3. Scene displays available subscriptions with tariff options
    */
   @Action('open_renewal_scene')
-  async handleOpenRenewalScene(@Ctx() ctx: UserContext): Promise<void> {
+  async handleOpenRenewalScene(@Ctx() ctx: PartnerBotContext): Promise<void> {
     this.logger.debug('handleOpenRenewalScene called'); // DEBUG LOG
 
     const user = ctx.user;

@@ -133,6 +133,13 @@ export class ListenersExplorerService
     const instance = wrapper.instance as object | null;
     if (!instance) return undefined;
 
+    const isFeatureFlag = this.metadataAccessor.getFeatureFlagMetadata(
+      wrapper.metatype as (...args: unknown[]) => unknown,
+    );
+    if (isFeatureFlag) {
+      return undefined;
+    }
+
     const isComposer = this.metadataAccessor.isComposer(
       wrapper.metatype as (...args: unknown[]) => unknown,
     );
@@ -147,6 +154,13 @@ export class ListenersExplorerService
     const instance = wrapper.instance as object | null;
     if (!instance) return undefined;
 
+    const isFeatureFlag = this.metadataAccessor.getFeatureFlagMetadata(
+      wrapper.metatype as (...args: unknown[]) => unknown,
+    );
+    if (isFeatureFlag) {
+      return undefined;
+    }
+
     const isUpdate = this.metadataAccessor.isUpdate(
       wrapper.metatype as (...args: unknown[]) => unknown,
     );
@@ -160,6 +174,13 @@ export class ListenersExplorerService
   ): InstanceWrapper<unknown> | undefined {
     const instance = wrapper.instance as object | null;
     if (!instance) return undefined;
+
+    const isFeatureFlag = this.metadataAccessor.getFeatureFlagMetadata(
+      wrapper.metatype as (...args: unknown[]) => unknown,
+    );
+    if (isFeatureFlag) {
+      return undefined;
+    }
 
     const isScene = this.metadataAccessor.isScene(
       wrapper.metatype as (...args: unknown[]) => unknown,

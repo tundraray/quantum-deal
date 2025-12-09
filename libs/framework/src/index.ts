@@ -1,5 +1,4 @@
 export * from './framework.module';
-export * from './framework.service';
 export * from './pipes';
 export * from './interceptors/response-time.interceptor';
 export * from './filters/telegraf-exception.filter';

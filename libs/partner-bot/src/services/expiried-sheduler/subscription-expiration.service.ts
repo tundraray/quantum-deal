@@ -190,10 +190,6 @@ export class SubscriptionExpirationService {
     daysFromNow: number,
     bot: BotWithSettings,
   ): Promise<NotificationResult> {
-    this.logger.debug(
-      `Processing users with subscriptions expiring in ${daysFromNow} days`,
-    );
-
     try {
       // Find user-subscription pairs expiring in N days (signals only)
       const expiringSubscriptions =
@@ -204,7 +200,7 @@ export class SubscriptionExpirationService {
         );
 
       if (expiringSubscriptions.length === 0) {
-        this.logger.debug(`No users found expiring in ${daysFromNow} days`);
+        //this.logger.debug(`No users found expiring in ${daysFromNow} days`);
         return {
           success: true,
           totalUsers: 0,
@@ -213,6 +209,10 @@ export class SubscriptionExpirationService {
           errors: [],
         };
       }
+
+      this.logger.debug(
+        `Processing users with subscriptions expiring in ${daysFromNow} days`,
+      );
 
       // Extract users from results
       const users = expiringSubscriptions.map((result) => result.botUser);
@@ -510,9 +510,14 @@ export class SubscriptionExpirationService {
       let buttonTextKey: 'choosePlanButton' | 'renewButton' =
         'choosePlanButton'; // Default for trial
 
-      if (userSubscriptionId && subscriptionId && !isTrial) {
+      const defaultSubscriptionId = settings?.defaultSubscriptionId;
+
+      if (
+        defaultSubscriptionId ||
+        (userSubscriptionId && subscriptionId && !isTrial)
+      ) {
         // Regular (non-trial) subscription with valid IDs - use one-click renewal
-        callbackData = `renew_now:${userSubscriptionId}:${subscriptionId}`;
+        callbackData = `renew_now:${userSubscriptionId}:${defaultSubscriptionId}`;
         buttonTextKey = 'renewButton';
       }
 

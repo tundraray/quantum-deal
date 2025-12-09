@@ -3,10 +3,7 @@ import { InjectBot } from '@quantumdeal/telegraf';
 import { Telegraf, Context } from 'telegraf';
 import Bottleneck from 'bottleneck';
 import { DynamicTelegrafService } from '@quantumdeal/telegraf';
-import type {
-  SignalCapableBot,
-  BotRegistry,
-} from '../interfaces/bot-registry.interface';
+import type { SignalCapableBot, BotRegistry } from './bot-registry.interface';
 import type { UserContext } from '../interfaces';
 
 /**

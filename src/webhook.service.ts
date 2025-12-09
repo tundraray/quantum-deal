@@ -7,7 +7,7 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { OrdersRepository } from '@quantumdeal/db';
-import { WebhookProcessorService } from '@quantumdeal/bot';
+import { SignalService } from '@quantumdeal/framework/webhook';
 import { MergedOrder, MessageType } from '@quantumdeal/db/schema';
 import { BaseMT5EventDto, MT5EventType, MT5EventDto } from './dto';
 import { SentryService } from '@quantumdeal/framework';
@@ -22,7 +22,7 @@ export class WebhookService implements OnModuleDestroy {
 
   constructor(
     private readonly ordersRepository: OrdersRepository,
-    private readonly notificationService: WebhookProcessorService,
+    private readonly notificationService: SignalService,
     private readonly sentryService: SentryService,
   ) {}
 

@@ -89,4 +89,5 @@ export interface PartnerSettings extends BotSettings {
   channelId?: string;
   channelName?: string;
   referralUrl?: string;
+  defaultSubscriptionId?: number;
 }

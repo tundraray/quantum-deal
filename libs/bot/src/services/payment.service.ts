@@ -11,6 +11,7 @@ import {
 } from '@quantumdeal/db';
 import { PaymentState } from '@quantumdeal/db/schema';
 import { getRenewalMessage } from '../commands/renew/renewal.i18n';
+import { BotRegistryService } from '@quantumdeal/framework/webhook';
 
 /**
  * Renewal invoice payload structure
@@ -45,6 +46,7 @@ export class PaymentService {
   constructor(
     @InjectBot('QuantumDealBot')
     private readonly bot: Telegraf<TelegrafContext>,
+    private readonly botRegistryService: BotRegistryService,
     private readonly paymentTransactionsRepo: PaymentTransactionsRepository,
     private readonly renewalTariffsRepo: RenewalTariffsRepository,
     private readonly userSubscriptionsRepo: UserSubscriptionsRepository,
@@ -122,11 +124,17 @@ export class PaymentService {
     const subscription = await this.subscriptionsRepo.findById(subscriptionId);
     const userLang = await this.resolveUserLang(botUserId);
     const botUser = await this.botUsersRepo.findById(botUserId);
-
+    if (!botUser) {
+      throw new Error('Bot user not found');
+    }
+    const bot = this.botRegistryService.getBot(botUser.botId);
     // Send invoice to user
+    if (!bot) {
+      throw new Error('Bot not found');
+    }
     try {
-      const invoiceMessage = await this.bot.telegram.sendInvoice(
-        botUser?.userId || 0,
+      const invoiceMessage = await bot.instance.telegram.sendInvoice(
+        botUser.userId,
         {
           title: getRenewalMessage(
             userLang,
@@ -203,6 +211,7 @@ export class PaymentService {
     botUserId: number,
   ): Promise<boolean> {
     try {
+      this.logger.log('Validating pre-checkout query', payload);
       // Validate payload structure
       if (payload.type !== 'renewal' || !payload.transactionId) {
         this.logger.warn('Invalid payload structure');
