@@ -6,3 +6,4 @@ export * from './interfaces/context.interface';
 export * from './decorators';
 export * from './llm';
 export * from './sentry';
+export * from './localization';

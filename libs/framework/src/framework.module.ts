@@ -5,9 +5,10 @@ import { ConfigModule } from '@nestjs/config';
 import { DbModule } from '@quantumdeal/db';
 import { BotRegistryService, SignalService } from './webhook';
 import { NotificationService } from './notifications';
+import { LocalizationModule } from './localization';
 
 @Module({
-  imports: [ConfigModule, DbModule],
+  imports: [ConfigModule, DbModule, LocalizationModule],
   providers: [
     ResponseTimeInterceptor,
     LLMConfigurationService,
@@ -22,6 +23,7 @@ import { NotificationService } from './notifications';
     LLMConfigurationService,
     BotRegistryService,
     SignalService,
+    LocalizationModule,
   ],
 })
 export class FrameworkModule {}
