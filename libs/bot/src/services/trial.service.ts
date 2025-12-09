@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   UserSubscriptionsRepository,
   SubscriptionsRepository,
+  UserSubscription,
 } from '@quantumdeal/db';
 
 @Injectable()
@@ -22,19 +23,35 @@ export class TrialService {
    */
   async isEligible(botUserId: number): Promise<boolean> {
     // Check if TRIAL_ENABLED is true
+    const trialSubscription = await this.getTrialSubscription(botUserId);
+    console.log('trialSubscription', trialSubscription);
+    return trialSubscription === null;
+  }
+
+  /**
+   * Check if user is eligible for trial
+   * Eligibility: No subscription history for this specific bot-user
+   * @param botUserId - The bot_users.id (NOT telegramId)
+   */
+  async getTrialSubscription(
+    botUserId: number,
+  ): Promise<UserSubscription | null> {
+    // Check if TRIAL_ENABLED is true
     const trialEnabled = this.configService.get<boolean>('TRIAL_ENABLED', true);
     if (!trialEnabled) {
       this.logger.debug('Trial system is disabled');
-      return false;
+      return null;
     }
 
     // Simple: no subscription history for this bot-user = eligible
     const existing =
       await this.userSubscriptionsRepository.findByBotUserId(botUserId);
     const eligible = existing.length === 0;
+    if (eligible) {
+      return null;
+    }
 
-    this.logger.debug(`BotUser ${botUserId} trial eligibility: ${eligible}`);
-    return eligible;
+    return existing[0];
   }
 
   /**
@@ -54,7 +71,14 @@ export class TrialService {
       // Double-check eligibility
       const eligible = await this.isEligible(botUserId);
       if (!eligible) {
-        return { success: false, error: 'Trial already used or not enabled' };
+        const trialSubscription = await this.getTrialSubscription(botUserId);
+        if (!trialSubscription) {
+          return { success: false, error: 'Trial not available' };
+        }
+        return {
+          success: true,
+          expiresAt: trialSubscription.expiresAt ?? undefined,
+        };
       }
 
       // Get trial subscription from DB using feature flag

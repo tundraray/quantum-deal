@@ -413,6 +413,29 @@ export class UserSubscriptionsRepository extends BaseRepository<
   }
 
   /**
+   * Find all active (non-expired) subscriptions for a specific bot user
+   * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
+   * @returns Array of active, non-expired user subscriptions
+   */
+  async findActiveByBotAndTelegramId(botId: number, telegramId: number) {
+    return this.db
+      .select({
+        userSubscription: this.table,
+      })
+      .from(this.table)
+      .innerJoin(botUsers, eq(this.table.botUserId, botUsers.id))
+      .where(
+        and(
+          eq(this.table.isActive, true),
+          sql`${this.table.expiresAt} IS NOT NULL`,
+          sql`${this.table.expiresAt} >= ${new Date()}`,
+          eq(botUsers.botId, botId),
+          eq(botUsers.userId, telegramId),
+        ),
+      );
+  }
+
+  /**
    * Find user subscription by bot user ID and subscription ID
    * @param botUserId - The bot_users.id (internal auto-generated ID, NOT telegramId)
    * @param subscriptionId - The subscription ID
