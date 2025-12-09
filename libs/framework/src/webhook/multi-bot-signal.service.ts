@@ -20,6 +20,7 @@ import {
   NotificationUser,
 } from '../notifications';
 import type { PartnerSettings } from '@quantumdeal/partner-bot';
+import { Markup } from 'telegraf';
 
 /**
  * MultiBotSignalService
@@ -238,8 +239,6 @@ export class SignalService implements MultiBotSignal {
         return this.createBotResult(bot, true, 0, 0, startTime);
       }
 
-      const buttons = [] as Array<Array<object>>;
-
       // Step 2: Map to NotificationUser format
       const users: NotificationUser[] = subscriptions.map((sub) => ({
         botUserId: sub.botUserId,
@@ -272,6 +271,7 @@ export class SignalService implements MultiBotSignal {
       let failedCount = 0;
 
       for (const user of filteredUsers) {
+        const buttons = [] as Array<Array<object>>;
         try {
           // Resolve message template for this bot and user's language
           const template = await this.botMessagesRepository.resolveMessage(
@@ -292,11 +292,11 @@ export class SignalService implements MultiBotSignal {
 
             // Create trial status button - url if valid referralUrl, otherwise callback
             const trialStatusButton = referralUrl
-              ? { text: extendTrialButtonText, url: referralUrl }
-              : {
-                  text: extendTrialButtonText,
-                  callback_data: 'partner_extend_trial',
-                };
+              ? Markup.button.url(extendTrialButtonText, referralUrl)
+              : Markup.button.callback(
+                  extendTrialButtonText,
+                  'partner_extend_trial',
+                );
             buttons.push([trialStatusButton]);
           }
 
