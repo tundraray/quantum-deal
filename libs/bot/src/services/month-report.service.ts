@@ -27,6 +27,7 @@ interface TradingActivityStats {
   readonly totalProfit: number;
   readonly totalLoss: number;
   readonly ordersBySymbol: Record<string, number>;
+  readonly profitBySymbol: Record<string, number>;
 }
 
 interface ClientSubscription {
@@ -378,6 +379,8 @@ export class MonthReportService {
         totalProfit: profitLossData.totalProfit,
         totalLoss: profitLossData.totalLoss,
         ordersBySymbol: symbolBreakdown,
+        profitBySymbol:
+          this.calculateProfitBySymbolFromOrders(closedOrdersOnly),
         bestTradeSymbol: bestTrade?.symbol,
         bestTradeProfit: bestTrade?.profit,
       };
@@ -455,6 +458,18 @@ export class MonthReportService {
     return breakdown;
   }
 
+  private calculateProfitBySymbolFromOrders(
+    orders: Order[],
+  ): Record<string, number> {
+    const breakdown: Record<string, number> = {};
+    orders.forEach((order) => {
+      const symbol = order.symbol || 'unknown';
+      const profit = order.profit ?? 0;
+      breakdown[symbol] = (breakdown[symbol] || 0) + profit;
+    });
+    return breakdown;
+  }
+
   private async sendClientMonthlyReportWithSharedData(
     client: ClientSubscription,
     sharedData: SharedMonthlyReportData,
@@ -520,9 +535,9 @@ export class MonthReportService {
         : `${bestTradeSymbol} (${bestTradeProfitSign}${bestTradeProfit.toFixed(2)} USD)`;
 
     const allOrders =
-      Object.keys(data.tradingActivity.ordersBySymbol).length > 0
-        ? Object.entries(data.tradingActivity.ordersBySymbol)
-            .sort(([, countA], [, countB]) => countB - countA)
+      Object.keys(data.tradingActivity.profitBySymbol).length > 0
+        ? Object.entries(data.tradingActivity.profitBySymbol)
+            .sort(([, profitA], [, profitB]) => profitB - profitA)
             .map(([symbol]) => symbol)
         : [];
 

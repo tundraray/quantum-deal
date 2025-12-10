@@ -23,7 +23,6 @@ import { SubscriptionExpirationService } from './services/subscription-expiratio
 import { FeatureFlagService } from './services/feature-flag.service';
 import { InstrumentFilterService } from './services/instrument-filter.service';
 import { FilterSessionService } from './services/filter-session.service';
-import { NotificationService } from '@quantumdeal/framework/notifications';
 import { PaymentService } from './services/payment.service';
 import { BotCommandsService } from './services/bot-commands.service';
 import { BotInitService } from './services/bot-init.service';
