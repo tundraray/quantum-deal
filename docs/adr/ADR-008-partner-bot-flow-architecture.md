@@ -60,7 +60,7 @@ This ADR documents six key architecture decisions for partner bot flow:
 
 ### Selected Option: User-Initiated Verification with API Check (Option A)
 
-Implement user-initiated verification where users click "I subscribed" button → bot verifies via Telegram `getChatMember` API.
+Implement user-initiated verification where users click "I subscribed" button, then bot verifies via Telegram `getChatMember` API.
 
 ### Options Considered
 
@@ -68,31 +68,9 @@ Implement user-initiated verification where users click "I subscribed" button �
 
 **Overview**: User subscribes to channel at their own pace, then clicks button to trigger bot verification via `telegram.getChatMember(channelId, userId)`.
 
-**Flow**:
-```mermaid
-sequenceDiagram
-    participant User
-    participant Bot
-    participant TelegramAPI
-    participant Channel
-
-    User->>Bot: /start
-    Bot->>User: Welcome + Channel subscription prompt
-    User->>Channel: Subscribes to partner channel
-    User->>Bot: Clicks "I subscribed" button
-    Bot->>TelegramAPI: getChatMember(channelId, userId)
-    TelegramAPI-->>Bot: ChatMember status
-    alt status = "member" or "administrator" or "creator"
-        Bot->>Bot: Activate trial via TrialService
-        Bot->>User: Trial activated message
-    else status = "left" or "kicked"
-        Bot->>User: Verification failed message
-    end
-```
-
 **Pros**:
 - **User control**: Users subscribe at their own pace, no pressure
-- **Simple state management**: Only track `awaiting_channel_subscription` → `channel_verified`
+- **Simple state management**: Only track `awaiting_channel_subscription` -> `channel_verified`
 - **Reliable verification**: Direct API call confirms actual membership
 - **No polling overhead**: Verification only happens on button click
 - **Retry-friendly**: Users can resubscribe and retry verification immediately
@@ -106,27 +84,6 @@ sequenceDiagram
 - **Rate limit potential**: Users spamming verify button (mitigated with per-user rate limit)
 
 **Effort**: 3 days
-
-**Implementation Pattern**:
-```typescript
-// ChannelVerifierService
-async verifyMembership(channelId: string, userId: number): Promise<boolean> {
-  try {
-    const member = await this.bot.telegram.getChatMember(channelId, userId)
-
-    // Valid membership statuses
-    const validStatuses = ['member', 'administrator', 'creator']
-    return validStatuses.includes(member.status)
-  } catch (error) {
-    if (error.response?.error_code === 400) {
-      // USER_ID_INVALID or chat not found
-      this.logger.warn(`Channel verification failed: ${error.message}`)
-      return false
-    }
-    throw error // Re-throw for retry logic
-  }
-}
-```
 
 ---
 
@@ -225,39 +182,6 @@ Use JavaScript's native `String.prototype.replace()` for variable substitution i
 
 **Effort**: 0.5 days
 
-**Implementation Pattern**:
-```typescript
-// BotMessagesRepository or MessageService
-async resolveMessage(
-  botId: string,
-  type: string,
-  lang: string,
-  variables?: Record<string, string>,
-): Promise<string> {
-  let message = await this.findMessage(botId, type, lang)
-
-  if (variables) {
-    for (const [key, value] of Object.entries(variables)) {
-      message = message.replace(`{${key}}`, value)
-    }
-  }
-
-  return message
-}
-
-// Usage example
-const message = await messagesRepo.resolveMessage(
-  botId,
-  'partner_channel_prompt',
-  'en',
-  {
-    channelUrl: 'https://t.me/tradepro_signals',
-    channelName: 'TradePro Signals',
-  },
-)
-// Result: "To activate your trial, subscribe to our channel: https://t.me/tradepro_signals..."
-```
-
 ---
 
 #### Option B: Template Engine (Handlebars/Mustache)
@@ -292,7 +216,7 @@ const message = await messagesRepo.resolveMessage(
 
 **Cons**:
 - **Premature abstraction**: YAGNI violation
-- **Extra indirection**: Service → method → replace
+- **Extra indirection**: Service -> method -> replace
 - **Maintenance burden**: More code to maintain
 - **No real benefit**: Simple replace doesn't need service wrapper
 
@@ -338,43 +262,6 @@ Define partner-specific TypeScript types in `libs/partner-bot/src/types/partner-
 
 **Overview**: Database library (`libs/db`) remains generic with JSONB columns. Partner-bot library defines typed interfaces for JSONB content.
 
-**Structure**:
-```typescript
-// libs/db/src/schema/bot-settings.ts - Generic schema
-export const botSettings = pgTable('bot_settings', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  botId: uuid('bot_id').references(() => bots.id),
-  settings: jsonb('settings').notNull(), // Generic JSONB, no type specified
-})
-
-// libs/partner-bot/src/types/partner-settings.ts - Partner-specific types
-export interface PartnerBotSettings {
-  features: {
-    trialEnabled: boolean
-    paymentsEnabled: boolean
-    signalsEnabled: boolean
-    broadcastEnabled: boolean
-    partnerFlowEnabled: boolean // Enable partner flow
-  }
-  defaults: {
-    subscriptionDays: number
-    trialDays: number
-    language: string
-  }
-  partner?: {
-    channelId: string // Telegram channel ID
-    channelUsername?: string // Optional display name
-    referralUrl: string // Partner referral page
-    verificationRetries: number // Max attempts per hour
-  }
-}
-
-// Usage in partner-bot services
-const rawSettings = await botSettingsRepo.findByBotId(botId)
-const typedSettings = rawSettings.settings as PartnerBotSettings
-const channelId = typedSettings.partner?.channelId
-```
-
 **Pros**:
 - **Separation of concerns**: Database layer stays generic, domain logic in domain library
 - **Reusable db library**: `libs/db` can be used for non-partner bots without partner types
@@ -395,19 +282,6 @@ const channelId = typedSettings.partner?.channelId
 #### Option B: Shared Types in libs/db
 
 **Overview**: Define all bot settings types in `libs/db/src/types/bot-settings.ts` as union type.
-
-**Structure**:
-```typescript
-// libs/db/src/types/bot-settings.ts
-export interface BaseBotSettings { features: {...}, defaults: {...} }
-export interface PartnerBotSettings extends BaseBotSettings { partner: {...} }
-export type BotSettings = BaseBotSettings | PartnerBotSettings
-
-// libs/db/src/schema/bot-settings.ts
-export const botSettings = pgTable('bot_settings', {
-  settings: jsonb('settings').$type<BotSettings>().notNull(),
-})
-```
 
 **Pros**:
 - Single source of truth for types
@@ -481,37 +355,6 @@ Use existing `bot_users.state` JSONB column to track user progress through verif
 
 **Overview**: Store verification flow state in `bot_users.state` JSONB column with state values like `awaiting_channel_subscription`, `channel_verified`, `trial_activated`.
 
-**Implementation**:
-```typescript
-// State type definition
-type VerificationState =
-  | 'awaiting_channel_subscription'
-  | 'channel_verified'
-  | 'trial_activated'
-  | 'trial_expired'
-
-interface BotUserState {
-  verification?: VerificationState
-  verificationAttempts?: number
-  lastVerificationAttempt?: string // ISO timestamp
-}
-
-// State transitions
-const stateTransitions = {
-  '/start': { next: 'awaiting_channel_subscription' },
-  'verify_button_click': {
-    next: (verified: boolean) => verified ? 'channel_verified' : 'awaiting_channel_subscription'
-  },
-  'trial_activate': { next: 'trial_activated' },
-  'trial_expire': { next: 'trial_expired' },
-}
-
-// Usage in middleware/service
-async function updateUserState(userId: string, botId: string, state: VerificationState) {
-  await botUsersRepo.updateState(userId, botId, { verification: state })
-}
-```
-
 **Pros**:
 - **Reuses existing field**: No schema changes required
 - **Flexible structure**: JSONB allows adding fields without migration
@@ -566,20 +409,6 @@ Send daily reminders indefinitely after trial expiration until user takes action
 
 **Overview**: Scheduled job runs daily at 12:00 UTC, queries expired trials, sends reminder messages with "Extend Free Period" and "Buy Subscription" buttons.
 
-**Flow**:
-```mermaid
-flowchart TD
-    A[Cron Job: Daily 12:00 UTC] --> B[Query user_subscriptions WHERE status=expired AND botId=X]
-    B --> C[For each expired user]
-    C --> D{Reminder sent today?}
-    D -->|No| E[Send partner_trial_expired message]
-    D -->|Yes| F[Skip user]
-    E --> G[Update last_reminder_sent timestamp]
-    G --> C
-    F --> C
-    C --> H[End]
-```
-
 **Pros**:
 - **High conversion potential**: Persistent reminders increase action rate
 - **User re-engagement**: Brings users back who forgot about trial expiration
@@ -593,47 +422,6 @@ flowchart TD
 - **Resource usage**: Must query all expired trials daily
 
 **Effort**: 2 days
-
-**Implementation**:
-```typescript
-// ReminderSchedulerService
-@Cron('0 12 * * *') // 12:00 UTC daily
-async processExpiredTrials() {
-  const expiredUsers = await userSubscriptionsRepo.findExpired(botId)
-
-  for (const user of expiredUsers) {
-    const lastReminder = user.lastReminderSent
-    const today = new Date().toDateString()
-
-    // Skip if reminder already sent today
-    if (lastReminder && lastReminder.toDateString() === today) {
-      continue
-    }
-
-    try {
-      const message = await messagesRepo.resolveMessage(
-        botId,
-        'partner_trial_expired',
-        user.lang,
-      )
-
-      await bot.telegram.sendMessage(user.telegramId, message, {
-        reply_markup: {
-          inline_keyboard: [[
-            { text: 'Extend Free Period', url: referralUrl },
-            { text: 'Buy Subscription', callback_data: 'partner_buy' },
-          ]],
-        },
-      })
-
-      await userSubscriptionsRepo.updateReminderSent(user.id, new Date())
-    } catch (error) {
-      this.logger.error(`Failed to send reminder to user ${user.id}:`, error)
-      // Continue with next user
-    }
-  }
-}
-```
 
 ---
 
@@ -690,57 +478,6 @@ Partner-bot wraps existing `TrialService.activate()` with channel verification p
 
 **Overview**: Partner-bot creates `PartnerFlowService` that calls `TrialService.activate()` after successful channel verification.
 
-**Implementation**:
-```typescript
-// libs/partner-bot/src/services/partner-flow.service.ts
-@Injectable()
-export class PartnerFlowService {
-  constructor(
-    private readonly channelVerifier: ChannelVerifierService,
-    private readonly trialService: TrialService, // Inject from @libs/bot
-    private readonly botUsersRepo: BotUsersRepository,
-  ) {}
-
-  async handleVerificationRequest(
-    userId: number,      // Telegram user ID (for channel verification)
-    botId: number,       // Bot ID (for settings lookup)
-    channelId: string,
-  ): Promise<{ verified: boolean, error?: string }> {
-    // Step 1: Verify channel membership
-    const isSubscribed = await this.channelVerifier.verifyMembership(
-      channelId,
-      userId,
-    )
-
-    if (!isSubscribed) {
-      return { verified: false, error: 'not_subscribed' }
-    }
-
-    // Step 2: Resolve botUser to get botUserId for subscription operations
-    const botUser = await this.botUsersRepo.findByUserAndBot(userId, botId)
-    if (!botUser) {
-      return { verified: false, error: 'user_context_not_found' }
-    }
-
-    // Step 3: Update user state
-    await this.botUsersRepo.updateState(userId, botId, {
-      verification: 'channel_verified',
-    })
-
-    // Step 4: Activate trial via existing TrialService
-    // NOTE: TrialService.activate() expects botUserId (bot_users.id), NOT telegramId
-    await this.trialService.activate(botUser.id)
-
-    // Step 5: Update state to trial_activated
-    await this.botUsersRepo.updateState(userId, botId, {
-      verification: 'trial_activated',
-    })
-
-    return { verified: true }
-  }
-}
-```
-
 **Pros**:
 - **DRY principle**: Reuses existing trial activation logic
 - **Zero duplication**: No code copied from TrialService
@@ -795,6 +532,23 @@ export class PartnerFlowService {
 
 ---
 
+## Implementation Reference
+
+> **Implementation Playbook**: See [ADR-COMMON-partner-flow](./ADR-COMMON-partner-flow.md) for detailed implementation patterns:
+>
+> - **Pattern 1**: State Machine Design (state types, transitions, storage)
+> - **Pattern 2**: Channel Verification Flow (`getChatMember` API usage, error handling)
+> - **Pattern 3**: Rate Limiting (per-user limits, Telegram API limits)
+> - **Pattern 4**: Retry Logic with Exponential Backoff
+> - **Pattern 5**: Race Condition Prevention (idempotency, callback query handling)
+> - **Pattern 6**: State Inconsistency Recovery (rollback on failure)
+> - **Pattern 7**: Channel ID vs Username Resolution
+> - **Pattern 8**: Referral URL Validation
+> - **Pattern 9**: Log Masking for Privacy
+> - **Pattern 10**: Attempt Tracking
+
+---
+
 ## Consequences
 
 ### Positive Consequences
@@ -821,56 +575,9 @@ export class PartnerFlowService {
 ### Neutral Consequences
 
 - **New Library**: `libs/partner-bot` added to monorepo
-- **New Message Types**: 6 new message types × 8 languages = 48 bot_messages entries
+- **New Message Types**: 6 new message types x 8 languages = 48 bot_messages entries
 - **Scheduled Job**: Daily cron job for expiration reminders
 - **JSONB Extension**: `bot_settings.partner` field populated for partner bots
-
----
-
-## Implementation Guidance
-
-### Channel Verification Principles
-
-- **Bot Admin Not Required**: Use public channel `@channelname` format or ensure bot is member for private channels
-- **Error Handling**: Catch `USER_ID_INVALID` error, return `false` instead of throwing
-- **Retry Logic**: Implement exponential backoff for Telegram API network errors (not rate limits)
-- **Rate Limiting**: Enforce per-user verification limit (10 attempts per hour) to prevent abuse
-- **Logging**: Log verification attempts with masked user IDs and channel IDs for debugging
-
-### Message Resolution Principles
-
-- **Fallback Chain**: `bot_messages(botId, type, lang)` → `messages(type, lang)` → hardcoded fallback
-- **Variable Format**: Use `{variableName}` format consistently across all message templates
-- **Variable Escaping**: If message content includes literal `{` or `}`, escape with backslash
-- **Caching**: Cache resolved messages at application level (messages rarely change)
-
-### Type Safety Principles
-
-- **Domain Type Location**: Partner-specific types in `libs/partner-bot/src/types/`
-- **Type Casting Pattern**: `const typed = rawSettings.settings as PartnerBotSettings`
-- **Optional Chaining**: Always use `settings.partner?.channelId` (partner field is optional)
-- **Type Guards**: Implement `isPartnerBot(settings)` guard for conditional logic
-
-### State Management Principles
-
-- **State Validation**: Validate state transitions before updating (e.g., can't go from `trial_expired` to `awaiting_channel_subscription`)
-- **Atomic Updates**: Use database transactions for state updates coupled with other operations
-- **State Query Optimization**: Index `bot_users.state` JSONB field with GIN index for efficient state-based queries
-- **Error Recovery**: If verification succeeds but trial activation fails, revert state to `channel_verified`
-
-### Trial Integration Principles
-
-- **Dependency Injection**: Inject `TrialService` from `@libs/bot` into `PartnerFlowService`
-- **No Modification**: Never modify TrialService, only call its public methods
-- **Transaction Boundary**: Wrap verification + trial activation in database transaction
-- **Error Propagation**: If `TrialService.activate()` throws, propagate error to user with retry option
-
-### Reminder Scheduling Principles
-
-- **Idempotency**: Check if reminder sent today before sending (prevent duplicates)
-- **Fault Isolation**: Catch and log errors per user, continue processing other users
-- **Graceful Degradation**: If bot is blocked by user, mark user as `opted_out` (don't retry)
-- **Monitoring**: Emit metrics: reminders sent, failures, opt-outs per run
 
 ---
 
@@ -885,38 +592,35 @@ flowchart TB
         D --> E{User clicks I subscribed}
         E --> F[ChannelVerifierService.verifyMembership]
         F --> G{Subscribed?}
-        G -->|Yes| H[BotUsersRepo.updateState: channel_verified]
+        G -->|Yes| H[Update state: channel_verified]
         G -->|No| I[Send partner_verification_failed]
-        H --> J[TrialService.activate botUserId - from libs/bot]
-        J --> K[BotUsersRepo.updateState: trial_activated]
+        H --> J[TrialService.activate]
+        J --> K[Update state: trial_activated]
         K --> L[Send partner_trial_activated]
         I --> D
     end
 
     subgraph "Trial Expiration"
-        M[Daily Cron 12:00 UTC] --> N[ReminderSchedulerService.processExpiredTrials]
-        N --> O[Query user_subscriptions WHERE status=expired]
-        O --> P[For each user: Send partner_trial_expired]
+        M[Daily Cron 12:00 UTC] --> N[ReminderSchedulerService]
+        N --> O[Query expired subscriptions]
+        O --> P[Send partner_trial_expired]
         P --> Q{User action?}
         Q -->|Extend| R[Open referralUrl]
-        Q -->|Buy| S[Send partner_coming_soon]
+        Q -->|Buy| S[Payment flow]
         Q -->|No action| N
     end
 
     subgraph "Dependencies"
         T[libs/bot: TrialService]
-        U[libs/db: BotMessagesRepository]
-        V[libs/db: BotSettingsRepository]
-        W[libs/db: BotUsersRepository]
-        X[Telegram Bot API: getChatMember]
+        U[libs/db: Repositories]
+        V[Telegram Bot API]
     end
 
-    F -.->|uses| X
-    J -.->|uses| T
-    C -.->|uses| U
-    B -.->|uses| V
-    H -.->|uses| W
+    F -.->|getChatMember| V
+    J -.->|activate| T
 ```
+
+> **Detailed Implementation**: See [ADR-COMMON-partner-flow](./ADR-COMMON-partner-flow.md) for state transition diagrams, error handling flows, and service interaction patterns.
 
 ---
 
@@ -930,13 +634,10 @@ flowchart TB
 - **ADR-006**: Dynamic Telegraf Module Loading
 - **ADR-003**: User Settings JSONB Storage (pattern reference)
 
-### Common ADRs
+### Related ADRs
 
-This ADR depends on the following common technical decisions:
-
-- **Message Resolution**: Follows message override pattern from ADR-004 (bot_messages → messages → fallback)
-- **JSONB Configuration**: Follows JSONB extension pattern from ADR-003
-- **Multi-Bot Patterns**: Follows bot registration patterns from ADR-006
+- **[ADR-COMMON-partner-flow](./ADR-COMMON-partner-flow.md)**: Implementation playbook with patterns and anti-patterns
+- **ADR-COMMON-multi-bot-context**: Multi-bot context patterns (botId handling)
 
 ### External References
 
@@ -969,7 +670,7 @@ This ADR depends on the following common technical decisions:
 - `libs/partner-bot/test/services/reminder-scheduler.service.spec.ts`
 
 **SQL Migrations**:
-- `libs/db/migrations/YYYYMMDD_partner_bot_messages.sql` - 48 INSERT statements (6 types × 8 languages)
+- `libs/db/migrations/YYYYMMDD_partner_bot_messages.sql` - 48 INSERT statements (6 types x 8 languages)
 
 ### No Files to Modify
 
@@ -999,12 +700,13 @@ This ADR depends on the following common technical decisions:
 |---------|------|--------|---------|
 | 1.0.0 | 2025-12-02 | Claude Code Architecture Agent | Initial version - Six architecture decisions for partner bot flow |
 | 1.0.1 | 2025-12-04 | Claude Code | Fixed Decision 6: TrialService.activate() signature corrected to use botUserId (bot_users.id) instead of userId (telegramId) |
+| 1.1.0 | 2025-12-11 | Claude Code Architecture Agent | Refactored to reference ADR-COMMON-partner-flow for implementation details. Removed code examples, added Implementation Reference section |
 
 ---
 
-**Document Version**: 1.0.1
+**Document Version**: 1.1.0
 **Created**: 2025-12-02
-**Last Updated**: 2025-12-04
+**Last Updated**: 2025-12-11
 **Author**: Claude Code Architecture Agent
 
 ---
