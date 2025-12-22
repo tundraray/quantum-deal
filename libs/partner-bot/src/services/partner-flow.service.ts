@@ -73,100 +73,18 @@ export class PartnerFlowService {
         await this.botSettingsRepository.findByBotId(botId);
       const settings = settingsRecord?.settings as PartnerSettings | undefined;
 
-      // Skip channel verification if channelId is not configured - directly activate trial
-      if (!settings?.channelId) {
-        this.logger.debug({
-          message: 'channelId not configured, skipping channel verification',
-          userId,
-          botId,
-        });
-
-        // Get botUser for trial activation
-        const botUser = await this.botUsersRepository.findByUserAndBot(
-          userId,
-          botId,
-        );
-
-        if (!botUser) {
-          this.logger.error({
-            message: 'BotUser not found for direct trial activation',
-            userId,
-            botId,
-          });
-          throw new Error('User not found');
-        }
-
-        // State 2: channel_verified (skipped verification)
-        const verifiedState: BotUserState = {
-          currentScene: 'partner_flow',
-          sceneData: {
-            verificationState: 'channel_verified',
-            verificationAttempts: 0,
-            lastVerificationAttempt: new Date().toISOString(),
-          } as PartnerFlowSceneData,
-        };
-        await this.botUsersRepository.updateState(userId, botId, verifiedState);
-
-        // Activate trial
-        const activationResult = await this.trialService.activate(
-          botUser.id,
-          settings?.defaults?.trialDays,
-        );
-
-        if (!activationResult.success) {
-          this.logger.error({
-            message: 'Trial activation failed during direct activation',
-            userId,
-            botId,
-            error: activationResult.error,
-          });
-          throw new Error(activationResult.error ?? 'Trial activation failed');
-        }
-
-        // State 3: trial_activated
-        const activatedState: BotUserState = {
-          currentScene: 'partner_flow',
-          sceneData: {
-            verificationState: 'trial_activated',
-            trialActivatedAt: new Date().toISOString(),
-            trialExpiresAt: activationResult.expiresAt?.toISOString(),
-          } as PartnerFlowSceneData,
-        };
-        await this.botUsersRepository.updateState(
-          userId,
-          botId,
-          activatedState,
-        );
-
-        // Send trial UI immediately
-        await this.sendTrialUI(
-          userId,
-          botId,
-          lang,
-          activationResult.expiresAt ?? new Date(),
-        );
-
-        this.logger.log({
-          message:
-            'Direct trial activation completed (no channelId configured)',
-          userId,
-          botId,
-          expiresAt: activationResult.expiresAt,
-        });
-
-        return;
-      }
-
-      const channelId: string = settings.channelId;
-
+      const channelId = settings?.channelId;
+      const channelName = settings?.channelName;
       // Get localization context
       const l10n = this.localizationService.forBot(botId).lang(lang);
 
       // Retrieve channel info and message
-      const channel = resolveChannelInfo(channelId, settings.channelName);
+      const channel = channelId
+        ? resolveChannelInfo(channelId, channelName)
+        : undefined;
       const message = await l10n.t(MESSAGE_KEYS.CHANNEL_PROMPT, {
-        channelUrl: channel.url,
-        channelName: channel.name,
+        channelUrl: channel?.url,
+        channelName: channel?.name,
       });
 
       // Get bot instance for sending message
@@ -201,8 +119,8 @@ export class PartnerFlowService {
         // 3. Default flow: No state or trial_expired -> send welcome + channel prompt
         // Retrieve welcome messages via LocalizationService
         const welcomeMessage = await l10n.t('partner_welcome', {
-          channelName: channel.name,
-          channelUrl: channel.url,
+          channelName: channel?.name ?? '',
+          channelUrl: channel?.url ?? '',
         });
 
         const welcomeMessageLang = await l10n.t('partner_welcome_lang');
@@ -295,93 +213,25 @@ export class PartnerFlowService {
       const settingsRecord =
         await this.botSettingsRepository.findByBotId(botId);
       const settings = settingsRecord?.settings as PartnerSettings | undefined;
-
-      // Get botUser early - needed for both skip and normal flow
-      const botUser = await this.botUsersRepository.findByUserAndBot(
-        userId,
-        botId,
-      );
-
-      // Skip channel verification if channelId is not configured - directly activate trial
       if (!settings?.channelId) {
-        this.logger.debug({
-          message: 'channelId not configured, skipping verification',
+        this.logger.error({
+          message: 'Partner configuration missing',
           userId,
           botId,
         });
-
-        if (!botUser) {
-          this.logger.error({
-            message: 'BotUser not found for direct trial activation',
-            userId,
-            botId,
-          });
-          return {
-            verified: false,
-            error: 'User not found',
-          };
-        }
-
-        // State 2: channel_verified (skipped verification)
-        const verifiedState: BotUserState = {
-          currentScene: 'partner_flow',
-          sceneData: {
-            verificationState: 'channel_verified',
-            verificationAttempts: 0,
-            lastVerificationAttempt: new Date().toISOString(),
-          } as PartnerFlowSceneData,
-        };
-        await this.botUsersRepository.updateState(userId, botId, verifiedState);
-
-        // Activate trial
-        const activationResult = await this.trialService.activate(
-          botUser.id,
-          settings?.defaults?.trialDays,
-        );
-
-        if (!activationResult.success) {
-          this.logger.error({
-            message: 'Trial activation failed during direct activation',
-            userId,
-            botId,
-            error: activationResult.error,
-          });
-          return {
-            verified: false,
-            error: activationResult.error ?? 'Trial activation failed',
-          };
-        }
-
-        // State 3: trial_activated
-        const activatedState: BotUserState = {
-          currentScene: 'partner_flow',
-          sceneData: {
-            verificationState: 'trial_activated',
-            trialActivatedAt: new Date().toISOString(),
-            trialExpiresAt: activationResult.expiresAt?.toISOString(),
-          } as PartnerFlowSceneData,
-        };
-        await this.botUsersRepository.updateState(
-          userId,
-          botId,
-          activatedState,
-        );
-
-        this.logger.log({
-          message:
-            'Direct trial activation completed (no channelId configured)',
-          userId,
-          botId,
-          expiresAt: activationResult.expiresAt,
-        });
-
         return {
-          verified: true,
-          trialExpiresAt: activationResult.expiresAt,
+          verified: false,
+          error: 'Configuration error',
         };
       }
 
       const channelId: string = settings.channelId;
+
+      // Get current verification attempts
+      const botUser = await this.botUsersRepository.findByUserAndBot(
+        userId,
+        botId,
+      );
       const sceneData = botUser?.state?.sceneData as
         | PartnerFlowSceneData
         | undefined;
