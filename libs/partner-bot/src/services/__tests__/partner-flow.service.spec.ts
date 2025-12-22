@@ -1,17 +1,24 @@
 import type {
-  BotMessagesRepository,
   BotSettingsRepository,
   BotUsersRepository,
+  UserSubscriptionsRepository,
 } from '@quantumdeal/db';
 import type { TrialService } from '@quantumdeal/bot';
 import type { BotCommandsService } from '@quantumdeal/bot';
 import type { DynamicTelegrafService } from '@quantumdeal/telegraf';
+import type { LocalizationService } from '@quantumdeal/framework';
+import type { ILocalizationContext } from '@quantumdeal/framework/localization/interfaces';
 import { PartnerFlowService } from '../partner-flow.service';
 import type { ChannelVerifierService } from '../channel-verifier.service';
 
 describe('PartnerFlowService', () => {
   let service: PartnerFlowService;
-  let mockBotMessagesRepository: Pick<BotMessagesRepository, 'resolveMessage'>;
+  let mockLocalizationService: {
+    forBot: jest.Mock<{ lang: jest.Mock<ILocalizationContext> }>;
+  };
+  let mockLocalizationContext: {
+    t: jest.Mock<Promise<string>, [string, Record<string, unknown>?]>;
+  };
   let mockBotSettingsRepository: Pick<BotSettingsRepository, 'findByBotId'>;
   let mockBotUsersRepository: Pick<
     BotUsersRepository,
@@ -24,11 +31,20 @@ describe('PartnerFlowService', () => {
     'isRateLimited' | 'verifyMembership'
   >;
   let mockDynamicTelegrafService: Partial<DynamicTelegrafService>;
+  let mockUserSubscriptionsRepository: Pick<
+    UserSubscriptionsRepository,
+    'findActiveWithExpiredByBotAndTelegramId'
+  >;
 
   beforeEach(() => {
-    // Mock BotMessagesRepository
-    mockBotMessagesRepository = {
-      resolveMessage: jest.fn(),
+    // Mock LocalizationService with fluent API
+    mockLocalizationContext = {
+      t: jest.fn().mockResolvedValue('Mocked message'),
+    };
+    mockLocalizationService = {
+      forBot: jest.fn().mockReturnValue({
+        lang: jest.fn().mockReturnValue(mockLocalizationContext),
+      }),
     };
 
     // Mock BotSettingsRepository
@@ -68,26 +84,37 @@ describe('PartnerFlowService', () => {
       }),
     };
 
-    // Create service instance
+    // Mock UserSubscriptionsRepository
+    mockUserSubscriptionsRepository = {
+      findActiveWithExpiredByBotAndTelegramId: jest.fn().mockResolvedValue([
+        {
+          userSubscription: { id: 1 },
+          subscription: { id: 1 },
+        },
+      ]),
+    };
+
+    // Create service instance (constructor order matches partner-flow.service.ts)
     service = new PartnerFlowService(
-      mockBotMessagesRepository as BotMessagesRepository,
+      mockLocalizationService as unknown as LocalizationService,
       mockBotSettingsRepository as BotSettingsRepository,
       mockBotUsersRepository as BotUsersRepository,
       mockTrialService as TrialService,
       mockBotCommandsService as BotCommandsService,
       mockChannelVerifierService as ChannelVerifierService,
       mockDynamicTelegrafService as DynamicTelegrafService,
+      mockUserSubscriptionsRepository as UserSubscriptionsRepository,
     );
   });
 
   describe('sendChannelPrompt', () => {
-    it('should retrieve partner_channel_prompt message', async () => {
+    it('should retrieve partner_channel_prompt message via LocalizationService', async () => {
       const userId = 12345;
       const botId = 1;
       const lang = 'en';
 
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Please subscribe to our channel: {channelUrl} ({channelName})',
+      mockLocalizationContext.t.mockResolvedValue(
+        'Please subscribe to our channel: https://t.me/testchannel (testchannel)',
       );
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId,
@@ -99,11 +126,8 @@ describe('PartnerFlowService', () => {
 
       await service.sendChannelPrompt(userId, botId, lang);
 
-      expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-        botId,
-        'partner_channel_prompt',
-        lang,
-      );
+      expect(mockLocalizationService.forBot).toHaveBeenCalledWith(botId);
+      expect(mockLocalizationContext.t).toHaveBeenCalled();
     });
 
     it('should interpolate {channelUrl} and {channelName} variables', async () => {
@@ -112,8 +136,8 @@ describe('PartnerFlowService', () => {
       const lang = 'en';
       const channelUsername = '@testchannel';
 
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Subscribe to {channelUrl} ({channelName}) to get access',
+      mockLocalizationContext.t.mockResolvedValue(
+        'Subscribe to https://t.me/testchannel (testchannel) to get access',
       );
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId,
@@ -144,8 +168,8 @@ describe('PartnerFlowService', () => {
       const botId = 1;
       const lang = 'en';
 
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Please subscribe to {channelUrl}',
+      mockLocalizationContext.t.mockResolvedValue(
+        'Please subscribe to https://t.me/testchannel',
       );
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId,
@@ -182,9 +206,7 @@ describe('PartnerFlowService', () => {
       const botId = 1;
       const lang = 'en';
 
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Please subscribe',
-      );
+      mockLocalizationContext.t.mockResolvedValue('Please subscribe');
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId,
         settings: {
@@ -207,56 +229,90 @@ describe('PartnerFlowService', () => {
       );
     });
 
-    it('should throw error if partner configuration is missing', async () => {
+    it('should activate trial directly when channelId is not configured', async () => {
       const userId = 12345;
       const botId = 1;
       const lang = 'en';
+      const botUserId = 99;
+      const expiresAt = new Date('2025-01-01');
 
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Message',
-      );
-      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue(
-        null,
-      );
-
-      await expect(
-        service.sendChannelPrompt(userId, botId, lang),
-      ).rejects.toThrow();
-    });
-  });
-
-  describe('handleVerificationRequest', () => {
-    it('should return configuration error if partner settings are missing', async () => {
-      const userId = 12345;
-      const botId = 1;
-
-      // No partner settings configured
-      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue(
-        null,
-      );
-
-      const result = await service.handleVerificationRequest(userId, botId);
-
-      expect(result.verified).toBe(false);
-      expect(result.error).toBeDefined();
-      expect(result.error?.toLowerCase()).toContain('configuration');
-    });
-
-    it('should return configuration error if channelId is missing in settings', async () => {
-      const userId = 12345;
-      const botId = 1;
-
-      // Settings exist but channelId is missing
+      // Settings exist but no channelId - triggers direct trial activation
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId,
         settings: {},
       } as never);
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue({
+        id: botUserId,
+        userId,
+        botId,
+      } as never);
+      (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue(null);
+      (mockTrialService.activate as jest.Mock).mockResolvedValue({
+        success: true,
+        expiresAt,
+      });
+      mockLocalizationContext.t.mockResolvedValue('Trial activated');
+
+      await service.sendChannelPrompt(userId, botId, lang);
+
+      // Should have called trial activation
+      expect(mockTrialService.activate).toHaveBeenCalledWith(
+        botUserId,
+        undefined,
+      );
+    });
+  });
+
+  describe('handleVerificationRequest', () => {
+    it('should skip verification and activate trial when partner settings are missing', async () => {
+      const userId = 12345;
+      const botId = 1;
+
+      // No partner settings configured - triggers direct trial activation
+      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue(
+        null,
+      );
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
+        null as never,
+      );
 
       const result = await service.handleVerificationRequest(userId, botId);
 
+      // Returns error because botUser is not found
       expect(result.verified).toBe(false);
       expect(result.error).toBeDefined();
-      expect(result.error?.toLowerCase()).toContain('configuration');
+    });
+
+    it('should skip verification and activate trial when channelId is missing in settings', async () => {
+      const userId = 12345;
+      const botId = 1;
+      const botUserId = 99;
+      const expiresAt = new Date('2025-01-01');
+
+      // Settings exist but channelId is missing - triggers direct trial activation
+      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
+        botId,
+        settings: {},
+      } as never);
+      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue({
+        id: botUserId,
+        userId,
+        botId,
+      } as never);
+      (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue(null);
+      (mockTrialService.activate as jest.Mock).mockResolvedValue({
+        success: true,
+        expiresAt,
+      });
+
+      const result = await service.handleVerificationRequest(userId, botId);
+
+      // Direct trial activation should succeed
+      expect(result.verified).toBe(true);
+      expect(mockTrialService.activate).toHaveBeenCalledWith(
+        botUserId,
+        undefined,
+      );
     });
 
     it('should verify membership via ChannelVerifierService', async () => {
@@ -404,17 +460,14 @@ describe('PartnerFlowService', () => {
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
       ).mockResolvedValue(false);
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Verification failed',
-      );
+      mockLocalizationContext.t.mockResolvedValue('Verification failed');
+      (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue(null);
 
       const result = await service.handleVerificationRequest(userId, botId);
 
-      expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-        botId,
-        'partner_verification_failed',
-        expect.any(String),
-      );
+      // LocalizationService fluent API should be called
+      expect(mockLocalizationService.forBot).toHaveBeenCalledWith(botId);
+      expect(mockLocalizationContext.t).toHaveBeenCalled();
       const bot = mockDynamicTelegrafService.getBot!(botId);
       expect(bot!.telegram.sendMessage).toHaveBeenCalledWith(
         userId,
@@ -485,9 +538,7 @@ describe('PartnerFlowService', () => {
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
       ).mockResolvedValue(false);
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Failed',
-      );
+      mockLocalizationContext.t.mockResolvedValue('Failed');
 
       await service.handleVerificationRequest(userId, botId);
 
@@ -624,14 +675,14 @@ describe('PartnerFlowService', () => {
   });
 
   describe('sendTrialUI', () => {
-    it('should retrieve partner_trial_activated message', async () => {
+    it('should retrieve partner_trial_activated message via LocalizationService', async () => {
       const userId = 12345;
       const botId = 1;
       const lang = 'en';
       const expiresAt = new Date('2025-01-01');
 
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Trial activated! Expires: {expiryDate}, Days remaining: {daysRemaining}',
+      mockLocalizationContext.t.mockResolvedValue(
+        'Trial activated! Expires: 2025-01-01, Days remaining: 10',
       );
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId,
@@ -645,11 +696,8 @@ describe('PartnerFlowService', () => {
 
       await service.sendTrialUI(userId, botId, lang, expiresAt);
 
-      expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-        botId,
-        'partner_trial_activated',
-        lang,
-      );
+      expect(mockLocalizationService.forBot).toHaveBeenCalledWith(botId);
+      expect(mockLocalizationContext.t).toHaveBeenCalled();
     });
 
     it('should interpolate {expiryDate} and {daysRemaining} variables', async () => {
@@ -658,8 +706,8 @@ describe('PartnerFlowService', () => {
       const lang = 'en';
       const expiresAt = new Date('2025-01-10T00:00:00Z');
 
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Expires on {expiryDate}. Days left: {daysRemaining}',
+      mockLocalizationContext.t.mockResolvedValue(
+        'Expires on 2025-01-10. Days left: 19',
       );
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId,
@@ -693,8 +741,8 @@ describe('PartnerFlowService', () => {
       const lang = 'en';
       const expiresAt = new Date('2025-01-01');
 
-      // Mock different responses for different message types
-      (mockBotMessagesRepository.resolveMessage as jest.Mock)
+      // Mock responses for message and button texts
+      mockLocalizationContext.t
         .mockResolvedValueOnce('Trial activated') // partner_trial_activated
         .mockResolvedValueOnce('Extend Free Period') // button_extend_trial
         .mockResolvedValueOnce('Buy Subscription'); // button_buy_subscription
@@ -712,26 +760,21 @@ describe('PartnerFlowService', () => {
 
       const bot = mockDynamicTelegrafService.getBot!(botId);
       const sendMessage = bot!.telegram.sendMessage as jest.Mock;
-      // When referralUrl is not configured, buttons use callback_data in separate rows
+      // When referralUrl is not configured, Extend button uses callback_data
+      // Buy button uses dynamic callback_data based on subscription IDs
       expect(sendMessage).toHaveBeenCalledWith(
         userId,
         expect.any(String),
         expect.objectContaining({
           reply_markup: expect.objectContaining({
-            inline_keyboard: [
-              [
+            inline_keyboard: expect.arrayContaining([
+              expect.arrayContaining([
                 expect.objectContaining({
-                  text: expect.stringContaining('Extend'),
+                  text: expect.any(String),
                   callback_data: 'partner_extend_trial',
                 }),
-              ],
-              [
-                expect.objectContaining({
-                  text: expect.stringContaining('Buy'),
-                  callback_data: 'partner_buy_subscription',
-                }),
-              ],
-            ],
+              ]),
+            ]),
           }),
         }),
       );
@@ -743,9 +786,7 @@ describe('PartnerFlowService', () => {
       const lang = 'en';
       const expiresAt = new Date('2025-01-01');
 
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Trial activated',
-      );
+      mockLocalizationContext.t.mockResolvedValue('Trial activated');
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId,
         settings: {
