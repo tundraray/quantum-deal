@@ -86,27 +86,25 @@ export class ChannelVerificationAction {
       );
 
       // Get partner channel ID
-      const channelId = await this.getPartnerChannelId(telegramId, botId, ctx);
-      if (!channelId) {
-        return;
-      }
-
-      // Verify channel membership
-      const isMember = await this.channelVerifierService.verifyMembership(
-        channelId,
-        telegramId,
-        botId,
-      );
-
-      if (!isMember) {
-        await this.sendVerificationFailedMessage(
+      const channelId = await this.getPartnerChannelId(telegramId, botId);
+      if (channelId) {
+        // Verify channel membership
+        const isMember = await this.channelVerifierService.verifyMembership(
+          channelId,
           telegramId,
           botId,
-          lang,
-          channelId,
-          ctx,
         );
-        return;
+
+        if (!isMember) {
+          await this.sendVerificationFailedMessage(
+            telegramId,
+            botId,
+            lang,
+            channelId,
+            ctx,
+          );
+          return;
+        }
       }
 
       // Handle successful verification and trial activation
@@ -145,7 +143,6 @@ export class ChannelVerificationAction {
   private async getPartnerChannelId(
     userId: number,
     botId: number,
-    ctx: PartnerBotContext,
   ): Promise<string | null> {
     const settingsRecord = await this.botSettingsRepository.findByBotId(botId);
 
@@ -157,7 +154,6 @@ export class ChannelVerificationAction {
         botId,
       });
 
-      await ctx.reply('Configuration error. Please contact support.');
       return null;
     }
 
