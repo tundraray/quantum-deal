@@ -103,7 +103,7 @@ export class DailyReportService {
     private readonly botsRepository: BotsRepository,
     private readonly localizationService: LocalizationService,
     private readonly botSettingsRepository: BotSettingsRepository,
-  ) {}
+  ) { }
 
   /**
    * Scheduled task: Generate daily reports every day at 09:00 UTC+3
@@ -142,7 +142,7 @@ export class DailyReportService {
     );
     const dailyCron = this.configService.get<string>(
       'DAILY_REPORT_CRON',
-      '0 0 6 * * *',
+      '0 0 23 * * *',
     );
     const dailyEnabled = this.configService.get<boolean>(
       'DAILY_REPORT_ENABLED',
@@ -536,9 +536,9 @@ export class DailyReportService {
       const extendTrialButton = isValidHttpsUrl(referralUrl ?? '')
         ? { text: extendTrialButtonText, url: referralUrl as string }
         : {
-            text: extendTrialButtonText,
-            callback_data: CALLBACK_DATA.EXTEND_TRIAL,
-          };
+          text: extendTrialButtonText,
+          callback_data: CALLBACK_DATA.EXTEND_TRIAL,
+        };
 
       this.notificationService.addMessage(
         client.telegramId,
@@ -585,8 +585,8 @@ export class DailyReportService {
     const allOrders =
       Object.keys(data.tradingActivity.ordersBySymbol).length > 0
         ? Object.entries(data.tradingActivity.ordersBySymbol)
-            .sort(([, countA], [, countB]) => countB - countA)
-            .map(([symbol]) => symbol)
+          .sort(([, countA], [, countB]) => countB - countA)
+          .map(([symbol]) => symbol)
         : [];
 
     const bestSymbol1 = allOrders[0] || 'N/A';
