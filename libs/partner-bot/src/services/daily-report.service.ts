@@ -136,13 +136,10 @@ export class DailyReportService {
   }
 
   onModuleInit(): void {
-    const timezone = this.configService.get<string>(
-      'REPORTS_TIMEZONE',
-      'Europe/Moscow',
-    );
+    const timezone = this.configService.get<string>('REPORTS_TIMEZONE', 'EET');
     const dailyCron = this.configService.get<string>(
       'DAILY_REPORT_CRON',
-      '0 0 23 * * *',
+      '0 0 1 * * *',
     );
     const dailyEnabled = this.configService.get<boolean>(
       'DAILY_REPORT_ENABLED',
