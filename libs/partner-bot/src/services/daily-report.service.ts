@@ -136,7 +136,10 @@ export class DailyReportService {
   }
 
   onModuleInit(): void {
-    const timezone = this.configService.get<string>('REPORTS_TIMEZONE', 'EET');
+    const timezone = this.configService.get<string>(
+      'REPORTS_TIMEZONE',
+      'Europe/Kyiv',
+    );
     const dailyCron = this.configService.get<string>(
       'DAILY_REPORT_CRON',
       '0 0 1 * * *',
