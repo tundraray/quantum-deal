@@ -142,7 +142,7 @@ export class DailyReportService {
     );
     const dailyCron = this.configService.get<string>(
       'DAILY_REPORT_CRON',
-      '0 0 1 * * *',
+      '0 0 0 * * *',
     );
     const dailyEnabled = this.configService.get<boolean>(
       'DAILY_REPORT_ENABLED',
