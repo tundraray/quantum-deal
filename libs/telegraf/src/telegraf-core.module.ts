@@ -24,6 +24,7 @@ import {
   telegrafAllBotsProvider,
 } from './telegraf-all-bots.provider';
 import { createBotFactory, getBotToken } from './utils';
+import * as Sentry from '@sentry/nestjs';
 
 @Global()
 @Module({
@@ -35,7 +36,7 @@ export class TelegrafCoreModule implements OnApplicationShutdown {
     @Inject(TELEGRAF_BOT_NAME)
     private readonly botName: string,
     private readonly moduleRef: ModuleRef,
-  ) {}
+  ) { }
 
   public static forRoot(options: TelegrafModuleOptions): DynamicModule {
     const telegrafBotName = getBotToken(options.botName);
@@ -124,6 +125,10 @@ export class TelegrafCoreModule implements OnApplicationShutdown {
     );
     if (bot) {
       await bot.stop();
+    } else {
+      Sentry.captureException(
+        new Error(`Shutdown: Bot ${this.botName} not found`),
+      );
     }
   }
 

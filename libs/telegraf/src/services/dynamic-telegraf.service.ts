@@ -21,6 +21,7 @@ import {
 import { DYNAMIC_TELEGRAF_MODULE_OPTIONS } from '../telegraf.constants';
 import { DynamicListenersExplorerService } from './dynamic-listeners-explorer.service';
 import { createBotFactory } from '../utils';
+import * as Sentry from '@sentry/nestjs';
 
 /**
  * DynamicTelegrafService
@@ -40,8 +41,7 @@ import { createBotFactory } from '../utils';
  */
 @Injectable()
 export class DynamicTelegrafService
-  implements OnModuleInit, OnApplicationShutdown
-{
+  implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(DynamicTelegrafService.name);
 
   /** Map of botId -> DynamicBotInstance for O(1) lookup */
@@ -73,7 +73,7 @@ export class DynamicTelegrafService
     @Inject(BOT_CONFIGURATION_PROVIDER)
     private readonly botConfigProvider: BotConfigurationProvider,
     private readonly listenersExplorer: DynamicListenersExplorerService,
-  ) {}
+  ) { }
 
   /**
    * Initialize all dynamic bots on application startup.
@@ -139,6 +139,11 @@ export class DynamicTelegrafService
 
     this.bots.clear();
     this.webhookPathIndex.clear();
+
+    Sentry.captureEvent({
+      message: `All dynamic bots stopped (signal: ${signal})`,
+      level: 'info',
+    });
 
     this.logger.log('All dynamic bots stopped');
   }
