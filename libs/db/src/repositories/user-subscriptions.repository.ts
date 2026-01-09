@@ -113,6 +113,87 @@ export class UserSubscriptionsRepository extends BaseRepository<
   }
 
   /**
+   * Find users with expired subscriptions (mirrors findExpiring pattern without daysFromNow)
+   *
+   * Pattern Reference: Based on existing findExpiring method signature and implementation style
+   *
+   * Supports TWO query modes:
+   * 1. Global query (subscriptionId = null): Query ALL users with ANY expired subscription of given type
+   * 2. Subscription-scoped query (subscriptionId provided): Query users with expired specific subscription
+   *
+   * Filters (Drizzle ORM conditions pattern):
+   * - isActive = false (subscription deactivated - contrast to findExpiring which uses isActive = true)
+   * - expiresAt IS NOT NULL
+   * - expiresAt < NOW() (already expired - contrast to findExpiring which checks exact date)
+   * - bot_users.is_active = true (only active bot users, exclude churned)
+   * - Optional: filter by subscriptionType ('signals' or 'subscription_%')
+   * - Optional: filter by botId
+   * - Optional: filter by subscriptionId
+   *
+   * @param subscriptionType - Optional filter by subscription type ('signals' or 'subscription_%')
+   * @param botId - Optional bot ID filter (undefined = all bots)
+   * @param subscriptionId - Optional subscription ID filter (undefined = all expired subscriptions)
+   * @returns Array of expired subscribers with user, subscription, and userSubscription details
+   */
+  async findExpired(
+    subscriptionType?: string,
+    botId?: number,
+    subscriptionId?: number,
+  ): Promise<
+    Array<{
+      botUser: BotUser;
+      subscription: Subscription;
+      userSubscription: UserSubscription;
+    }>
+  > {
+    // Base conditions (contrast to findExpiring):
+    // - isActive = false (expired) vs findExpiring's isActive = true (active)
+    // - expiresAt < NOW() (past) vs findExpiring's expiresAt::date = CURRENT_DATE + N (future)
+    const conditions = [
+      eq(this.table.isActive, false), // EXPIRED = isActive false
+      eq(botUsers.isActive, true), // Only active bot users
+      sql`${this.table.expiresAt} IS NOT NULL`,
+      sql`${this.table.expiresAt} < NOW()`, // Already expired (no days param)
+    ];
+
+    // Optional bot filter (same as findExpiring)
+    if (botId) {
+      conditions.push(eq(this.table.botId, botId));
+    }
+
+    // Optional subscription type filter (same logic as findExpiring)
+    if (subscriptionType) {
+      if (subscriptionType === 'signals') {
+        conditions.push(eq(subscriptions.type, 'signals'));
+      } else if (subscriptionType.startsWith('subscription_')) {
+        conditions.push(eq(subscriptions.type, subscriptionType));
+      } else {
+        // Filter for all broadcast subscriptions
+        conditions.push(like(subscriptions.type, 'subscription_%'));
+      }
+    }
+
+    // Optional subscription ID filter (additional filter not in findExpiring)
+    if (subscriptionId) {
+      conditions.push(eq(this.table.subscriptionId, subscriptionId));
+    }
+
+    // Query execution (same pattern as findExpiring)
+    const result = await this.db
+      .select({
+        botUser: botUsers,
+        subscription: subscriptions,
+        userSubscription: this.table,
+      })
+      .from(this.table)
+      .innerJoin(botUsers, eq(this.table.botUserId, botUsers.id))
+      .innerJoin(subscriptions, eq(this.table.subscriptionId, subscriptions.id))
+      .where(and(...conditions));
+
+    return result;
+  }
+
+  /**
    * Find all active users with active subscriptions (non-expired)
    * Replaces UsersRepository.findActiveUsersWithActiveSubscription()
    *

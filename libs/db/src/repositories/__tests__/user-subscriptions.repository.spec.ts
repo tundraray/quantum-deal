@@ -540,4 +540,239 @@ describe('UserSubscriptionsRepository', () => {
       });
     });
   });
+
+  describe('findExpired', () => {
+    it('should return only expired subscriptions with correct return shape', async () => {
+      // Arrange: Create expired subscriptions (isActive=false, expiresAt < NOW())
+      const mockExpiredSubscriptions = [
+        {
+          botUser: {
+            id: 1,
+            userId: 123,
+            botId: 1,
+            lang: 'en',
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            preferences: null,
+            state: null,
+          },
+          subscription: {
+            id: 1,
+            name: 'Signals Subscription',
+            type: 'signals',
+            isActive: true,
+            botId: 1,
+            uid: 'test-uid',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          userSubscription: {
+            id: 1,
+            botUserId: 1,
+            subscriptionId: 1,
+            botId: 1,
+            expiresAt: new Date('2025-11-01'),
+            isActive: false, // Expired subscriptions are inactive
+            activatedAt: new Date(),
+            createdAt: new Date(),
+          },
+        },
+      ];
+
+      mockDb.select.mockReturnValue(mockDb);
+      mockDb.from.mockReturnValue(mockDb);
+      mockDb.innerJoin.mockReturnValue(mockDb);
+      mockDb.where.mockResolvedValue(mockExpiredSubscriptions);
+
+      // Act: Call findExpired()
+      const result = await repository.findExpired();
+
+      // Assert: Only expired subscriptions returned with { botUser, subscription, userSubscription }
+      expect(mockDb.select).toHaveBeenCalledWith({
+        botUser: botUsers,
+        subscription: subscriptions,
+        userSubscription: userSubscriptions,
+      });
+      expect(mockDb.from).toHaveBeenCalledWith(userSubscriptions);
+      expect(mockDb.innerJoin).toHaveBeenCalledTimes(2); // botUsers and subscriptions
+      expect(result).toEqual(mockExpiredSubscriptions);
+      expect(result[0].botUser).toBeDefined();
+      expect(result[0].subscription).toBeDefined();
+      expect(result[0].userSubscription).toBeDefined();
+      expect(result[0].userSubscription.isActive).toBe(false);
+    });
+
+    it('should filter by subscriptionType=signals when specified', async () => {
+      // Arrange: Create expired signals subscriptions
+      const mockSignalsSubscriptions = [
+        {
+          botUser: {
+            id: 1,
+            userId: 123,
+            botId: 1,
+            lang: 'en',
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            preferences: null,
+            state: null,
+          },
+          subscription: {
+            id: 1,
+            name: 'Signals Subscription',
+            type: 'signals',
+            isActive: true,
+            botId: 1,
+            uid: 'test-uid',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          userSubscription: {
+            id: 1,
+            botUserId: 1,
+            subscriptionId: 1,
+            botId: 1,
+            expiresAt: new Date('2025-11-01'),
+            isActive: false,
+            activatedAt: new Date(),
+            createdAt: new Date(),
+          },
+        },
+      ];
+
+      mockDb.select.mockReturnValue(mockDb);
+      mockDb.from.mockReturnValue(mockDb);
+      mockDb.innerJoin.mockReturnValue(mockDb);
+      mockDb.where.mockResolvedValue(mockSignalsSubscriptions);
+
+      // Act: Call findExpired('signals')
+      const result = await repository.findExpired('signals');
+
+      // Assert: Only signals subscriptions returned
+      expect(result).toEqual(mockSignalsSubscriptions);
+      expect(result[0].subscription.type).toBe('signals');
+    });
+
+    it('should filter by botId when specified', async () => {
+      // Arrange: Create expired subscriptions for a specific bot
+      const specificBotId = 5;
+      const mockBotSubscriptions = [
+        {
+          botUser: {
+            id: 10,
+            userId: 789,
+            botId: specificBotId,
+            lang: 'ru',
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            preferences: null,
+            state: null,
+          },
+          subscription: {
+            id: 3,
+            name: 'Bot 5 Signals',
+            type: 'signals',
+            isActive: true,
+            botId: specificBotId,
+            uid: 'bot5-uid',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          userSubscription: {
+            id: 3,
+            botUserId: 10,
+            subscriptionId: 3,
+            botId: specificBotId,
+            expiresAt: new Date('2025-10-15'),
+            isActive: false,
+            activatedAt: new Date(),
+            createdAt: new Date(),
+          },
+        },
+      ];
+
+      mockDb.select.mockReturnValue(mockDb);
+      mockDb.from.mockReturnValue(mockDb);
+      mockDb.innerJoin.mockReturnValue(mockDb);
+      mockDb.where.mockResolvedValue(mockBotSubscriptions);
+
+      // Act: Call findExpired(undefined, specificBotId)
+      const result = await repository.findExpired(undefined, specificBotId);
+
+      // Assert: Only specified bot's subscriptions returned
+      expect(result).toEqual(mockBotSubscriptions);
+      expect(result[0].userSubscription.botId).toBe(specificBotId);
+    });
+
+    it('should filter by subscriptionId when specified', async () => {
+      // Arrange: Create expired subscriptions for a specific subscription
+      const specificSubscriptionId = 10;
+      const mockSubscriptionFiltered = [
+        {
+          botUser: {
+            id: 5,
+            userId: 555,
+            botId: 1,
+            lang: 'en',
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            preferences: null,
+            state: null,
+          },
+          subscription: {
+            id: specificSubscriptionId,
+            name: 'Premium Signals',
+            type: 'signals',
+            isActive: true,
+            botId: 1,
+            uid: 'premium-uid',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          userSubscription: {
+            id: 15,
+            botUserId: 5,
+            subscriptionId: specificSubscriptionId,
+            botId: 1,
+            expiresAt: new Date('2025-09-20'),
+            isActive: false,
+            activatedAt: new Date(),
+            createdAt: new Date(),
+          },
+        },
+      ];
+
+      mockDb.select.mockReturnValue(mockDb);
+      mockDb.from.mockReturnValue(mockDb);
+      mockDb.innerJoin.mockReturnValue(mockDb);
+      mockDb.where.mockResolvedValue(mockSubscriptionFiltered);
+
+      // Act: Call findExpired(undefined, undefined, specificSubscriptionId)
+      const result = await repository.findExpired(
+        undefined,
+        undefined,
+        specificSubscriptionId,
+      );
+
+      // Assert: Only specified subscription's expired users returned
+      expect(result).toEqual(mockSubscriptionFiltered);
+      expect(result[0].userSubscription.subscriptionId).toBe(
+        specificSubscriptionId,
+      );
+    });
+
+    it('should return empty array when no expired subscriptions exist', async () => {
+      mockDb.select.mockReturnValue(mockDb);
+      mockDb.from.mockReturnValue(mockDb);
+      mockDb.innerJoin.mockReturnValue(mockDb);
+      mockDb.where.mockResolvedValue([]);
+
+      const result = await repository.findExpired();
+
+      expect(result).toEqual([]);
+    });
+  });
 });
