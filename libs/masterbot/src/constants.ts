@@ -12,6 +12,7 @@ export const MASTERBOT_CONSTANTS = {
     CODE: '/code',
     HELP: '/help',
     SUBSCRIPTION: '/subscription',
+    BROADCAST: '/broadcast',
   },
   MESSAGES: {
     UNAUTHORIZED: '❌ Access denied. This bot is for administrators only.',
