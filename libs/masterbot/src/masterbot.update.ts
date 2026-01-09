@@ -366,6 +366,8 @@ export class MasterbotUpdate {
         broadcastSubscriptionId: null,
         broadcastMessage: null,
         broadcastMessageEntities: null,
+        broadcastFilterStatus: null,
+        broadcastFilterBotId: null,
       } as UserContext['session'];
     }
   }
@@ -766,15 +768,15 @@ export class MasterbotUpdate {
       this.ensureSession(ctx);
 
       // Set state and save subscription ID
-      ctx.session.flowState = 'awaiting_broadcast_message';
       ctx.session.broadcastSubscriptionId = subscriptionId;
+      ctx.session.flowState = 'selecting_status_filter';
 
-      await ctx.editMessageText(
-        `📝 *Введите сообщение для рассылки*\n\n` +
-          `Подписка: ${subscription.name}\n\n` +
-          `_Совет: Вы можете использовать Markdown форматирование_`,
-        { parse_mode: 'Markdown' },
-      );
+      // Initialize filter defaults
+      ctx.session.broadcastFilterStatus = null;
+      ctx.session.broadcastFilterBotId = null;
+
+      // Show status filter keyboard instead of proceeding to message input
+      await this.showStatusFilterKeyboard(ctx);
 
       await ctx.answerCbQuery();
     } catch (error) {
@@ -818,19 +820,27 @@ export class MasterbotUpdate {
 
       await ctx.answerCbQuery('Рассылка началась...');
 
-      // Send broadcast with entities
+      // Get filter values from session (default to active/all bots for backward compatibility)
+      const filterStatus = ctx.session.broadcastFilterStatus ?? 'active';
+      const filterBotId = ctx.session.broadcastFilterBotId ?? null;
+
+      // Send broadcast with entities and filters
       const result = await this.broadcastService.sendBroadcast(
         subscriptionId,
         message,
         entities || undefined,
         manager.telegramId,
+        filterStatus,
+        filterBotId,
       );
 
-      // Clear session
+      // Clear session including filter state
       ctx.session.flowState = null;
       ctx.session.broadcastSubscriptionId = null;
       ctx.session.broadcastMessage = null;
       ctx.session.broadcastMessageEntities = null;
+      ctx.session.broadcastFilterStatus = null;
+      ctx.session.broadcastFilterBotId = null;
 
       // Log the action
       this.masterbotService.logManagerAction(manager, 'BROADCAST_SENT', {
@@ -849,11 +859,13 @@ export class MasterbotUpdate {
         { parse_mode: 'Markdown' },
       );
     } catch (error) {
-      // Clear session
+      // Clear session including filter state
       ctx.session.flowState = null;
       ctx.session.broadcastSubscriptionId = null;
       ctx.session.broadcastMessage = null;
       ctx.session.broadcastMessageEntities = null;
+      ctx.session.broadcastFilterStatus = null;
+      ctx.session.broadcastFilterBotId = null;
 
       this.logger.error('Error confirming broadcast', error);
       const errorMessage =
@@ -867,11 +879,13 @@ export class MasterbotUpdate {
     // Ensure session is initialized
     this.ensureSession(ctx);
 
-    // Clear session
+    // Clear session including filter state
     ctx.session.flowState = null;
     ctx.session.broadcastSubscriptionId = null;
     ctx.session.broadcastMessage = null;
     ctx.session.broadcastMessageEntities = null;
+    ctx.session.broadcastFilterStatus = null;
+    ctx.session.broadcastFilterBotId = null;
 
     await ctx.editMessageText('❌ Рассылка отменена.');
     await ctx.answerCbQuery('Отменено');
@@ -1242,8 +1256,29 @@ export class MasterbotUpdate {
         return;
       }
 
-      const subscriberCount =
-        await this.broadcastService.countSubscribers(subscriptionId);
+      // Get filter values from session (default to active/all bots for backward compatibility)
+      const filterStatus = ctx.session.broadcastFilterStatus ?? 'active';
+      const filterBotId = ctx.session.broadcastFilterBotId ?? null;
+
+      // Count subscribers with filters
+      const subscriberCount = await this.broadcastService.countSubscribers(
+        subscriptionId,
+        filterStatus,
+        filterBotId,
+      );
+
+      // Build filter description labels for preview
+      const filterStatusLabel =
+        filterStatus === 'expired'
+          ? 'Истекшие подписки'
+          : 'Активные подписчики';
+
+      // Get bot name if specific bot is selected
+      let botLabel = 'Все боты';
+      if (filterBotId != null) {
+        const bot = await this.botsRepository.findById(filterBotId);
+        botLabel = bot?.name || 'Неизвестный бот';
+      }
 
       // Save message and entities to session
       ctx.session.broadcastMessage = message;
@@ -1255,8 +1290,10 @@ export class MasterbotUpdate {
       if (entities && entities.length > 0) {
         await ctx.reply(
           `📊 *Предпросмотр рассылки*\n\n` +
-            `Подписка: ${subscription.name}\n` +
-            `Получателей: ${subscriberCount} активных пользователей\n\n` +
+            `📋 Подписка: ${subscription.name}\n` +
+            `🎯 Цель: ${filterStatusLabel}\n` +
+            `🤖 Бот: ${botLabel}\n` +
+            `👥 Получателей: ${subscriberCount} пользователей\n\n` +
             `*Сообщение (с форматированием):*`,
           { parse_mode: 'Markdown' },
         );
@@ -1287,8 +1324,10 @@ export class MasterbotUpdate {
         // No entities, show plain text preview
         await ctx.reply(
           `📊 *Предпросмотр рассылки*\n\n` +
-            `Подписка: ${subscription.name}\n` +
-            `Получателей: ${subscriberCount} активных пользователей\n\n` +
+            `📋 Подписка: ${subscription.name}\n` +
+            `🎯 Цель: ${filterStatusLabel}\n` +
+            `🤖 Бот: ${botLabel}\n` +
+            `👥 Получателей: ${subscriberCount} пользователей\n\n` +
             `*Сообщение:*\n${message}\n\n` +
             `Отправить это сообщение?`,
           {

@@ -602,4 +602,224 @@ describe('MasterbotUpdate - Filter Selection Handlers', () => {
       );
     });
   });
+
+  describe('Broadcast Flow with Filters (Task 006)', () => {
+    describe('onBroadcastSubscriptionSelected - shows status filter keyboard', () => {
+      it('should set flowState to selecting_status_filter after subscription selection', async () => {
+        // Arrange
+        const subscriptionId = 1;
+        mockSubscriptionManagementService.getSubscriptionById.mockResolvedValue(
+          {
+            id: subscriptionId,
+            name: 'Test Subscription',
+            type: 'subscription_test',
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        );
+
+        const ctx = createMockContext(
+          `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${subscriptionId}`,
+        );
+
+        // Act
+        await masterbotUpdate.onBroadcastSubscriptionSelected(ctx);
+
+        // Assert
+        expect(ctx.session.flowState).toBe('selecting_status_filter');
+      });
+
+      it('should initialize filter defaults to null after subscription selection', async () => {
+        // Arrange
+        const subscriptionId = 1;
+        mockSubscriptionManagementService.getSubscriptionById.mockResolvedValue(
+          {
+            id: subscriptionId,
+            name: 'Test Subscription',
+            type: 'subscription_test',
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        );
+
+        const ctx = createMockContext(
+          `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${subscriptionId}`,
+        );
+
+        // Act
+        await masterbotUpdate.onBroadcastSubscriptionSelected(ctx);
+
+        // Assert
+        expect(ctx.session.broadcastFilterStatus).toBeNull();
+        expect(ctx.session.broadcastFilterBotId).toBeNull();
+      });
+
+      it('should show status filter keyboard after subscription selection', async () => {
+        // Arrange
+        const subscriptionId = 1;
+        mockSubscriptionManagementService.getSubscriptionById.mockResolvedValue(
+          {
+            id: subscriptionId,
+            name: 'Test Subscription',
+            type: 'subscription_test',
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        );
+
+        const ctx = createMockContext(
+          `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${subscriptionId}`,
+        );
+
+        // Act
+        await masterbotUpdate.onBroadcastSubscriptionSelected(ctx);
+
+        // Assert
+        expect(ctx.editMessageText).toHaveBeenCalled();
+        const callArgs = (ctx.editMessageText as jest.Mock).mock.calls[0];
+        const markup = callArgs[1]?.reply_markup;
+        const buttons = markup?.inline_keyboard?.flat() || [];
+        const callbackDataValues = buttons.map(
+          (b: { callback_data: string }) => b.callback_data,
+        );
+
+        // Should show status filter buttons
+        expect(callbackDataValues).toContain(
+          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
+        );
+        expect(callbackDataValues).toContain(
+          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED,
+        );
+      });
+    });
+
+    describe('onBroadcastConfirm - passes filters to sendBroadcast', () => {
+      it('should pass filter parameters to sendBroadcast', async () => {
+        // Arrange
+        const ctx = createMockContext(
+          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM,
+          {
+            broadcastSubscriptionId: 1,
+            broadcastMessage: 'Test broadcast message',
+            broadcastMessageEntities: null,
+            broadcastFilterStatus: 'expired',
+            broadcastFilterBotId: 5,
+          },
+        );
+
+        // Act
+        await masterbotUpdate.onBroadcastConfirm(ctx);
+
+        // Assert
+        expect(mockBroadcastService.sendBroadcast).toHaveBeenCalledWith(
+          1,
+          'Test broadcast message',
+          undefined,
+          12345, // manager.telegramId
+          'expired',
+          5,
+        );
+      });
+
+      it('should pass default filter values (active/null) when not set', async () => {
+        // Arrange
+        const ctx = createMockContext(
+          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM,
+          {
+            broadcastSubscriptionId: 1,
+            broadcastMessage: 'Test broadcast message',
+            broadcastMessageEntities: null,
+            broadcastFilterStatus: null,
+            broadcastFilterBotId: null,
+          },
+        );
+
+        // Act
+        await masterbotUpdate.onBroadcastConfirm(ctx);
+
+        // Assert
+        expect(mockBroadcastService.sendBroadcast).toHaveBeenCalledWith(
+          1,
+          'Test broadcast message',
+          undefined,
+          12345,
+          'active', // default
+          null, // default
+        );
+      });
+
+      it('should clear filter state after successful broadcast', async () => {
+        // Arrange
+        const ctx = createMockContext(
+          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM,
+          {
+            broadcastSubscriptionId: 1,
+            broadcastMessage: 'Test broadcast message',
+            broadcastMessageEntities: null,
+            broadcastFilterStatus: 'expired',
+            broadcastFilterBotId: 5,
+          },
+        );
+
+        // Act
+        await masterbotUpdate.onBroadcastConfirm(ctx);
+
+        // Assert
+        expect(ctx.session.broadcastFilterStatus).toBeNull();
+        expect(ctx.session.broadcastFilterBotId).toBeNull();
+      });
+    });
+
+    describe('onBroadcastCancel - resets filter state', () => {
+      it('should reset filter state on cancel', async () => {
+        // Arrange
+        const ctx = createMockContext(
+          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CANCEL,
+          {
+            broadcastSubscriptionId: 1,
+            broadcastFilterStatus: 'expired',
+            broadcastFilterBotId: 5,
+          },
+        );
+
+        // Act
+        await masterbotUpdate.onBroadcastCancel(ctx);
+
+        // Assert
+        expect(ctx.session.broadcastFilterStatus).toBeNull();
+        expect(ctx.session.broadcastFilterBotId).toBeNull();
+      });
+    });
+
+    describe('backward compatibility (AC5)', () => {
+      it('should work with default filter values when filters not explicitly selected', async () => {
+        // Arrange
+        const ctx = createMockContext(
+          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM,
+          {
+            broadcastSubscriptionId: 1,
+            broadcastMessage: 'Test message',
+            broadcastMessageEntities: null,
+            // Filters not set (null) - should default to active/all bots
+          },
+        );
+
+        // Act
+        await masterbotUpdate.onBroadcastConfirm(ctx);
+
+        // Assert - should call with default values
+        expect(mockBroadcastService.sendBroadcast).toHaveBeenCalledWith(
+          1,
+          'Test message',
+          undefined,
+          12345,
+          'active',
+          null,
+        );
+      });
+    });
+  });
 });
