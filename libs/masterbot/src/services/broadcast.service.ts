@@ -42,16 +42,29 @@ export class BroadcastService {
   ) {}
 
   /**
-   * Count active subscribers for a subscription
+   * Count subscribers with optional filters
    *
-   * CRITICAL: Validates subscription is broadcast type INLINE before counting
+   * CRITICAL: Validates subscription exists INLINE before counting
+   *
+   * Supports filtering by:
+   * - filterStatus: 'active' (default) or 'expired'
+   * - filterBotId: specific bot ID or null/undefined for all bots
+   *
+   * Backward compatible: calling without filter parameters returns
+   * active subscriber count (identical to previous behavior)
    *
    * @param subscriptionId - The subscription ID
-   * @returns Number of active subscribers
-   * @throws Error if subscription not found or is not broadcast type
+   * @param filterStatus - 'active' | 'expired' (default: 'active')
+   * @param filterBotId - Optional bot ID filter (null/undefined = all bots)
+   * @returns Number of matching subscribers
+   * @throws Error if subscription not found
    */
-  async countSubscribers(subscriptionId: number): Promise<number> {
-    // Validate subscription type
+  async countSubscribers(
+    subscriptionId: number,
+    filterStatus?: 'active' | 'expired',
+    filterBotId?: number | null,
+  ): Promise<number> {
+    // Validate subscription exists
     const subscription =
       await this.subscriptionsRepository.findById(subscriptionId);
 
@@ -59,13 +72,32 @@ export class BroadcastService {
       throw new Error('Subscription not found');
     }
 
-    // Count active subscribers
+    // Determine which query to use based on filterStatus
+    const status = filterStatus ?? 'active';
+
+    if (status === 'expired') {
+      // Use findExpired for expired subscribers
+      const expiredSubscribers =
+        await this.userSubscriptionsRepository.findExpired(
+          undefined, // subscriptionType - not filtering by type
+          filterBotId ?? undefined, // botId filter
+          subscriptionId, // subscriptionId filter
+        );
+      return expiredSubscribers.length;
+    }
+
+    // Default: active subscribers (backward compatible)
     const subscribers =
       await this.userSubscriptionsRepository.findActiveBySubscriptionId(
         subscriptionId,
       );
-    console.log('subscribers', subscribers);
-    return subscribers.map((s) => s.userSubscription).length;
+
+    // Apply bot filter if provided (for active subscribers)
+    if (filterBotId != null) {
+      return subscribers.filter((s) => s.botUser.botId === filterBotId).length;
+    }
+
+    return subscribers.length;
   }
 
   /**
