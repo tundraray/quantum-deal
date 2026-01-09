@@ -115,7 +115,8 @@ export class MasterbotUpdate {
       `• /start - Initialize the admin panel\n` +
       `• /stats - View user and subscription statistics\n` +
       `• /code - Generate subscription codes\n` +
-      `• /subscription - Manage subscriptions (create, close, broadcast)\n` +
+      `• /subscription - Manage subscriptions (create, close)\n` +
+      `• /broadcast - Send message to subscribers\n` +
       `• /help - Show this help message\n\n` +
       `This bot provides administrative tools for monitoring the QuantumDeal bot ecosystem.\n\n` +
       `_Logged in as: ${manager.username || manager.firstName || `Manager ${manager.telegramId}`}_`;
@@ -390,12 +391,6 @@ export class MasterbotUpdate {
             Markup.button.callback(
               '🔒 Закрыть подписку',
               MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.SUBSCRIPTION_CLOSE,
-            ),
-          ],
-          [
-            Markup.button.callback(
-              '📢 Отправить сообщение',
-              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.SUBSCRIPTION_BROADCAST,
             ),
           ],
         ]),
