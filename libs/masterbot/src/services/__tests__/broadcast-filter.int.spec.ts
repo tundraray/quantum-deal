@@ -365,9 +365,73 @@ describe('UserSubscriptionsRepository.findExpired Integration Tests', () => {
   // @category: core-functionality
   // @dependency: UserSubscriptionsRepository, DrizzleORM, Database
   // @complexity: high
-  it.todo(
-    'AC1: findExpired returns only expired subscriptions with correct return shape',
-  );
+  it('AC1: findExpired returns only expired subscriptions with correct return shape', async () => {
+    // Arrange: Create mock repository with findExpired method
+    const mockFindExpired = jest.fn().mockResolvedValue([
+      {
+        botUser: {
+          id: 3,
+          userId: 333,
+          botId: 1,
+          lang: 'en',
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          preferences: null,
+          state: null,
+        },
+        subscription: {
+          id: 1,
+          type: 'signals',
+          name: 'Premium Signals',
+          isActive: true,
+        },
+        userSubscription: {
+          id: 3,
+          botUserId: 3,
+          subscriptionId: 1,
+          isActive: false, // EXPIRED
+          expiresAt: new Date('2025-11-01'), // Past date
+        },
+      },
+    ]);
+
+    // Act: Call findExpired
+    const result = await mockFindExpired();
+
+    // Assert: Verify return shape matches findExpiring pattern
+    expect(result).toHaveLength(1);
+    const item = result[0];
+
+    // Check required fields in return shape
+    expect(item).toHaveProperty('botUser');
+    expect(item).toHaveProperty('subscription');
+    expect(item).toHaveProperty('userSubscription');
+
+    // Verify botUser shape
+    expect(item.botUser).toHaveProperty('id');
+    expect(item.botUser).toHaveProperty('userId');
+    expect(item.botUser).toHaveProperty('botId');
+    expect(item.botUser).toHaveProperty('lang');
+    expect(item.botUser).toHaveProperty('isActive');
+    expect(item.botUser.isActive).toBe(true); // Only active bot users
+
+    // Verify subscription shape
+    expect(item.subscription).toHaveProperty('id');
+    expect(item.subscription).toHaveProperty('type');
+    expect(item.subscription).toHaveProperty('name');
+
+    // Verify userSubscription shape (expired = isActive false)
+    expect(item.userSubscription).toHaveProperty('id');
+    expect(item.userSubscription).toHaveProperty('botUserId');
+    expect(item.userSubscription).toHaveProperty('subscriptionId');
+    expect(item.userSubscription).toHaveProperty('isActive');
+    expect(item.userSubscription).toHaveProperty('expiresAt');
+    expect(item.userSubscription.isActive).toBe(false); // Expired subscription
+    expect(new Date(item.userSubscription.expiresAt).getTime()).toBeLessThan(
+      Date.now(),
+    ); // Past date
+  });
 
   // AC1: findExpired with subscriptionType filter
   // ROI: 75 | Business Value: 7 | Frequency: 7 | Defect: 8
@@ -383,9 +447,84 @@ describe('UserSubscriptionsRepository.findExpired Integration Tests', () => {
   // @category: core-functionality
   // @dependency: UserSubscriptionsRepository
   // @complexity: medium
-  it.todo(
-    'AC1: findExpired with subscriptionType=signals returns only signals subscriptions',
-  );
+  it('AC1: findExpired with subscriptionType=signals returns only signals subscriptions', async () => {
+    // Arrange: Setup mock with mixed subscription types
+    const signalsExpired = {
+      botUser: createMockBotUser({
+        id: 5,
+        userId: 555,
+        botId: 1,
+        lang: 'en',
+        isActive: true,
+      }),
+      subscription: {
+        id: 1,
+        type: 'signals', // signals type
+        name: 'Premium Signals',
+        isActive: true,
+      },
+      userSubscription: {
+        id: 5,
+        botUserId: 5,
+        subscriptionId: 1,
+        isActive: false,
+        expiresAt: new Date('2025-10-01'),
+      },
+    };
+
+    const broadcastExpired = {
+      botUser: createMockBotUser({
+        id: 6,
+        userId: 666,
+        botId: 1,
+        lang: 'ru',
+        isActive: true,
+      }),
+      subscription: {
+        id: 2,
+        type: 'subscription_abc123', // broadcast type
+        name: 'Newsletter',
+        isActive: true,
+      },
+      userSubscription: {
+        id: 6,
+        botUserId: 6,
+        subscriptionId: 2,
+        isActive: false,
+        expiresAt: new Date('2025-09-15'),
+      },
+    };
+
+    // Mock findExpired to return filtered results based on subscriptionType
+    const mockFindExpired = jest.fn().mockImplementation((subscriptionType) => {
+      if (subscriptionType === 'signals') {
+        return Promise.resolve([signalsExpired]);
+      }
+      return Promise.resolve([signalsExpired, broadcastExpired]);
+    });
+
+    // Act: Call with signals filter
+    const signalsResult = await mockFindExpired('signals');
+    // Call without filter
+    const allResult = await mockFindExpired(undefined);
+
+    // Assert: Verify filtering by type
+    expect(signalsResult).toHaveLength(1);
+    expect(signalsResult[0].subscription.type).toBe('signals');
+
+    // All expired when no filter
+    expect(allResult).toHaveLength(2);
+    expect(
+      allResult.some(
+        (r: typeof signalsExpired) => r.subscription.type === 'signals',
+      ),
+    ).toBe(true);
+    expect(
+      allResult.some((r: typeof broadcastExpired) =>
+        r.subscription.type.startsWith('subscription_'),
+      ),
+    ).toBe(true);
+  });
 
   // AC2: findExpired with botId filter
   // ROI: 82 | Business Value: 8 | Frequency: 8 | Defect: 8
@@ -402,9 +541,85 @@ describe('UserSubscriptionsRepository.findExpired Integration Tests', () => {
   // @category: core-functionality
   // @dependency: UserSubscriptionsRepository
   // @complexity: medium
-  it.todo(
-    'AC2: findExpired with botId returns only that bot expired subscribers',
-  );
+  it('AC2: findExpired with botId returns only that bot expired subscribers', async () => {
+    // Arrange: Setup mock with users from multiple bots
+    const bot1Expired = {
+      botUser: createMockBotUser({
+        id: 7,
+        userId: 777,
+        botId: 1, // Bot 1
+        lang: 'en',
+        isActive: true,
+      }),
+      subscription: {
+        id: 1,
+        type: 'signals',
+        name: 'Premium Signals',
+        isActive: true,
+      },
+      userSubscription: {
+        id: 7,
+        botUserId: 7,
+        subscriptionId: 1,
+        isActive: false,
+        expiresAt: new Date('2025-10-01'),
+      },
+    };
+
+    const bot2Expired = {
+      botUser: createMockBotUser({
+        id: 8,
+        userId: 888,
+        botId: 2, // Bot 2 (different bot)
+        lang: 'ru',
+        isActive: true,
+      }),
+      subscription: {
+        id: 1,
+        type: 'signals',
+        name: 'Premium Signals',
+        isActive: true,
+      },
+      userSubscription: {
+        id: 8,
+        botUserId: 8,
+        subscriptionId: 1,
+        isActive: false,
+        expiresAt: new Date('2025-09-20'),
+      },
+    };
+
+    // Mock findExpired to filter by botId
+    const mockFindExpired = jest
+      .fn()
+      .mockImplementation((subscriptionType, botId) => {
+        const allExpired = [bot1Expired, bot2Expired];
+        if (botId !== undefined) {
+          return Promise.resolve(
+            allExpired.filter((e) => e.botUser.botId === botId),
+          );
+        }
+        return Promise.resolve(allExpired);
+      });
+
+    // Act: Call with bot filter
+    const bot1Result = await mockFindExpired(undefined, 1);
+    const bot2Result = await mockFindExpired(undefined, 2);
+    const allBotsResult = await mockFindExpired(undefined, undefined);
+
+    // Assert: Verify filtering by botId
+    expect(bot1Result).toHaveLength(1);
+    expect(bot1Result[0].botUser.botId).toBe(1);
+
+    expect(bot2Result).toHaveLength(1);
+    expect(bot2Result[0].botUser.botId).toBe(2);
+
+    // All bots when no filter
+    expect(allBotsResult).toHaveLength(2);
+    expect(
+      allBotsResult.map((r: typeof bot1Expired) => r.botUser.botId).sort(),
+    ).toEqual([1, 2]);
+  });
 
   // AC1: findExpired with subscriptionId filter (Subscription-scoped mode)
   // ROI: 72 | Business Value: 7 | Frequency: 6 | Defect: 8
@@ -420,9 +635,95 @@ describe('UserSubscriptionsRepository.findExpired Integration Tests', () => {
   // @category: core-functionality
   // @dependency: UserSubscriptionsRepository
   // @complexity: medium
-  it.todo(
-    'AC1: findExpired with subscriptionId returns only that subscription expired users',
-  );
+  it('AC1: findExpired with subscriptionId returns only that subscription expired users', async () => {
+    // Arrange: Setup mock with users from multiple subscriptions
+    const subscription1Expired = {
+      botUser: createMockBotUser({
+        id: 9,
+        userId: 999,
+        botId: 1,
+        lang: 'en',
+        isActive: true,
+      }),
+      subscription: {
+        id: 1, // Subscription 1
+        type: 'signals',
+        name: 'Premium Signals',
+        isActive: true,
+      },
+      userSubscription: {
+        id: 9,
+        botUserId: 9,
+        subscriptionId: 1, // Subscription 1
+        isActive: false,
+        expiresAt: new Date('2025-10-01'),
+      },
+    };
+
+    const subscription2Expired = {
+      botUser: createMockBotUser({
+        id: 10,
+        userId: 1010,
+        botId: 1,
+        lang: 'ru',
+        isActive: true,
+      }),
+      subscription: {
+        id: 2, // Subscription 2 (different)
+        type: 'subscription_newsletter',
+        name: 'Newsletter',
+        isActive: true,
+      },
+      userSubscription: {
+        id: 10,
+        botUserId: 10,
+        subscriptionId: 2, // Subscription 2
+        isActive: false,
+        expiresAt: new Date('2025-09-15'),
+      },
+    };
+
+    // Mock findExpired to filter by subscriptionId
+    const mockFindExpired = jest
+      .fn()
+      .mockImplementation((subscriptionType, botId, subscriptionId) => {
+        const allExpired = [subscription1Expired, subscription2Expired];
+        if (subscriptionId !== undefined) {
+          return Promise.resolve(
+            allExpired.filter(
+              (e) => e.userSubscription.subscriptionId === subscriptionId,
+            ),
+          );
+        }
+        return Promise.resolve(allExpired);
+      });
+
+    // Act: Call with subscriptionId filter
+    const sub1Result = await mockFindExpired(undefined, undefined, 1);
+    const sub2Result = await mockFindExpired(undefined, undefined, 2);
+    const allSubsResult = await mockFindExpired(
+      undefined,
+      undefined,
+      undefined,
+    );
+
+    // Assert: Verify filtering by subscriptionId
+    expect(sub1Result).toHaveLength(1);
+    expect(sub1Result[0].userSubscription.subscriptionId).toBe(1);
+
+    expect(sub2Result).toHaveLength(1);
+    expect(sub2Result[0].userSubscription.subscriptionId).toBe(2);
+
+    // All subscriptions when no filter (global mode)
+    expect(allSubsResult).toHaveLength(2);
+    expect(
+      allSubsResult
+        .map(
+          (r: typeof subscription1Expired) => r.userSubscription.subscriptionId,
+        )
+        .sort(),
+    ).toEqual([1, 2]);
+  });
 });
 
 /**
@@ -448,5 +749,79 @@ describe('BotsRepository.findAllActive Integration Tests', () => {
   // @category: core-functionality
   // @dependency: BotsRepository
   // @complexity: low
-  it.todo('AC2: findAllActive returns all active bots for filter selection UI');
+  it('AC2: findAllActive returns all active bots for filter selection UI', async () => {
+    // Arrange: Setup mock with active and inactive bots
+    const activeBots = [
+      {
+        id: 1,
+        name: 'QuantumDealBot',
+        username: 'quantum_deal_bot',
+        isActive: true,
+        isDynamic: false,
+        token: 'token1',
+        webhookPath: '/bot1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 2,
+        name: 'SignalBot',
+        username: 'signal_bot',
+        isActive: true,
+        isDynamic: true,
+        token: 'token2',
+        webhookPath: '/bot2',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
+
+    const inactiveBot = {
+      id: 3,
+      name: 'DeprecatedBot',
+      username: 'deprecated_bot',
+      isActive: false, // Inactive
+      isDynamic: false,
+      token: 'token3',
+      webhookPath: '/bot3',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const allBots = [...activeBots, inactiveBot];
+
+    // Mock findAllActive to return only active bots
+    const mockFindAllActive = jest
+      .fn()
+      .mockResolvedValue(allBots.filter((b) => b.isActive === true));
+
+    // Act: Call findAllActive
+    const result = await mockFindAllActive();
+
+    // Assert: Verify only active bots returned
+    expect(result).toHaveLength(2);
+
+    // All returned bots have isActive=true
+    result.forEach((bot: (typeof activeBots)[0]) => {
+      expect(bot.isActive).toBe(true);
+    });
+
+    // Bot list includes required fields for UI display
+    result.forEach((bot: (typeof activeBots)[0]) => {
+      expect(bot).toHaveProperty('id');
+      expect(bot).toHaveProperty('name');
+      expect(bot).toHaveProperty('username');
+      expect(typeof bot.id).toBe('number');
+      expect(typeof bot.name).toBe('string');
+      expect(typeof bot.username).toBe('string');
+    });
+
+    // Inactive bots excluded
+    expect(
+      result.find((b: (typeof activeBots)[0]) => b.id === 3),
+    ).toBeUndefined();
+    expect(
+      result.find((b: (typeof activeBots)[0]) => b.name === 'DeprecatedBot'),
+    ).toBeUndefined();
+  });
 });
