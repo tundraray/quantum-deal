@@ -12,10 +12,9 @@ import type {
 import type { NotificationService } from '@quantumdeal/framework/notifications';
 import type { LLMService } from '@quantumdeal/framework';
 import { BroadcastService } from '../../services/broadcast.service';
-import { MasterbotUpdate } from '../../masterbot.update';
+import { BroadcastUpdate } from '../../broadcast.update';
 import { MASTERBOT_CONSTANTS } from '../../constants';
 import type { MasterbotService } from '../../masterbot.service';
-import type { SubscriptionManagementService } from '../../services/subscription-management.service';
 import type { UserContext } from '../../interfaces';
 import type { Telegraf } from 'telegraf';
 
@@ -35,7 +34,7 @@ const TEST_SUBSCRIPTION_ID = 1;
  * Prerequisites:
  * - All feature implementations complete (Phase 1-3 of implementation plan)
  * - BroadcastService extended with filter parameters
- * - MasterbotUpdate handlers extended with filter selection flow
+ * - BroadcastUpdate handlers extended with filter selection flow
  * - Session state includes filter fields
  * - Test database with seed data for subscriptions, users, bots
  *
@@ -50,16 +49,11 @@ const TEST_SUBSCRIPTION_ID = 1;
 
 describe('Broadcast Filter Extension E2E Tests', () => {
   // Mocks for E2E test
-  let masterbotUpdate: MasterbotUpdate;
+  let broadcastUpdate: BroadcastUpdate;
   let broadcastService: BroadcastService;
   let mockBot: jest.Mocked<Telegraf<UserContext>>;
   let mockMasterbotService: jest.Mocked<MasterbotService>;
   let mockSubscriptionsRepository: jest.Mocked<SubscriptionsRepository>;
-  let mockCodesRepository: jest.Mocked<{
-    findByCode: jest.Mock;
-    create: jest.Mock;
-  }>;
-  let mockSubscriptionManagementService: jest.Mocked<SubscriptionManagementService>;
   let mockBroadcastService: jest.Mocked<BroadcastService>;
   let mockBotsRepository: jest.Mocked<BotsRepository>;
   let mockUserSubscriptionsRepository: jest.Mocked<
@@ -383,7 +377,7 @@ describe('Broadcast Filter Extension E2E Tests', () => {
       mockLLMService as never,
     );
 
-    // Create mock for BroadcastService used by MasterbotUpdate
+    // Create mock for BroadcastService used by BroadcastUpdate
     mockBroadcastService = {
       countSubscribers: jest
         .fn()
@@ -425,15 +419,13 @@ describe('Broadcast Filter Extension E2E Tests', () => {
       validateMessage: jest.fn().mockReturnValue({ valid: true }),
     } as unknown as jest.Mocked<BroadcastService>;
 
-    // Create MasterbotUpdate instance
-    masterbotUpdate = new MasterbotUpdate(
+    // Create BroadcastUpdate instance
+    broadcastUpdate = new BroadcastUpdate(
       mockBot,
-      mockMasterbotService,
-      mockSubscriptionsRepository,
-      mockCodesRepository as never,
-      mockSubscriptionManagementService,
       mockBroadcastService,
+      mockSubscriptionsRepository,
       mockBotsRepository,
+      mockMasterbotService,
     );
   });
 
@@ -454,7 +446,7 @@ describe('Broadcast Filter Extension E2E Tests', () => {
     const selectSubCtx = createMockContext(
       `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${TEST_SUBSCRIPTION_ID}`,
     );
-    await masterbotUpdate.onBroadcastSubscriptionSelected(selectSubCtx);
+    await broadcastUpdate.onBroadcastSubscriptionSelected(selectSubCtx);
 
     // Verify: Flow state set to selecting_status_filter, status filter keyboard shown
     expect(selectSubCtx.session.flowState).toBe('selecting_status_filter');
@@ -471,7 +463,7 @@ describe('Broadcast Filter Extension E2E Tests', () => {
         flowState: 'selecting_status_filter',
       },
     );
-    await masterbotUpdate.onBroadcastFilterExpired(selectExpiredCtx);
+    await broadcastUpdate.onBroadcastFilterExpired(selectExpiredCtx);
 
     // Verify: Session state updated, bot filter keyboard shown
     expect(selectExpiredCtx.session.broadcastFilterStatus).toBe('expired');
@@ -487,7 +479,7 @@ describe('Broadcast Filter Extension E2E Tests', () => {
         flowState: 'selecting_bot_filter',
       },
     );
-    await masterbotUpdate.onBroadcastBotAll(selectAllBotsCtx);
+    await broadcastUpdate.onBroadcastBotAll(selectAllBotsCtx);
 
     // Verify: Session state updated, message input prompt shown
     expect(selectAllBotsCtx.session.broadcastFilterBotId).toBeNull();
@@ -506,7 +498,7 @@ describe('Broadcast Filter Extension E2E Tests', () => {
         broadcastFilterBotId: null,
       },
     );
-    await masterbotUpdate.onBroadcastConfirm(confirmCtx);
+    await broadcastUpdate.onBroadcastConfirm(confirmCtx);
 
     // Verify: BroadcastService called with correct filter parameters
     expect(mockBroadcastService.sendBroadcast).toHaveBeenCalledWith(
@@ -562,7 +554,7 @@ describe('Broadcast Filter Extension E2E Tests', () => {
     const selectSubCtx = createMockContext(
       `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${TEST_SUBSCRIPTION_ID}`,
     );
-    await masterbotUpdate.onBroadcastSubscriptionSelected(selectSubCtx);
+    await broadcastUpdate.onBroadcastSubscriptionSelected(selectSubCtx);
     expect(selectSubCtx.session.flowState).toBe('selecting_status_filter');
 
     // Step 2: Manager selects "Expired subscribers" filter
@@ -573,7 +565,7 @@ describe('Broadcast Filter Extension E2E Tests', () => {
         flowState: 'selecting_status_filter',
       },
     );
-    await masterbotUpdate.onBroadcastFilterExpired(selectExpiredCtx);
+    await broadcastUpdate.onBroadcastFilterExpired(selectExpiredCtx);
     expect(selectExpiredCtx.session.broadcastFilterStatus).toBe('expired');
     expect(selectExpiredCtx.session.flowState).toBe('selecting_bot_filter');
 
@@ -586,7 +578,7 @@ describe('Broadcast Filter Extension E2E Tests', () => {
         flowState: 'selecting_bot_filter',
       },
     );
-    await masterbotUpdate.onBroadcastBotSelected(selectBotCtx);
+    await broadcastUpdate.onBroadcastBotSelected(selectBotCtx);
 
     // Verify: Session state correctly tracks both filters
     expect(selectBotCtx.session.broadcastFilterBotId).toBe(TEST_BOT_ID);
@@ -605,7 +597,7 @@ describe('Broadcast Filter Extension E2E Tests', () => {
         broadcastFilterBotId: TEST_BOT_ID,
       },
     );
-    await masterbotUpdate.onBroadcastConfirm(confirmCtx);
+    await broadcastUpdate.onBroadcastConfirm(confirmCtx);
 
     // Verify: BroadcastService called with BOTH filter parameters
     expect(mockBroadcastService.sendBroadcast).toHaveBeenCalledWith(
@@ -657,16 +649,11 @@ describe('Broadcast Filter Extension E2E Tests', () => {
  */
 describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => {
   // Mocks for E2E test
-  let masterbotUpdate: MasterbotUpdate;
+  let broadcastUpdate: BroadcastUpdate;
   let broadcastService: BroadcastService;
   let mockBot: jest.Mocked<Telegraf<UserContext>>;
   let mockMasterbotService: jest.Mocked<MasterbotService>;
   let mockSubscriptionsRepository: jest.Mocked<SubscriptionsRepository>;
-  let mockCodesRepository: jest.Mocked<{
-    findByCode: jest.Mock;
-    create: jest.Mock;
-  }>;
-  let mockSubscriptionManagementService: jest.Mocked<SubscriptionManagementService>;
   let mockBroadcastService: jest.Mocked<BroadcastService>;
   let mockBotsRepository: jest.Mocked<BotsRepository>;
   let mockUserSubscriptionsRepository: jest.Mocked<
@@ -936,15 +923,13 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
       validateMessage: jest.fn().mockReturnValue({ valid: true }),
     } as unknown as jest.Mocked<BroadcastService>;
 
-    // Create MasterbotUpdate instance
-    masterbotUpdate = new MasterbotUpdate(
+    // Create BroadcastUpdate instance
+    broadcastUpdate = new BroadcastUpdate(
       mockBot,
-      mockMasterbotService,
-      mockSubscriptionsRepository,
-      mockCodesRepository as never,
-      mockSubscriptionManagementService,
       mockBroadcastService,
+      mockSubscriptionsRepository,
       mockBotsRepository,
+      mockMasterbotService,
     );
   });
 
@@ -964,7 +949,7 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
     const selectSubCtx = createMockContext(
       `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${TEST_SUBSCRIPTION_ID}`,
     );
-    await masterbotUpdate.onBroadcastSubscriptionSelected(selectSubCtx);
+    await broadcastUpdate.onBroadcastSubscriptionSelected(selectSubCtx);
     expect(selectSubCtx.session.flowState).toBe('selecting_status_filter');
 
     // Step 2: Manager selects "Active subscribers" filter (default behavior)
@@ -975,7 +960,7 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
         flowState: 'selecting_status_filter',
       },
     );
-    await masterbotUpdate.onBroadcastFilterActive(selectActiveCtx);
+    await broadcastUpdate.onBroadcastFilterActive(selectActiveCtx);
 
     // Verify: Default filter status is 'active'
     expect(selectActiveCtx.session.broadcastFilterStatus).toBe('active');
@@ -990,7 +975,7 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
         flowState: 'selecting_bot_filter',
       },
     );
-    await masterbotUpdate.onBroadcastBotAll(selectAllBotsCtx);
+    await broadcastUpdate.onBroadcastBotAll(selectAllBotsCtx);
 
     // Verify: Default bot filter is null (all bots)
     expect(selectAllBotsCtx.session.broadcastFilterBotId).toBeNull();
@@ -1009,7 +994,7 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
         broadcastFilterBotId: null,
       },
     );
-    await masterbotUpdate.onBroadcastConfirm(confirmCtx);
+    await broadcastUpdate.onBroadcastConfirm(confirmCtx);
 
     // Verify: BroadcastService called with 'active' filter and null botId (backward compatible)
     expect(mockBroadcastService.sendBroadcast).toHaveBeenCalledWith(
@@ -1057,7 +1042,7 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
     const selectSubCtx = createMockContext(
       `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${TEST_SUBSCRIPTION_ID}`,
     );
-    await masterbotUpdate.onBroadcastSubscriptionSelected(selectSubCtx);
+    await broadcastUpdate.onBroadcastSubscriptionSelected(selectSubCtx);
 
     // Step 2: Manager selects "Expired subscribers" filter
     const selectExpiredCtx = createMockContext(
@@ -1067,7 +1052,7 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
         flowState: 'selecting_status_filter',
       },
     );
-    await masterbotUpdate.onBroadcastFilterExpired(selectExpiredCtx);
+    await broadcastUpdate.onBroadcastFilterExpired(selectExpiredCtx);
     expect(selectExpiredCtx.session.broadcastFilterStatus).toBe('expired');
 
     // Step 3: Manager selects "All bots"
@@ -1079,7 +1064,7 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
         flowState: 'selecting_bot_filter',
       },
     );
-    await masterbotUpdate.onBroadcastBotAll(selectAllBotsCtx);
+    await broadcastUpdate.onBroadcastBotAll(selectAllBotsCtx);
 
     // Step 4: Manager confirms broadcast (no expired subscribers exist)
     const confirmCtx = createMockContext(
@@ -1092,7 +1077,7 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
         broadcastFilterBotId: null,
       },
     );
-    await masterbotUpdate.onBroadcastConfirm(confirmCtx);
+    await broadcastUpdate.onBroadcastConfirm(confirmCtx);
 
     // Verify: BroadcastService was called
     expect(mockBroadcastService.sendBroadcast).toHaveBeenCalled();
