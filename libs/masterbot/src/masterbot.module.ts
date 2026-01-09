@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BroadcastUpdate } from './broadcast.update';
 import { MasterbotService } from './masterbot.service';
 import { MasterbotUpdate } from './masterbot.update';
 import { MasterbotInitService } from './masterbot-init.service';
@@ -13,6 +14,7 @@ import { BroadcastService } from './services/broadcast.service';
 @Module({
   imports: [DbModule, FrameworkModule, BotModule],
   providers: [
+    BroadcastUpdate,
     MasterbotService,
     MasterbotUpdate,
     MasterbotInitService,
