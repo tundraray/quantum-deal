@@ -126,9 +126,9 @@ export class BroadcastService {
   }
 
   /**
-   * Send broadcast message to all subscribers
+   * Send broadcast message to subscribers with optional filters
    *
-   * CRITICAL: Validates subscription is broadcast type INLINE before sending
+   * CRITICAL: Validates subscription exists INLINE before sending
    *
    * Features:
    * - Automatic translation based on user language preferences
@@ -137,11 +137,18 @@ export class BroadcastService {
    * - Preserves message formatting via entities (bold, italic, etc.)
    * - Converts entities to Markdown for translation preservation
    * - Fallback to original message on translation failure
+   * - Supports filtering by subscription status (active/expired)
+   * - Supports filtering by bot ID
+   *
+   * Backward compatible: calling without filter parameters sends to
+   * active subscribers (identical to previous behavior)
    *
    * @param subscriptionId - The subscription ID to broadcast to
    * @param message - The message content
    * @param entities - Message entities for formatting (optional)
    * @param managerId - The manager's Telegram ID who is broadcasting
+   * @param filterStatus - 'active' | 'expired' (default: 'active')
+   * @param filterBotId - Optional bot ID filter (null/undefined = all bots)
    * @returns Broadcast result with statistics
    * @throws Error if subscription not found, is not broadcast, or message invalid
    */
@@ -150,8 +157,10 @@ export class BroadcastService {
     message: string,
     entities: MessageEntity[] | undefined,
     managerId: number,
+    filterStatus?: 'active' | 'expired',
+    filterBotId?: number | null,
   ): Promise<BroadcastResultDto> {
-    // Validate subscription type
+    // Validate subscription exists
     const subscription =
       await this.subscriptionsRepository.findById(subscriptionId);
 
@@ -165,14 +174,48 @@ export class BroadcastService {
       throw new Error(validation.error);
     }
 
-    // Get all active subscribers with user details
-    const subscribers =
-      await this.userSubscriptionsRepository.findSubscribersWithUserDetails(
-        subscriptionId,
-      );
+    // Determine which query to use based on filterStatus
+    const status = filterStatus ?? 'active';
+    const botIdFilter = filterBotId ?? undefined;
+
+    // Log filter parameters
+    this.logger.log(
+      `Broadcast filter: status=${status}, botId=${botIdFilter ?? 'all'}`,
+    );
+
+    // Get subscribers based on filter status
+    let subscribers: Array<{
+      botUser: { userId: number; botId: number; lang: string | null };
+      userSubscription: { id: number; subscriptionId: number };
+    }>;
+
+    if (status === 'expired') {
+      // Use findExpired for expired subscribers
+      const expiredSubscribers =
+        await this.userSubscriptionsRepository.findExpired(
+          undefined, // subscriptionType - not filtering by type
+          botIdFilter, // botId filter
+          subscriptionId, // subscriptionId filter
+        );
+      subscribers = expiredSubscribers;
+    } else {
+      // Default: active subscribers (backward compatible)
+      let activeSubscribers =
+        await this.userSubscriptionsRepository.findSubscribersWithUserDetails(
+          subscriptionId,
+        );
+
+      // Apply bot filter if provided (in-memory filtering, same pattern as countSubscribers)
+      if (botIdFilter != null) {
+        activeSubscribers = activeSubscribers.filter(
+          (s) => s.botUser.botId === botIdFilter,
+        );
+      }
+      subscribers = activeSubscribers;
+    }
 
     this.logger.log(
-      `Broadcasting message to ${subscribers.length} subscribers for subscription ${subscriptionId}`,
+      `Broadcasting message to ${subscribers.length} ${status} subscribers for subscription ${subscriptionId}`,
     );
 
     // Check if message has formatting entities

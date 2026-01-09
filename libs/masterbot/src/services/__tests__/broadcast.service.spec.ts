@@ -346,4 +346,156 @@ describe('BroadcastService', () => {
       });
     });
   });
+
+  describe('sendBroadcast', () => {
+    const TEST_MESSAGE = 'Hello subscribers!';
+    const TEST_MANAGER_ID = 12345;
+
+    describe('with filters (AC1, AC2, AC3)', () => {
+      it('should query expired subscribers when filterStatus is expired', async () => {
+        // Arrange: Mock findExpired to return expired subscribers
+        mockUserSubscriptionsRepository.findExpired.mockResolvedValue(
+          expiredSubscribers,
+        );
+
+        // Act: Call sendBroadcast with filterStatus='expired'
+        const result = await broadcastService.sendBroadcast(
+          TEST_SUBSCRIPTION_ID,
+          TEST_MESSAGE,
+          undefined,
+          TEST_MANAGER_ID,
+          'expired',
+        );
+
+        // Assert: findExpired was called, correct recipients received message
+        expect(
+          mockUserSubscriptionsRepository.findExpired,
+        ).toHaveBeenCalledWith(
+          undefined, // subscriptionType
+          undefined, // botId (no filter)
+          TEST_SUBSCRIPTION_ID, // subscriptionId
+        );
+        // Should NOT call findSubscribersWithUserDetails (active query)
+        expect(
+          mockUserSubscriptionsRepository.findSubscribersWithUserDetails,
+        ).not.toHaveBeenCalled();
+        // Verify notification was sent to expired subscribers
+        expect(mockNotificationService.addMessages).toHaveBeenCalled();
+        expect(result.recipientCount).toBe(2); // 2 expired subscribers
+      });
+
+      it('should filter by botId when specified', async () => {
+        // Arrange: Set up mock to return filtered results
+        mockUserSubscriptionsRepository.findExpired.mockResolvedValue(
+          expiredSubscribersForBot5,
+        );
+
+        // Act: Call sendBroadcast with filterBotId
+        const result = await broadcastService.sendBroadcast(
+          TEST_SUBSCRIPTION_ID,
+          TEST_MESSAGE,
+          undefined,
+          TEST_MANAGER_ID,
+          'expired',
+          TEST_BOT_ID,
+        );
+
+        // Assert: Only specified bot's subscribers received message
+        expect(
+          mockUserSubscriptionsRepository.findExpired,
+        ).toHaveBeenCalledWith(
+          undefined, // subscriptionType
+          TEST_BOT_ID, // botId filter
+          TEST_SUBSCRIPTION_ID, // subscriptionId
+        );
+        expect(result.recipientCount).toBe(1); // 1 expired subscriber for bot 5
+      });
+
+      it('should apply bot filter with active status', async () => {
+        // Arrange: All active subscribers are from bot 1, so filter to bot 1
+        // The service fetches all, then filters in-memory (same pattern as countSubscribers)
+
+        // Act: Call sendBroadcast with active status and bot filter
+        const result = await broadcastService.sendBroadcast(
+          TEST_SUBSCRIPTION_ID,
+          TEST_MESSAGE,
+          undefined,
+          TEST_MANAGER_ID,
+          'active',
+          1, // Filter to bot 1
+        );
+
+        // Assert: findSubscribersWithUserDetails was called (active query)
+        expect(
+          mockUserSubscriptionsRepository.findSubscribersWithUserDetails,
+        ).toHaveBeenCalledWith(TEST_SUBSCRIPTION_ID);
+        // Verify only bot 1 subscribers are targeted (all 3 are from bot 1)
+        expect(result.recipientCount).toBe(3);
+      });
+    });
+
+    describe('backward compatibility (AC5)', () => {
+      it('should work identically to existing implementation without filters', async () => {
+        // Arrange: Use same setup as existing tests (active subscribers)
+
+        // Act: Call sendBroadcast without filter parameters
+        const result = await broadcastService.sendBroadcast(
+          TEST_SUBSCRIPTION_ID,
+          TEST_MESSAGE,
+          undefined,
+          TEST_MANAGER_ID,
+        );
+
+        // Assert: Same behavior as before extension
+        expect(
+          mockUserSubscriptionsRepository.findSubscribersWithUserDetails,
+        ).toHaveBeenCalledWith(TEST_SUBSCRIPTION_ID);
+        expect(
+          mockUserSubscriptionsRepository.findExpired,
+        ).not.toHaveBeenCalled();
+        expect(result.recipientCount).toBe(3); // 3 active subscribers
+      });
+
+      it('should work identically when filterStatus is active (explicit)', async () => {
+        // Arrange: Use same setup
+
+        // Act: Call sendBroadcast with explicit 'active' filter
+        const result = await broadcastService.sendBroadcast(
+          TEST_SUBSCRIPTION_ID,
+          TEST_MESSAGE,
+          undefined,
+          TEST_MANAGER_ID,
+          'active',
+        );
+
+        // Assert: Same behavior as no filter
+        expect(
+          mockUserSubscriptionsRepository.findSubscribersWithUserDetails,
+        ).toHaveBeenCalledWith(TEST_SUBSCRIPTION_ID);
+        expect(result.recipientCount).toBe(3);
+      });
+    });
+
+    describe('logging', () => {
+      it('should log filter parameters when sending broadcast', async () => {
+        // Arrange: Spy on logger
+        const loggerSpy = jest.spyOn(broadcastService['logger'], 'log');
+
+        // Act: Call sendBroadcast with filters
+        await broadcastService.sendBroadcast(
+          TEST_SUBSCRIPTION_ID,
+          TEST_MESSAGE,
+          undefined,
+          TEST_MANAGER_ID,
+          'expired',
+          TEST_BOT_ID,
+        );
+
+        // Assert: Filter parameters are logged
+        expect(loggerSpy).toHaveBeenCalledWith(
+          expect.stringContaining('filter'),
+        );
+      });
+    });
+  });
 });
