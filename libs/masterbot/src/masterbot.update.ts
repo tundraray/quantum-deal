@@ -14,7 +14,11 @@ import {
   ResponseTimeInterceptor,
   TelegrafExceptionFilter,
 } from '@quantumdeal/framework';
-import { SubscriptionsRepository, CodesRepository } from '@quantumdeal/db';
+import {
+  SubscriptionsRepository,
+  CodesRepository,
+  BotsRepository,
+} from '@quantumdeal/db';
 import { MasterbotService } from './masterbot.service';
 import type { UserContext } from './interfaces';
 import { MASTERBOT_CONSTANTS } from './constants';
@@ -37,6 +41,7 @@ export class MasterbotUpdate {
     private readonly codesRepository: CodesRepository,
     private readonly subscriptionManagementService: SubscriptionManagementService,
     private readonly broadcastService: BroadcastService,
+    private readonly botsRepository: BotsRepository,
   ) {}
 
   @Start()
@@ -870,6 +875,247 @@ export class MasterbotUpdate {
 
     await ctx.editMessageText('❌ Рассылка отменена.');
     await ctx.answerCbQuery('Отменено');
+  }
+
+  // ==================== Broadcast Filter Selection Handlers ====================
+
+  /**
+   * Handler for selecting "Active subscribers" filter
+   * Sets session state to track active filter and shows bot selection keyboard
+   */
+  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE)
+  async onBroadcastFilterActive(@Ctx() ctx: UserContext): Promise<void> {
+    const manager = ctx.manager;
+    if (!manager) {
+      await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
+      return;
+    }
+
+    try {
+      // Ensure session is initialized
+      this.ensureSession(ctx);
+
+      // Set filter status to active
+      ctx.session.broadcastFilterStatus = 'active';
+      ctx.session.flowState = 'selecting_bot_filter';
+
+      // Show bot selection keyboard
+      await this.showBotFilterKeyboard(ctx);
+      await ctx.answerCbQuery();
+    } catch (error) {
+      this.logger.error('Error in filter active handler', error);
+      await ctx.answerCbQuery('Ошибка');
+    }
+  }
+
+  /**
+   * Handler for selecting "Expired subscribers" filter
+   * Sets session state to track expired filter and shows bot selection keyboard
+   */
+  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED)
+  async onBroadcastFilterExpired(@Ctx() ctx: UserContext): Promise<void> {
+    const manager = ctx.manager;
+    if (!manager) {
+      await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
+      return;
+    }
+
+    try {
+      // Ensure session is initialized
+      this.ensureSession(ctx);
+
+      // Set filter status to expired
+      ctx.session.broadcastFilterStatus = 'expired';
+      ctx.session.flowState = 'selecting_bot_filter';
+
+      // Show bot selection keyboard
+      await this.showBotFilterKeyboard(ctx);
+      await ctx.answerCbQuery();
+    } catch (error) {
+      this.logger.error('Error in filter expired handler', error);
+      await ctx.answerCbQuery('Ошибка');
+    }
+  }
+
+  /**
+   * Handler for selecting "All bots" filter
+   * Sets session state to target all bots and proceeds to message input
+   */
+  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL)
+  async onBroadcastBotAll(@Ctx() ctx: UserContext): Promise<void> {
+    const manager = ctx.manager;
+    if (!manager) {
+      await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
+      return;
+    }
+
+    try {
+      // Ensure session is initialized
+      this.ensureSession(ctx);
+
+      // Set bot filter to null (all bots)
+      ctx.session.broadcastFilterBotId = null;
+      ctx.session.flowState = 'awaiting_broadcast_message';
+
+      // Show message input prompt
+      await ctx.editMessageText(
+        `📝 *Введите сообщение для рассылки*\n\n` +
+          `_Совет: Вы можете использовать форматирование текста_`,
+        { parse_mode: 'Markdown' },
+      );
+      await ctx.answerCbQuery();
+    } catch (error) {
+      this.logger.error('Error in bot all handler', error);
+      await ctx.answerCbQuery('Ошибка');
+    }
+  }
+
+  /**
+   * Handler for selecting a specific bot filter
+   * Validates bot exists and sets session state to target specific bot
+   */
+  @Action(
+    new RegExp(
+      `^${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_PREFIX}(\\d+)$`,
+    ),
+  )
+  async onBroadcastBotSelected(@Ctx() ctx: UserContext): Promise<void> {
+    const manager = ctx.manager;
+    if (!manager) {
+      await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
+      return;
+    }
+
+    try {
+      const callbackQuery = ctx.callbackQuery;
+      if (!callbackQuery || !('data' in callbackQuery)) {
+        await ctx.editMessageText('❌ Неверный выбор');
+        await ctx.answerCbQuery('Ошибка');
+        return;
+      }
+
+      // Parse bot ID from callback data
+      const match = callbackQuery.data.match(
+        new RegExp(
+          `^${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_PREFIX}(\\d+)$`,
+        ),
+      );
+
+      if (!match) {
+        await ctx.editMessageText('❌ Неверный формат выбора бота');
+        await ctx.answerCbQuery('Ошибка');
+        return;
+      }
+
+      const botId = parseInt(match[1], 10);
+
+      if (isNaN(botId)) {
+        await ctx.editMessageText('❌ Неверный ID бота');
+        await ctx.answerCbQuery('Ошибка');
+        return;
+      }
+
+      // Validate bot exists
+      const bot = await this.botsRepository.findById(botId);
+      if (!bot) {
+        await ctx.editMessageText('❌ Бот не найден');
+        await ctx.answerCbQuery('Бот не найден');
+        return;
+      }
+
+      // Ensure session is initialized
+      this.ensureSession(ctx);
+
+      // Set bot filter
+      ctx.session.broadcastFilterBotId = botId;
+      ctx.session.flowState = 'awaiting_broadcast_message';
+
+      // Show message input prompt with bot name
+      await ctx.editMessageText(
+        `📝 *Введите сообщение для рассылки*\n\n` +
+          `🤖 Бот: ${bot.name}\n\n` +
+          `_Совет: Вы можете использовать форматирование текста_`,
+        { parse_mode: 'Markdown' },
+      );
+      await ctx.answerCbQuery();
+    } catch (error) {
+      this.logger.error('Error in bot selected handler', error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Неизвестная ошибка';
+      await ctx.editMessageText(`❌ Ошибка: ${errorMessage}`);
+      await ctx.answerCbQuery('Ошибка');
+    }
+  }
+
+  /**
+   * Shows inline keyboard for selecting subscription status filter (Active/Expired)
+   */
+  private async showStatusFilterKeyboard(ctx: UserContext): Promise<void> {
+    await ctx.editMessageText(
+      `📊 *Выберите тип подписчиков*\n\n` +
+        `Выберите, каких подписчиков включить в рассылку:`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              '🟢 Активные подписчики',
+              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
+            ),
+            Markup.button.callback(
+              '🔴 Истекшие подписки',
+              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED,
+            ),
+          ],
+          [
+            Markup.button.callback(
+              '❌ Отмена',
+              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CANCEL,
+            ),
+          ],
+        ]),
+      },
+    );
+  }
+
+  /**
+   * Shows inline keyboard for selecting bot filter (All bots / Specific bot)
+   * Fetches active bots from repository and displays them as options
+   */
+  private async showBotFilterKeyboard(ctx: UserContext): Promise<void> {
+    // Fetch active bots
+    const activeBots = await this.botsRepository.findAllActive();
+
+    // Build bot selection buttons
+    const botButtons = activeBots.map((bot) => [
+      Markup.button.callback(
+        bot.name,
+        `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_PREFIX}${bot.id}`,
+      ),
+    ]);
+
+    await ctx.editMessageText(
+      `🤖 *Выберите бота*\n\n` +
+        `Выберите, подписчикам какого бота отправить рассылку:`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              '📱 Все боты',
+              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
+            ),
+          ],
+          ...botButtons,
+          [
+            Markup.button.callback(
+              '❌ Отмена',
+              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CANCEL,
+            ),
+          ],
+        ]),
+      },
+    );
   }
 
   // ==================== Text Message Handler ====================
