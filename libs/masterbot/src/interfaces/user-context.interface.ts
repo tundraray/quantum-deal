@@ -29,7 +29,13 @@ export interface UserContext extends Context {
      * Current state of the multi-step flow
      * Used to track which step of the conversation the user is in
      */
-    flowState?: string | null;
+    flowState?:
+      | 'awaiting_subscription_name'
+      | 'awaiting_broadcast_message'
+      | 'confirming_broadcast'
+      | 'selecting_status_filter'
+      | 'selecting_bot_filter'
+      | null;
 
     /**
      * Context for the current command being executed
@@ -55,5 +61,19 @@ export interface UserContext extends Context {
      * (bold, italic, links, code blocks, etc.)
      */
     broadcastMessageEntities?: MessageEntity[] | null;
+
+    /**
+     * Filter for broadcast subscriber status
+     * Used during filter selection flow to target active or expired subscribers
+     * null = not selected yet (default behavior targets active)
+     */
+    broadcastFilterStatus?: 'active' | 'expired' | null;
+
+    /**
+     * Filter for broadcast bot selection
+     * Used during filter selection flow to target specific bot's subscribers
+     * null = all bots (default behavior)
+     */
+    broadcastFilterBotId?: number | null;
   };
 }

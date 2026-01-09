@@ -37,6 +37,11 @@ export const MASTERBOT_CONSTANTS = {
     BROADCAST_SUB_PREFIX: 'broadcast_sub_',
     BROADCAST_CONFIRM: 'broadcast_confirm',
     BROADCAST_CANCEL: 'broadcast_cancel',
+    // Broadcast filter callback actions
+    BROADCAST_FILTER_ACTIVE: 'broadcast_filter_active',
+    BROADCAST_FILTER_EXPIRED: 'broadcast_filter_expired',
+    BROADCAST_BOT_ALL: 'broadcast_bot_all',
+    BROADCAST_BOT_PREFIX: 'broadcast_bot_', // Usage: `broadcast_bot_${botId}`
     MENU_STATS: 'menu_stats',
     MENU_CODE: 'menu_code',
     MENU_HELP: 'menu_help',
