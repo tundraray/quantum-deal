@@ -64,7 +64,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
     private readonly dynamicTelegrafService: DynamicTelegrafService,
     private readonly botsRepository: BotsRepository,
     private readonly botUsersRepository: BotUsersRepository,
-  ) {}
+  ) { }
 
   onModuleInit() {
     this.logger.log('Initializing NotificationService...');
@@ -315,11 +315,6 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       message.status = QueueMessageStatus.SENT;
       this.messageStats.successCount++;
     } catch (error) {
-      this.logger.error(
-        `Error sending message ${message.id} to user ${message.telegramId}:`,
-        error,
-      );
-
       // Check if this is a permanent error that shouldn't be retried
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -332,7 +327,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
         this.messageStats.retryCount++;
 
         this.logger.debug(
-          `Message ${message.id} scheduled for retry (${message.retryCount}/${message.maxRetries})`,
+          `Message ${message.id} scheduled for retry (${message.retryCount}/${message.maxRetries}), Reason: ${errorMessage}`,
         );
 
         // Schedule retry with exponential backoff
@@ -544,8 +539,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       reply_markup:
         message.buttons && message.buttons.length > 0
           ? ({
-              inline_keyboard: message.buttons,
-            } as any)
+            inline_keyboard: message.buttons,
+          } as any)
           : undefined,
     });
   }
@@ -631,8 +626,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       reply_markup:
         message.buttons && message.buttons.length > 0
           ? ({
-              inline_keyboard: message.buttons,
-            } as any)
+            inline_keyboard: message.buttons,
+          } as any)
           : undefined,
     });
   }

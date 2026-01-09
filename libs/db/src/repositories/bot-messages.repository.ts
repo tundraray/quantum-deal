@@ -3,7 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { BaseRepository } from './base.repository';
 import { DRIZZLE_CLIENT, type DrizzleClient } from '../database.provider';
 import { botMessages, BotMessage, NewBotMessage } from '../schema/bot-messages';
-import { messages } from '../schema/messages';
+import { Message, messages, MessageType } from '../schema/messages';
 
 /**
  * BotMessagesRepository
@@ -74,6 +74,28 @@ export class BotMessagesRepository extends BaseRepository<
   }
 
   /**
+   * Find messages by type and language
+   * Returns a random message template for the specified type and language
+   */
+  async findByTypeAndLang(
+    type: MessageType,
+    lang: string,
+  ): Promise<Message | null> {
+    const messagesForType = await this.db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.type, type), eq(messages.lang, lang)));
+
+    if (messagesForType.length === 0) {
+      return null;
+    }
+
+    // Return a random message template
+    const randomIndex = Math.floor(Math.random() * messagesForType.length);
+    return messagesForType[randomIndex];
+  }
+
+  /**
    * Resolve message with full hierarchy
    *
    * Resolution order per ADR-004 Decision 3:
@@ -89,7 +111,7 @@ export class BotMessagesRepository extends BaseRepository<
    */
   async resolveMessage(
     botId: number | null,
-    type: string,
+    type: MessageType,
     lang: string,
   ): Promise<string> {
     // Step 1: Check bot-specific override
@@ -101,35 +123,27 @@ export class BotMessagesRepository extends BaseRepository<
     }
 
     // Step 2: Fall back to global default
-    const globalDefault = await this.db
-      .select({ message: messages.message })
-      .from(messages)
-      .where(and(eq(messages.type, type), eq(messages.lang, lang)))
-      .limit(1);
+    const globalDefault = await this.findByTypeAndLang(type, lang);
 
-    if (globalDefault[0]?.message) {
-      return globalDefault[0].message;
+    if (globalDefault && globalDefault.message) {
+      return globalDefault.message;
     }
 
     // Step 3: Try English fallback for global messages
     if (lang !== 'en') {
-      const englishDefault = await this.db
-        .select({ message: messages.message })
-        .from(messages)
-        .where(and(eq(messages.type, type), eq(messages.lang, 'en')))
-        .limit(1);
+      const englishDefault = await this.findByTypeAndLang(type, 'en');
 
-      if (englishDefault[0]?.message) {
+      if (englishDefault && englishDefault.message) {
         this.logger.debug(
           `Message ${type} not found for lang ${lang}, using English fallback`,
         );
-        return englishDefault[0].message;
+        return englishDefault.message;
       }
     }
 
-    // Step 4: Hardcoded fallback (should rarely happen)
-    this.logger.warn(`No message found for type=${type}, lang=${lang}`);
-    return this.getHardcodedFallback(type, lang);
+    const errorMsg = `${type} template not found for languages '${lang}' and 'en'`;
+    this.logger.error(errorMsg);
+    throw new Error(errorMsg);
   }
 
   /**
@@ -146,7 +160,7 @@ export class BotMessagesRepository extends BaseRepository<
    */
   async upsert(
     botId: number,
-    type: string,
+    type: MessageType,
     lang: string,
     message: string,
   ): Promise<BotMessage> {
@@ -184,40 +198,5 @@ export class BotMessagesRepository extends BaseRepository<
     if (!existing) return false;
 
     return this.delete(existing.id);
-  }
-
-  /**
-   * Get hardcoded fallback message
-   *
-   * Used when no message exists in database for both bot-specific
-   * and global messages. This ensures the system never fails to
-   * return a message.
-   *
-   * @param type - Message type key
-   * @param lang - Language code
-   * @returns Hardcoded fallback message
-   */
-  getHardcodedFallback(type: string, lang: string): string {
-    const fallbacks: Record<string, Record<string, string>> = {
-      welcome: {
-        en: 'Welcome!',
-        ru: 'Dobro pozhalovat!',
-      },
-      error: {
-        en: 'An error occurred. Please try again.',
-        ru: 'Proizoshla oshibka. Poprobujte eshche raz.',
-      },
-    };
-
-    this.logger.error('Hardcoded fallback message', {
-      type,
-      lang,
-    });
-
-    return (
-      fallbacks[type]?.[lang] ??
-      fallbacks[type]?.['en'] ??
-      'Message not available'
-    );
   }
 }

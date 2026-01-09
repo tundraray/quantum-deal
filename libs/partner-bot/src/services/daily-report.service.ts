@@ -5,11 +5,11 @@ import { CronJob } from 'cron';
 import {
   OrdersRepository,
   UserSubscriptionsRepository,
-  MessagesRepository,
   Order,
   MessageType,
   BotsRepository,
   BotSettingsRepository,
+  BotMessagesRepository,
 } from '@quantumdeal/db';
 import {
   MessagePriority,
@@ -56,6 +56,7 @@ interface ClientDailyReportData {
 
   readonly client: {
     readonly telegramId: number;
+    readonly botId: number;
     readonly lang?: string | null;
     readonly subscription: {
       readonly id: number;
@@ -95,7 +96,7 @@ export class DailyReportService {
 
   constructor(
     private readonly ordersRepository: OrdersRepository,
-    private readonly messagesRepository: MessagesRepository,
+    private readonly botMessagesRepository: BotMessagesRepository,
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly notificationService: NotificationService,
     private readonly schedulerRegistry: SchedulerRegistry,
@@ -509,6 +510,7 @@ export class DailyReportService {
         generatedAt: sharedData.generatedAt,
         client: {
           telegramId: client.telegramId,
+          botId: client.botId,
           lang: client.lang,
           subscription: {
             id: client.subscriptionId,
@@ -594,7 +596,8 @@ export class DailyReportService {
     const bestSymbol3 = allOrders[2] || 'N/A';
 
     try {
-      const template = await this.messagesRepository.getReportTemplate(
+      const template = await this.botMessagesRepository.resolveMessage(
+        data.client.botId,
         'daily_report' as MessageType,
         clientLang,
       );
