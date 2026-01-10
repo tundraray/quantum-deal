@@ -19,7 +19,7 @@ import { MasterbotService } from './masterbot.service';
 import type { UserContext } from './interfaces';
 import { MASTERBOT_CONSTANTS } from './constants';
 import { Telegraf, Markup } from 'telegraf';
-import { BotName } from '@quantumdeal/bot';
+import { MASTERBOT_BOT_NAME } from './constants';
 import { SubscriptionManagementService } from './services/subscription-management.service';
 
 @Update()
@@ -29,7 +29,7 @@ export class MasterbotUpdate {
   private readonly logger = new Logger(MasterbotUpdate.name);
 
   constructor(
-    @InjectBot(BotName)
+    @InjectBot(MASTERBOT_BOT_NAME)
     private readonly bot: Telegraf<UserContext>,
     private readonly masterbotService: MasterbotService,
     private readonly subscriptionsRepository: SubscriptionsRepository,

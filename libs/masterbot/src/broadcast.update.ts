@@ -15,7 +15,7 @@ import {
 } from '@quantumdeal/framework';
 import { SubscriptionsRepository, BotsRepository } from '@quantumdeal/db';
 
-import { BotName } from '@quantumdeal/bot';
+import { MASTERBOT_BOT_NAME } from './constants';
 import { MASTERBOT_CONSTANTS } from './constants';
 import type { UserContext } from './interfaces';
 import { BroadcastService } from './services/broadcast.service';
@@ -28,7 +28,7 @@ export class BroadcastUpdate {
   private readonly logger = new Logger(BroadcastUpdate.name);
 
   constructor(
-    @InjectBot(BotName)
+    @InjectBot(MASTERBOT_BOT_NAME)
     private readonly bot: Telegraf<UserContext>,
     private readonly broadcastService: BroadcastService,
     private readonly subscriptionsRepository: SubscriptionsRepository,
