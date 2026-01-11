@@ -1,4 +1,9 @@
-import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  UseFilters,
+  UseInterceptors,
+} from '@nestjs/common';
 import {
   Action,
   Command,
@@ -6,6 +11,7 @@ import {
   On,
   Update,
   InjectBot,
+  Next,
 } from '@quantumdeal/telegraf';
 import { Telegraf, Markup } from 'telegraf';
 
@@ -24,6 +30,7 @@ import { MasterbotService } from './masterbot.service';
 @Update()
 @UseInterceptors(ResponseTimeInterceptor)
 @UseFilters(TelegrafExceptionFilter)
+@Injectable()
 export class BroadcastUpdate {
   private readonly logger = new Logger(BroadcastUpdate.name);
 
@@ -477,10 +484,13 @@ export class BroadcastUpdate {
   // ==================== Text Handler ====================
 
   @On('text')
-  async onText(@Ctx() ctx: UserContext): Promise<void> {
+  async onText(
+    @Ctx() ctx: UserContext,
+    @Next() next: () => Promise<void>,
+  ): Promise<void> {
     const manager = ctx.manager;
     if (!manager) {
-      return; // Ignore messages from non-managers
+      return next(); // Pass to next handler for non-managers
     }
 
     // Ensure session is initialized
@@ -491,8 +501,11 @@ export class BroadcastUpdate {
     // Only handle broadcast message input if in the correct flow state
     if (flowState === 'awaiting_broadcast_message') {
       await this.handleBroadcastMessageInput(ctx);
+      return; // Don't call next() - we handled this message
     }
-    // Other text states are not handled by BroadcastUpdate
+
+    // Pass to next handler if not our flow state
+    return next();
   }
 
   // ==================== Private Helper Methods ====================

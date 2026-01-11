@@ -14,6 +14,14 @@ export const MASTERBOT_CONSTANTS = {
     SUBSCRIPTION: '/subscription',
     BROADCAST: '/broadcast',
   },
+  COMMAND_DESCRIPTIONS: {
+    START: '🚀 /start — Панель управления',
+    STATS: '📊 /stats — Статистика пользователей и подписок',
+    CODE: '🎫 /code — Генерация кодов подписки',
+    SUBSCRIPTION: '📋 /subscription — Управление подписками',
+    BROADCAST: '📢 /broadcast — Рассылка сообщений подписчикам',
+    HELP: '💡 /help — Справка по командам',
+  },
   MESSAGES: {
     UNAUTHORIZED: '❌ Access denied. This bot is for administrators only.',
     AUTH_REQUIRED: '❌ Authentication required. Please try again.',

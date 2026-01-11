@@ -1,4 +1,4 @@
-import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
+import { Injectable, Logger, UseFilters } from '@nestjs/common';
 import {
   Start,
   Update,
@@ -7,13 +7,11 @@ import {
   Action,
   InjectBot,
   On,
+  Next,
 } from '@quantumdeal/telegraf';
 import { randomBytes } from 'crypto';
 
-import {
-  ResponseTimeInterceptor,
-  TelegrafExceptionFilter,
-} from '@quantumdeal/framework';
+import { TelegrafExceptionFilter } from '@quantumdeal/framework';
 import { SubscriptionsRepository, CodesRepository } from '@quantumdeal/db';
 import { MasterbotService } from './masterbot.service';
 import type { UserContext } from './interfaces';
@@ -23,8 +21,8 @@ import { MASTERBOT_BOT_NAME } from './constants';
 import { SubscriptionManagementService } from './services/subscription-management.service';
 
 @Update()
-@UseInterceptors(ResponseTimeInterceptor)
 @UseFilters(TelegrafExceptionFilter)
+@Injectable()
 export class MasterbotUpdate {
   private readonly logger = new Logger(MasterbotUpdate.name);
 
@@ -109,17 +107,20 @@ export class MasterbotUpdate {
     // Log manager action
     this.masterbotService.logManagerAction(manager, 'HELP_COMMAND');
 
+    const { COMMAND_DESCRIPTIONS: CMD } = MASTERBOT_CONSTANTS;
+    const managerName =
+      manager.username || manager.firstName || `Manager ${manager.telegramId}`;
+
     const helpMessage =
-      `🔧 *Master Bot Commands*\n\n` +
-      `Available commands for managers:\n\n` +
-      `• /start - Initialize the admin panel\n` +
-      `• /stats - View user and subscription statistics\n` +
-      `• /code - Generate subscription codes\n` +
-      `• /subscription - Manage subscriptions (create, close)\n` +
-      `• /broadcast - Send message to subscribers\n` +
-      `• /help - Show this help message\n\n` +
-      `This bot provides administrative tools for monitoring the QuantumDeal bot ecosystem.\n\n` +
-      `_Logged in as: ${manager.username || manager.firstName || `Manager ${manager.telegramId}`}_`;
+      `💡 *Master Bot — Справка*\n\n` +
+      `*Доступные команды:*\n` +
+      `${CMD.START}\n` +
+      `${CMD.STATS}\n` +
+      `${CMD.CODE}\n` +
+      `${CMD.SUBSCRIPTION}\n` +
+      `${CMD.BROADCAST}\n` +
+      `${CMD.HELP}\n\n` +
+      `_Logged in as: ${managerName}_`;
 
     await ctx.reply(helpMessage, {
       parse_mode: 'Markdown',
@@ -634,10 +635,13 @@ export class MasterbotUpdate {
   // ==================== Text Message Handler ====================
 
   @On('text')
-  async onText(@Ctx() ctx: UserContext): Promise<void> {
+  async onText(
+    @Ctx() ctx: UserContext,
+    @Next() next: () => Promise<void>,
+  ): Promise<void> {
     const manager = ctx.manager;
     if (!manager) {
-      return; // Ignore messages from non-managers
+      return next(); // Pass to next handler for non-managers
     }
 
     // Ensure session is initialized
@@ -647,8 +651,11 @@ export class MasterbotUpdate {
 
     if (flowState === 'awaiting_subscription_name') {
       await this.handleSubscriptionNameInput(ctx);
+      return; // Don't call next() - we handled this message
     }
-    // Broadcast message handling is done by BroadcastUpdate
+
+    // Pass to next handler (e.g., BroadcastUpdate) if not our flow state
+    return next();
   }
 
   // ==================== Private Helper Methods ====================
