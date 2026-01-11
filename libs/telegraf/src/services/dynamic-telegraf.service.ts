@@ -41,7 +41,8 @@ import * as Sentry from '@sentry/nestjs';
  */
 @Injectable()
 export class DynamicTelegrafService
-  implements OnModuleInit, OnApplicationShutdown {
+  implements OnModuleInit, OnApplicationShutdown
+{
   private readonly logger = new Logger(DynamicTelegrafService.name);
 
   /** Map of botId -> DynamicBotInstance for O(1) lookup */
@@ -73,7 +74,7 @@ export class DynamicTelegrafService
     @Inject(BOT_CONFIGURATION_PROVIDER)
     private readonly botConfigProvider: BotConfigurationProvider,
     private readonly listenersExplorer: DynamicListenersExplorerService,
-  ) { }
+  ) {}
 
   /**
    * Initialize all dynamic bots on application startup.

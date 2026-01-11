@@ -86,10 +86,17 @@ export class ListenersExplorerService
   }
 
   private registerUpdates(modules: Module[]): void {
+    // IMPORTANT: Do NOT explore imports recursively for Updates!
+    // Due to NestJS's @Global module behavior, TelegrafCoreModule imports all bot modules,
+    // which creates a complex interconnected graph. If we explore imports, we'd register
+    // Update classes from ALL bot modules for EVERY bot, causing handler conflicts.
+    // Only look at providers directly in the explicitly included modules.
     const updates = this.flatMap<InstanceWrapper>(modules, (instance) =>
       this.filterUpdates(instance),
     );
-    updates.forEach((wrapper) => this.registerListeners(this.bot, wrapper));
+    updates.forEach((wrapper) => {
+      this.registerListeners(this.bot, wrapper);
+    });
   }
 
   private registerScenes(modules: Module[]): void {

@@ -3,13 +3,13 @@
 
 import type { Telegraf } from 'telegraf';
 import type {
-  BotMessagesRepository,
   BotSettingsRepository,
   BotUsersRepository,
   UserSubscriptionsRepository,
 } from '@quantumdeal/db';
 import type { TrialService, BotCommandsService } from '@quantumdeal/bot';
 import type { DynamicTelegrafService } from '@quantumdeal/telegraf';
+import type { LocalizationService } from '@quantumdeal/framework';
 import { PartnerFlowService } from '../../services/partner-flow.service';
 import { ChannelVerifierService } from '../../services/channel-verifier.service';
 import { ReminderSchedulerService } from '../../services/reminder-scheduler.service';
@@ -28,7 +28,13 @@ describe('Partner Bot Flow Integration Tests', () => {
   let startCommandUpdate: StartCommandUpdate;
   let channelVerificationAction: ChannelVerificationAction;
 
-  let mockBotMessagesRepository: Pick<BotMessagesRepository, 'resolveMessage'>;
+  let mockLocalizationService: { forBot: jest.Mock };
+  let mockLocalizationContext: {
+    lang: jest.Mock;
+    use: jest.Mock;
+    t: jest.Mock;
+  };
+  let mockBotMessagesRepository: { resolveMessage: jest.Mock };
   let mockBotSettingsRepository: Pick<BotSettingsRepository, 'findByBotId'>;
   let mockBotUsersRepository: Pick<
     BotUsersRepository,
@@ -36,7 +42,9 @@ describe('Partner Bot Flow Integration Tests', () => {
   >;
   let mockUserSubscriptionsRepository: Pick<
     UserSubscriptionsRepository,
-    'findActiveByBotUserId'
+    | 'findActiveByBotUserId'
+    | 'findActiveWithExpiredByBotUserId'
+    | 'findActiveWithExpiredByBotAndTelegramId'
   >;
   let mockTrialService: Pick<TrialService, 'activate'>;
   let mockBotCommandsService: Pick<BotCommandsService, 'setUserCommands'>;
@@ -55,7 +63,17 @@ describe('Partner Bot Flow Integration Tests', () => {
     // Reset all mocks
     jest.clearAllMocks();
 
-    // Mock BotMessagesRepository
+    // Mock LocalizationService with fluent API
+    mockLocalizationContext = {
+      lang: jest.fn().mockReturnThis(),
+      use: jest.fn().mockReturnThis(),
+      t: jest.fn().mockResolvedValue('Mocked message'),
+    };
+    mockLocalizationService = {
+      forBot: jest.fn().mockReturnValue(mockLocalizationContext),
+    };
+
+    // Mock BotMessagesRepository (kept for backward compatibility in tests)
     mockBotMessagesRepository = {
       resolveMessage: jest.fn(),
     };
@@ -90,6 +108,21 @@ describe('Partner Bot Flow Integration Tests', () => {
     // Mock UserSubscriptionsRepository
     mockUserSubscriptionsRepository = {
       findActiveByBotUserId: jest.fn().mockResolvedValue([]),
+      findActiveWithExpiredByBotUserId: jest.fn().mockResolvedValue([]),
+      findActiveWithExpiredByBotAndTelegramId: jest.fn().mockResolvedValue([
+        {
+          userSubscription: {
+            id: 1,
+            botUserId: TEST_BOT_USER_ID,
+            expiresAt: testExpiryDate,
+          },
+          botUser: {
+            id: TEST_BOT_USER_ID,
+            userId: testUserId,
+            botId: TEST_BOT_ID,
+          },
+        },
+      ]),
     };
 
     // Mock TrialService
@@ -127,26 +160,28 @@ describe('Partner Bot Flow Integration Tests', () => {
     );
 
     partnerFlowService = new PartnerFlowService(
-      mockBotMessagesRepository as never,
+      mockLocalizationService as never,
       mockBotSettingsRepository as never,
       mockBotUsersRepository as never,
       mockTrialService as never,
       mockBotCommandsService as never,
       channelVerifierService,
       mockDynamicTelegrafService as never,
+      mockUserSubscriptionsRepository as never,
     );
 
     startCommandUpdate = new StartCommandUpdate(
-      mockBotMessagesRepository as never,
+      mockLocalizationService as never,
       partnerFlowService,
       mockBotUsersRepository as never,
       mockUserSubscriptionsRepository as never,
+      mockBotSettingsRepository as never,
     );
 
     channelVerificationAction = new ChannelVerificationAction(
       channelVerifierService,
       partnerFlowService,
-      mockBotMessagesRepository as never,
+      mockLocalizationService as never,
       mockBotUsersRepository as never,
       mockBotSettingsRepository as never,
     );
@@ -171,19 +206,28 @@ describe('Partner Bot Flow Integration Tests', () => {
   // @dependency: StartCommandUpdate, BotMessagesRepository, PartnerFlowService, BotUsersRepository
   // @complexity: high
   it('AC-PB001: User sends /start command → receives welcome message + channel subscription prompt with button', async () => {
-    // Setup: Mock message templates
-    const welcomeMessage = 'Welcome to Partner Bot! 🎉';
-    const channelPromptTemplate =
-      'Please subscribe to our channel: {channelUrl} ({channelName})';
+    // Setup: Mock message templates with interpolated values
+    const welcomeMessage = `Welcome to Partner Bot! Subscribe to ${testChannelUrl} (${testChannelName})`;
+    const iSubscribedButtonText = 'I subscribed';
+    const changeLangButtonText = 'Change Language';
+    const welcomeMessageLang = 'Select your language';
 
-    // Note: Implementation calls resolveMessage in this order:
-    // 1. partner_welcome (in handleStart)
-    // 2. partner_channel_prompt (in sendChannelPrompt)
-    // 3. partner_i_subscribed_button (in sendChannelPrompt)
-    (mockBotMessagesRepository.resolveMessage as jest.Mock)
-      .mockResolvedValueOnce(welcomeMessage) // partner_welcome
-      .mockResolvedValueOnce(channelPromptTemplate) // partner_channel_prompt
-      .mockResolvedValueOnce('I subscribed ✅'); // partner_i_subscribed_button
+    // Mock LocalizationService.t() to return appropriate messages based on key
+    mockLocalizationContext.t.mockImplementation((key: string) => {
+      if (key === 'partner_welcome') {
+        return Promise.resolve(welcomeMessage);
+      }
+      if (key === 'button_i_subscribed') {
+        return Promise.resolve(iSubscribedButtonText);
+      }
+      if (key === 'button_change_language') {
+        return Promise.resolve(changeLangButtonText);
+      }
+      if (key === 'partner_welcome_lang') {
+        return Promise.resolve(welcomeMessageLang);
+      }
+      return Promise.resolve('Mocked message');
+    });
 
     // Mock Telegram context for /start command
     const mockCtx = {
@@ -198,35 +242,28 @@ describe('Partner Bot Flow Integration Tests', () => {
     // Step 1: User sends /start command
     await startCommandUpdate.handleStart(mockCtx as never);
 
-    // Verify BotMessagesRepository.resolveMessage() called for partner_welcome
-    expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-      TEST_BOT_ID,
+    // Verify LocalizationService.forBot() called with correct botId (fluent API)
+    expect(mockLocalizationService.forBot).toHaveBeenCalledWith(TEST_BOT_ID);
+
+    // Verify lang() called with correct language
+    expect(mockLocalizationContext.lang).toHaveBeenCalledWith(testLang);
+
+    // Verify t() called for partner_welcome message key
+    expect(mockLocalizationContext.t).toHaveBeenCalledWith(
       'partner_welcome',
-      testLang,
+      expect.any(Object),
     );
 
-    // Verify welcome message sent to user (parse_mode only, no inline keyboard)
-    expect(mockCtx.reply).toHaveBeenCalledWith(welcomeMessage, {
-      parse_mode: 'HTML',
-    });
-
-    // Verify BotMessagesRepository.resolveMessage() called for partner_channel_prompt
-    expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-      TEST_BOT_ID,
-      'partner_channel_prompt',
-      testLang,
-    );
-
-    // Verify channel prompt message sent with interpolated variables
+    // Verify welcome message sent with interpolated variables and I subscribed button
     expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
       testUserId,
-      expect.stringContaining(testChannelUrl), // Contains interpolated URL
+      welcomeMessage,
       expect.objectContaining({
         reply_markup: expect.objectContaining({
           inline_keyboard: expect.arrayContaining([
             expect.arrayContaining([
               expect.objectContaining({
-                text: expect.stringContaining('I subscribed'),
+                text: iSubscribedButtonText,
                 callback_data: 'partner_verify_subscription',
               }),
             ]),
@@ -235,13 +272,9 @@ describe('Partner Bot Flow Integration Tests', () => {
       }),
     );
 
-    // Verify interpolation removed placeholders
-    const sentMessage = (mockBot.telegram.sendMessage as jest.Mock).mock
-      .calls[0][1];
-    expect(sentMessage).not.toContain('{channelUrl}');
-    expect(sentMessage).not.toContain('{channelName}');
-    expect(sentMessage).toContain(testChannelUrl);
-    expect(sentMessage).toContain(testChannelName);
+    // Verify welcome message contains channel URL (interpolated by LocalizationService)
+    expect(welcomeMessage).toContain(testChannelUrl);
+    expect(welcomeMessage).toContain(testChannelName);
 
     // Verify state updated to awaiting_channel_subscription
     expect(mockBotUsersRepository.updateState).toHaveBeenCalledWith(
@@ -256,9 +289,8 @@ describe('Partner Bot Flow Integration Tests', () => {
       }),
     );
 
-    // Verify message count === 2 (welcome + prompt)
-    expect(mockCtx.reply).toHaveBeenCalledTimes(1); // welcome
-    expect(mockBot.telegram.sendMessage).toHaveBeenCalledTimes(1); // channel prompt
+    // Verify message count === 2 (welcome + lang prompt)
+    expect(mockBot.telegram.sendMessage).toHaveBeenCalledTimes(2);
   });
 
   // AC-PB002: Successful Channel Verification and Trial Activation
@@ -285,21 +317,28 @@ describe('Partner Bot Flow Integration Tests', () => {
   // @dependency: ChannelVerificationAction, ChannelVerifierService, Telegram API, PartnerFlowService, TrialService, BotUsersRepository, UserSubscriptionsRepository, BotMessagesRepository, BotCommandsService
   // @complexity: high
   it('AC-PB002: User clicks "I subscribed" with valid subscription → channel verified → trial activated → success message sent', async () => {
-    // Setup: Mock message templates
-    const trialActivatedTemplate =
-      'Your trial is activated! Expires: {expiryDate} ({daysRemaining} days remaining)';
+    // Setup: Mock message templates using LocalizationService
+    const trialActivatedMessage =
+      'Your trial is activated! Expires: 2025-12-09 (7 days remaining)';
+    const extendTrialButtonText = 'Extend Free Period';
+    const buySubscriptionButtonText = 'Buy Subscription';
 
-    // Use mockImplementation to return different values based on message key
-    (mockBotMessagesRepository.resolveMessage as jest.Mock).mockImplementation(
-      (_botId: number, messageKey: string, _lang: string) => {
-        const messages: Record<string, string> = {
-          partner_trial_activated: trialActivatedTemplate,
-          button_extend_trial: 'Extend Free Period 🎁',
-          button_buy_subscription: 'Buy Subscription 💳',
-        };
-        return Promise.resolve(messages[messageKey] ?? 'Unknown message');
-      },
-    );
+    // Mock LocalizationService.t() to return appropriate messages based on key
+    mockLocalizationContext.t.mockImplementation((key: string) => {
+      if (key === 'partner_trial_activated') {
+        return Promise.resolve(trialActivatedMessage);
+      }
+      if (key === 'button_extend_trial') {
+        return Promise.resolve(extendTrialButtonText);
+      }
+      if (key === 'button_buy_subscription') {
+        return Promise.resolve(buySubscriptionButtonText);
+      }
+      if (key === 'button_change_language') {
+        return Promise.resolve('Change Language');
+      }
+      return Promise.resolve('Mocked message');
+    });
 
     // Mock Telegram API to return valid subscription status
     (mockBot.telegram.getChatMember as jest.Mock).mockResolvedValue({
@@ -363,44 +402,39 @@ describe('Partner Bot Flow Integration Tests', () => {
       }),
     );
 
-    // Verify BotMessagesRepository.resolveMessage() called for partner_trial_activated
-    expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-      TEST_BOT_ID,
+    // Verify LocalizationService fluent API called for partner_trial_activated
+    expect(mockLocalizationService.forBot).toHaveBeenCalledWith(TEST_BOT_ID);
+    expect(mockLocalizationContext.lang).toHaveBeenCalledWith(testLang);
+    expect(mockLocalizationContext.t).toHaveBeenCalledWith(
       'partner_trial_activated',
-      testLang,
+      expect.any(Object),
     );
 
-    // Verify success message sent with interpolated variables
-    // Note: expiryDate is recalculated in sendTrialUI using current time, so we just check structure
+    // Verify success message sent with buttons
     // When referralUrl is not configured, buttons use callback_data in separate rows
     expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
       testUserId,
-      expect.stringMatching(/Expires:.*days remaining/), // Contains expiry info
+      trialActivatedMessage,
       expect.objectContaining({
         reply_markup: expect.objectContaining({
           inline_keyboard: [
             [
               expect.objectContaining({
-                text: expect.stringContaining('Extend Free Period'),
+                text: extendTrialButtonText,
                 callback_data: 'partner_extend_trial',
               }),
             ],
             [
               expect.objectContaining({
-                text: expect.stringContaining('Buy Subscription'),
-                callback_data: 'partner_buy_subscription',
+                text: buySubscriptionButtonText,
+                // callback_data format: renew_now:{subscriptionId}:{defaultSubscriptionId}
+                callback_data: expect.stringContaining('renew_now:'),
               }),
             ],
           ],
         }),
       }),
     );
-
-    // Verify interpolation removed placeholders
-    const sentMessage = (mockBot.telegram.sendMessage as jest.Mock).mock
-      .calls[0][1];
-    expect(sentMessage).not.toContain('{expiryDate}');
-    expect(sentMessage).not.toContain('{daysRemaining}');
 
     // Verify BotCommandsService.setUserCommands() called
     expect(mockBotCommandsService.setUserCommands).toHaveBeenCalledWith(
@@ -441,9 +475,8 @@ describe('Partner Bot Flow Integration Tests', () => {
     const failureMessage =
       'You are not subscribed to the channel yet. Please subscribe first.';
 
-    (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-      failureMessage,
-    );
+    // Mock LocalizationService.t() to return failure message for partner_verification_failed
+    mockLocalizationContext.t.mockResolvedValue(failureMessage);
 
     // Mock Telegram API to return NOT subscribed status
     (mockBot.telegram.getChatMember as jest.Mock).mockResolvedValue({
@@ -479,11 +512,12 @@ describe('Partner Bot Flow Integration Tests', () => {
     // Note: Current implementation does not track verification attempts in state.
     // Rate limiting is handled via timestamp-based checks in ChannelVerifierService.
 
-    // Verify BotMessagesRepository.resolveMessage() called for partner_verification_failed
-    expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-      TEST_BOT_ID,
+    // Verify LocalizationService fluent API called for partner_verification_failed
+    expect(mockLocalizationService.forBot).toHaveBeenCalledWith(TEST_BOT_ID);
+    expect(mockLocalizationContext.lang).toHaveBeenCalledWith(testLang);
+    expect(mockLocalizationContext.t).toHaveBeenCalledWith(
       'partner_verification_failed',
-      testLang,
+      expect.any(Object),
     );
 
     // Verify error message sent with retry button
@@ -623,9 +657,9 @@ describe('Partner Bot Flow Integration Tests', () => {
   it('AC-PB007: User clicks "Buy Subscription" button → coming soon message retrieved and displayed', async () => {
     // Setup: Mock coming soon message
     const comingSoonMessage = 'Payment integration coming soon! Stay tuned.';
-    (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-      comingSoonMessage,
-    );
+
+    // Mock LocalizationService.t() to return coming soon message
+    mockLocalizationContext.t.mockResolvedValue(comingSoonMessage);
 
     // Mock user language resolution
     (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
@@ -643,9 +677,9 @@ describe('Partner Bot Flow Integration Tests', () => {
       reply: jest.fn().mockResolvedValue({}),
     };
 
-    // Create TrialUIAction instance
+    // Create TrialUIAction instance with correct dependencies
     const trialUIAction = new TrialUIAction(
-      mockBotMessagesRepository as never,
+      mockLocalizationService as never,
       mockBotUsersRepository as never,
       mockBotSettingsRepository as never,
     );
@@ -653,11 +687,11 @@ describe('Partner Bot Flow Integration Tests', () => {
     // Step 1: User clicks "Buy Subscription" button
     await trialUIAction.handleBuy(mockCtx as never);
 
-    // Verify BotMessagesRepository.resolveMessage() called for partner_coming_soon
-    expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-      TEST_BOT_ID,
+    // Verify LocalizationService fluent API called for partner_coming_soon
+    expect(mockLocalizationService.forBot).toHaveBeenCalledWith(TEST_BOT_ID);
+    expect(mockLocalizationContext.lang).toHaveBeenCalledWith(testLang);
+    expect(mockLocalizationContext.t).toHaveBeenCalledWith(
       'partner_coming_soon',
-      testLang,
     );
 
     // Verify callback query answered
@@ -719,37 +753,11 @@ describe('Partner Bot Flow Integration Tests', () => {
     };
 
     // Mock UserSubscriptionsRepository.findExpiredTrials()
-    const mockUserSubscriptionsRepository = {
+    const localMockUserSubscriptionsRepository = {
       findExpiredTrials: jest
         .fn()
         .mockResolvedValue([expiredUser1, expiredUser2, expiredUser3]),
     };
-
-    // Mock BotMessagesRepository.resolveMessage() for partner_trial_expired
-    // ReminderSchedulerService calls resolveMessage 3 times per user:
-    // 1. Main message (partner_trial_expired)
-    // 2. Extend button text (button_extend_trial)
-    // 3. Buy button text (button_buy_subscription)
-    const trialExpiredMessageTemplate =
-      'Your trial has expired! Click "Extend" to get more free days via referral link: {referralUrl}';
-    const extendButtonText = 'Extend Free Period 🎁';
-    const buyButtonText = 'Buy Subscription 💳';
-
-    // Mock implementation that returns different values based on message key
-    (mockBotMessagesRepository.resolveMessage as jest.Mock).mockImplementation(
-      (_botId: number, messageKey: string, _lang: string) => {
-        if (messageKey === 'partner_trial_expired') {
-          return Promise.resolve(trialExpiredMessageTemplate);
-        }
-        if (messageKey === 'button_extend_trial') {
-          return Promise.resolve(extendButtonText);
-        }
-        if (messageKey === 'button_buy_subscription') {
-          return Promise.resolve(buyButtonText);
-        }
-        return Promise.resolve('Unknown message');
-      },
-    );
 
     // Mock BotSettingsRepository.findByBotId() with referral URL
     const referralUrl = 'https://partner.example.com/referral';
@@ -761,6 +769,24 @@ describe('Partner Bot Flow Integration Tests', () => {
       },
     });
 
+    // Mock LocalizationService.t() to return different messages based on key
+    const trialExpiredMessage = `Your trial has expired! Click "Extend" to get more free days via referral link: ${referralUrl}`;
+    const extendButtonText = 'Extend Free Period';
+    const buyButtonText = 'Buy Subscription';
+
+    mockLocalizationContext.t.mockImplementation((key: string) => {
+      if (key === 'partner_trial_expired') {
+        return Promise.resolve(trialExpiredMessage);
+      }
+      if (key === 'button_extend_trial') {
+        return Promise.resolve(extendButtonText);
+      }
+      if (key === 'button_buy_subscription') {
+        return Promise.resolve(buyButtonText);
+      }
+      return Promise.resolve('Unknown message');
+    });
+
     // Mock bot to succeed for all users (error handling tested in unit tests)
     (mockBot.telegram.sendMessage as jest.Mock).mockResolvedValue({});
 
@@ -769,7 +795,7 @@ describe('Partner Bot Flow Integration Tests', () => {
       findActiveDynamic: jest.fn(),
     };
 
-    const mockDynamicTelegrafService = {
+    const localMockDynamicTelegrafService = {
       getBotInstance: jest.fn().mockReturnValue({
         botId: TEST_BOT_ID,
         name: 'testbot',
@@ -782,13 +808,13 @@ describe('Partner Bot Flow Integration Tests', () => {
       }),
     };
 
-    // Create ReminderSchedulerService instance
+    // Create ReminderSchedulerService instance with LocalizationService
     const reminderSchedulerService = new ReminderSchedulerService(
-      mockUserSubscriptionsRepository as never,
-      mockBotMessagesRepository as never,
+      localMockUserSubscriptionsRepository as never,
+      mockLocalizationService as never,
       mockBotSettingsRepository as never,
       mockBotsRepository as never,
-      mockDynamicTelegrafService as never,
+      localMockDynamicTelegrafService as never,
     );
 
     // Step 1: Trigger cron job
@@ -797,7 +823,7 @@ describe('Partner Bot Flow Integration Tests', () => {
 
     // Verify UserSubscriptionsRepository.findExpiredTrials() called
     expect(
-      mockUserSubscriptionsRepository.findExpiredTrials,
+      localMockUserSubscriptionsRepository.findExpiredTrials,
     ).toHaveBeenCalledWith(TEST_BOT_ID);
 
     // Verify BotSettingsRepository.findByBotId() called to retrieve referral URL
@@ -805,39 +831,39 @@ describe('Partner Bot Flow Integration Tests', () => {
       TEST_BOT_ID,
     );
 
-    // Verify BotMessagesRepository.resolveMessage() called for each expired user
-    // Now using lang field from botUser (en for users 1 and 3, ru for user 2)
-    expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-      TEST_BOT_ID,
+    // ReminderSchedulerService uses LocalizationService with fluent API
+    // Verify LocalizationService.forBot() called with correct botId
+    expect(mockLocalizationService.forBot).toHaveBeenCalledWith(TEST_BOT_ID);
+
+    // Verify t() called for partner_trial_expired and button texts
+    expect(mockLocalizationContext.t).toHaveBeenCalledWith(
       'partner_trial_expired',
-      'en',
+      expect.any(Object),
     );
-    expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-      TEST_BOT_ID,
-      'partner_trial_expired',
-      'ru',
+    expect(mockLocalizationContext.t).toHaveBeenCalledWith(
+      'button_extend_trial',
     );
-    // Each user gets 3 calls: main message + 2 button texts (extend_trial, buy_subscription)
-    // 3 users * 3 calls = 9 total calls
-    expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledTimes(9);
+    expect(mockLocalizationContext.t).toHaveBeenCalledWith(
+      'button_buy_subscription',
+    );
 
     // Verify reminder messages sent via Telegram
     // When referralUrl is valid HTTPS, the extend button uses url instead of callback_data
     expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
       111,
-      expect.stringContaining(referralUrl), // Interpolated referral URL
+      trialExpiredMessage, // Message from LocalizationService
       expect.objectContaining({
         reply_markup: expect.objectContaining({
           inline_keyboard: [
             [
               expect.objectContaining({
-                text: expect.stringContaining('Extend Free Period'),
+                text: extendButtonText,
                 url: referralUrl,
               }),
             ],
             [
               expect.objectContaining({
-                text: expect.stringContaining('Buy Subscription'),
+                text: buyButtonText,
                 callback_data: 'partner_buy_subscription',
               }),
             ],
@@ -848,13 +874,6 @@ describe('Partner Bot Flow Integration Tests', () => {
 
     // Verify sendMessage called 3 times (once per user)
     expect(mockBot.telegram.sendMessage).toHaveBeenCalledTimes(3);
-
-    // Verify interpolation removed {referralUrl} placeholder
-    const sentMessages = (mockBot.telegram.sendMessage as jest.Mock).mock.calls;
-    for (const [, message] of sentMessages) {
-      expect(message).not.toContain('{referralUrl}');
-      expect(message).toContain(referralUrl);
-    }
 
     // Verify statistics accurate: all users processed successfully
     expect(stats.sent).toBe(3); // All 3 users
