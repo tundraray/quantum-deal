@@ -2,7 +2,6 @@
 // Tests for "I subscribed" button callback handler that verifies channel membership
 
 import type {
-  BotMessagesRepository,
   BotUsersRepository,
   BotSettingsRepository,
 } from '@quantumdeal/db';
@@ -24,7 +23,14 @@ describe('ChannelVerificationAction', () => {
     PartnerFlowService,
     'handleVerificationRequest' | 'sendTrialUI'
   >;
-  let mockBotMessagesRepository: Pick<BotMessagesRepository, 'resolveMessage'>;
+  let mockLocalizationService: {
+    forBot: jest.Mock;
+  };
+  let mockLocalizationContext: {
+    lang: jest.Mock;
+    use: jest.Mock;
+    t: jest.Mock;
+  };
   let mockBotUsersRepository: Pick<
     BotUsersRepository,
     'findByUserAndBot' | 'updateState' | 'resolveLanguage'
@@ -44,8 +50,14 @@ describe('ChannelVerificationAction', () => {
       sendTrialUI: jest.fn(),
     };
 
-    mockBotMessagesRepository = {
-      resolveMessage: jest.fn(),
+    // Setup LocalizationService mock with fluent API
+    mockLocalizationContext = {
+      lang: jest.fn().mockReturnThis(),
+      use: jest.fn().mockReturnThis(),
+      t: jest.fn().mockResolvedValue('Mocked message'),
+    };
+    mockLocalizationService = {
+      forBot: jest.fn().mockReturnValue(mockLocalizationContext),
     };
 
     mockBotUsersRepository = {
@@ -62,7 +74,7 @@ describe('ChannelVerificationAction', () => {
     channelVerificationAction = new ChannelVerificationAction(
       mockChannelVerifierService as ChannelVerifierService,
       mockPartnerFlowService as PartnerFlowService,
-      mockBotMessagesRepository as BotMessagesRepository,
+      mockLocalizationService as never,
       mockBotUsersRepository as BotUsersRepository,
       mockBotSettingsRepository as BotSettingsRepository,
     );
@@ -244,21 +256,20 @@ describe('ChannelVerificationAction', () => {
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
       ).mockResolvedValue(false);
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Verification failed.',
-      );
+      // Mock LocalizationService to return failure message
+      mockLocalizationContext.t.mockResolvedValue('Verification failed.');
 
       // Act
       await channelVerificationAction.handleVerify(
         mockContext as PartnerBotContext,
       );
 
+      // Assert - LocalizationService.forBot().lang().t() is called
+      expect(mockLocalizationService.forBot).toHaveBeenCalledWith(TEST_BOT_ID);
+      expect(mockLocalizationContext.lang).toHaveBeenCalledWith('en');
+      expect(mockLocalizationContext.t).toHaveBeenCalled();
+
       // Assert - failure message with retry button is sent
-      expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-        TEST_BOT_ID,
-        'partner_verification_failed',
-        'en',
-      );
       expect(mockContext.reply).toHaveBeenCalledWith(
         'Verification failed.',
         expect.objectContaining({
@@ -479,7 +490,8 @@ describe('ChannelVerificationAction', () => {
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
       ).mockResolvedValue(false);
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
+      // Mock LocalizationService to return failure message
+      mockLocalizationContext.t.mockResolvedValue(
         'Verification failed. Please subscribe to @testchannel first.',
       );
 
@@ -488,12 +500,9 @@ describe('ChannelVerificationAction', () => {
         mockContext as PartnerBotContext,
       );
 
-      // Assert - uses botId from context
-      expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-        TEST_BOT_ID,
-        'partner_verification_failed',
-        'en',
-      );
+      // Assert - uses LocalizationService instead of BotMessagesRepository
+      expect(mockLocalizationService.forBot).toHaveBeenCalledWith(TEST_BOT_ID);
+      expect(mockLocalizationContext.lang).toHaveBeenCalledWith('en');
       expect(mockContext.reply).toHaveBeenCalledWith(
         'Verification failed. Please subscribe to @testchannel first.',
         expect.objectContaining({
@@ -535,9 +544,8 @@ describe('ChannelVerificationAction', () => {
       (
         mockChannelVerifierService.verifyMembership as jest.Mock
       ).mockResolvedValue(false);
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Verification failed.',
-      );
+      // Mock LocalizationService to return failure message
+      mockLocalizationContext.t.mockResolvedValue('Verification failed.');
 
       // Act
       await channelVerificationAction.handleVerify(
@@ -617,8 +625,8 @@ describe('ChannelVerificationAction', () => {
       ).not.toHaveBeenCalled();
     });
 
-    it('should handle missing partner configuration gracefully', async () => {
-      // Arrange
+    it('should skip channel verification and activate trial when channelId not configured', async () => {
+      // Arrange - channelId is not configured, so verification is skipped
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
         user: { botUserId: 42 } as unknown as PartnerBotContext['user'],
@@ -635,11 +643,19 @@ describe('ChannelVerificationAction', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockChannelVerifierService.isRateLimited as jest.Mock).mockResolvedValue(
-        false,
-      );
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue(
-        null,
+        null, // No settings found = no channelId
+      );
+      // Mock successful verification flow
+      const expiresAt = new Date(Date.now() + 86400000);
+      (
+        mockPartnerFlowService.handleVerificationRequest as jest.Mock
+      ).mockResolvedValue({
+        verified: true,
+        trialExpiresAt: expiresAt,
+      });
+      (mockPartnerFlowService.sendTrialUI as jest.Mock).mockResolvedValue(
+        undefined,
       );
 
       // Act
@@ -647,14 +663,15 @@ describe('ChannelVerificationAction', () => {
         mockContext as PartnerBotContext,
       );
 
-      // Assert
+      // Assert - channel verification is skipped, proceeds to trial activation
       expect(mockContext.answerCbQuery).toHaveBeenCalled();
-      expect(mockContext.reply).toHaveBeenCalledWith(
-        'Configuration error. Please contact support.',
-      );
       expect(
         mockChannelVerifierService.verifyMembership,
       ).not.toHaveBeenCalled();
+      // Should proceed to handleVerificationRequest (trial activation)
+      expect(
+        mockPartnerFlowService.handleVerificationRequest,
+      ).toHaveBeenCalledWith(123456, TEST_BOT_ID);
     });
   });
 });

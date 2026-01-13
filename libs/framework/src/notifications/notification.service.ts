@@ -64,7 +64,7 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
     private readonly dynamicTelegrafService: DynamicTelegrafService,
     private readonly botsRepository: BotsRepository,
     private readonly botUsersRepository: BotUsersRepository,
-  ) { }
+  ) {}
 
   onModuleInit() {
     this.logger.log('Initializing NotificationService...');
@@ -539,8 +539,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       reply_markup:
         message.buttons && message.buttons.length > 0
           ? ({
-            inline_keyboard: message.buttons,
-          } as any)
+              inline_keyboard: message.buttons,
+            } as any)
           : undefined,
     });
   }
@@ -626,8 +626,8 @@ export class NotificationService implements OnModuleInit, OnModuleDestroy {
       reply_markup:
         message.buttons && message.buttons.length > 0
           ? ({
-            inline_keyboard: message.buttons,
-          } as any)
+              inline_keyboard: message.buttons,
+            } as any)
           : undefined,
     });
   }

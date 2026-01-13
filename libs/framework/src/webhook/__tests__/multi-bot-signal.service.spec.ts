@@ -16,9 +16,10 @@ jest.mock('telegramify-markdown', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { MultiBotSignalService } from '../multi-bot-signal.service';
+import { SignalService } from '../multi-bot-signal.service';
 import { BotRegistryService } from '../bot-registry.service';
 import { NotificationService } from '@quantumdeal/framework/notifications';
+import { LocalizationService } from '../../localization';
 import {
   SubscriptionsRepository,
   BotMessagesRepository,
@@ -31,16 +32,18 @@ import type { SubscriptionWithFeatures } from '@quantumdeal/db';
 import type Bottleneck from 'bottleneck';
 
 /**
- * Unit tests for MultiBotSignalService
+ * Unit tests for SignalService
  * Tests the orchestration of signal delivery across multiple bots
  */
-describe('MultiBotSignalService', () => {
-  let service: MultiBotSignalService;
+describe('SignalService', () => {
+  let service: SignalService;
   let botRegistryService: jest.Mocked<BotRegistryService>;
   let subscriptionsRepository: jest.Mocked<SubscriptionsRepository>;
   let botMessagesRepository: jest.Mocked<BotMessagesRepository>;
   let notificationService: jest.Mocked<NotificationService>;
   let userSubscriptionFeaturesRepository: jest.Mocked<UserSubscriptionFeaturesRepository>;
+  let localizationService: { forBot: jest.Mock };
+  let localizationContext: { lang: jest.Mock; use: jest.Mock; t: jest.Mock };
 
   // Mock data factories
   const createMockOrder = (overrides: Partial<MergedOrder> = {}): MergedOrder =>
@@ -128,13 +131,24 @@ describe('MultiBotSignalService', () => {
       sendWithBot: jest.fn().mockReturnValue('msg-123'),
     };
 
+    // Create fluent API mock for LocalizationService
+    localizationContext = {
+      lang: jest.fn().mockReturnThis(),
+      use: jest.fn().mockReturnThis(),
+      t: jest.fn().mockResolvedValue('Signal: {symbol} at {open_price}'),
+    };
+    localizationService = {
+      forBot: jest.fn().mockReturnValue(localizationContext),
+    };
+    const mockLocalizationService = localizationService;
+
     const mockUserSubscriptionFeaturesRepository = {
       getBotUserFeatureSettings: jest.fn().mockResolvedValue(null),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        MultiBotSignalService,
+        SignalService,
         { provide: BotRegistryService, useValue: mockBotRegistryService },
         {
           provide: SubscriptionsRepository,
@@ -142,6 +156,7 @@ describe('MultiBotSignalService', () => {
         },
         { provide: BotMessagesRepository, useValue: mockBotMessagesRepository },
         { provide: NotificationService, useValue: mockNotificationService },
+        { provide: LocalizationService, useValue: mockLocalizationService },
         {
           provide: UserSubscriptionFeaturesRepository,
           useValue: mockUserSubscriptionFeaturesRepository,
@@ -149,7 +164,7 @@ describe('MultiBotSignalService', () => {
       ],
     }).compile();
 
-    service = module.get<MultiBotSignalService>(MultiBotSignalService);
+    service = module.get<SignalService>(SignalService);
     botRegistryService = module.get(BotRegistryService);
     subscriptionsRepository = module.get(SubscriptionsRepository);
     botMessagesRepository = module.get(BotMessagesRepository);
@@ -387,12 +402,10 @@ describe('MultiBotSignalService', () => {
       // Act
       await service.broadcastSignal(order, 'open');
 
-      // Assert - message resolved for bot 1 with Russian language
-      expect(botMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-        1,
-        'open',
-        'ru',
-      );
+      // Assert - LocalizationService called with correct bot and language
+      expect(localizationService.forBot).toHaveBeenCalledWith(1);
+      expect(localizationContext.lang).toHaveBeenCalledWith('ru');
+      expect(localizationContext.t).toHaveBeenCalledWith('open');
     });
   });
 
@@ -551,7 +564,7 @@ describe('MultiBotSignalService', () => {
       subscriptionsRepository.findBySectorForBot.mockResolvedValue([
         createMockSubscription(),
       ]);
-      botMessagesRepository.resolveMessage.mockResolvedValue(
+      localizationContext.t.mockResolvedValue(
         'Signal: {symbol} Open: {open_price} TP: {take_profit} SL: {stop_loss}',
       );
 
@@ -582,7 +595,7 @@ describe('MultiBotSignalService', () => {
       subscriptionsRepository.findBySectorForBot.mockResolvedValue([
         createMockSubscription(),
       ]);
-      botMessagesRepository.resolveMessage.mockResolvedValue(
+      localizationContext.t.mockResolvedValue(
         'Signal: {symbol} Unknown: {unknown_field}',
       );
 

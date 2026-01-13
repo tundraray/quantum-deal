@@ -1,4 +1,4 @@
-import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
+import { Injectable, Logger, UseFilters } from '@nestjs/common';
 import {
   Start,
   Update,
@@ -7,37 +7,33 @@ import {
   Action,
   InjectBot,
   On,
+  Next,
 } from '@quantumdeal/telegraf';
 import { randomBytes } from 'crypto';
 
-import {
-  ResponseTimeInterceptor,
-  TelegrafExceptionFilter,
-} from '@quantumdeal/framework';
+import { TelegrafExceptionFilter } from '@quantumdeal/framework';
 import { SubscriptionsRepository, CodesRepository } from '@quantumdeal/db';
 import { MasterbotService } from './masterbot.service';
 import type { UserContext } from './interfaces';
 import { MASTERBOT_CONSTANTS } from './constants';
 import { Telegraf, Markup } from 'telegraf';
-import { BotName } from '@quantumdeal/bot';
+import { MASTERBOT_BOT_NAME } from './constants';
 import { SubscriptionManagementService } from './services/subscription-management.service';
-import { BroadcastService } from './services/broadcast.service';
 
 @Update()
-@UseInterceptors(ResponseTimeInterceptor)
 @UseFilters(TelegrafExceptionFilter)
+@Injectable()
 export class MasterbotUpdate {
   private readonly logger = new Logger(MasterbotUpdate.name);
 
   constructor(
-    @InjectBot(BotName)
+    @InjectBot(MASTERBOT_BOT_NAME)
     private readonly bot: Telegraf<UserContext>,
     private readonly masterbotService: MasterbotService,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly codesRepository: CodesRepository,
     private readonly subscriptionManagementService: SubscriptionManagementService,
-    private readonly broadcastService: BroadcastService,
-  ) {}
+  ) { }
 
   @Start()
   async onStart(@Ctx() ctx: UserContext): Promise<void> {
@@ -111,16 +107,20 @@ export class MasterbotUpdate {
     // Log manager action
     this.masterbotService.logManagerAction(manager, 'HELP_COMMAND');
 
+    const { COMMAND_DESCRIPTIONS: CMD } = MASTERBOT_CONSTANTS;
+    const managerName =
+      manager.username || manager.firstName || `Manager ${manager.telegramId}`;
+
     const helpMessage =
-      `🔧 *Master Bot Commands*\n\n` +
-      `Available commands for managers:\n\n` +
-      `• /start - Initialize the admin panel\n` +
-      `• /stats - View user and subscription statistics\n` +
-      `• /code - Generate subscription codes\n` +
-      `• /subscription - Manage subscriptions (create, close, broadcast)\n` +
-      `• /help - Show this help message\n\n` +
-      `This bot provides administrative tools for monitoring the QuantumDeal bot ecosystem.\n\n` +
-      `_Logged in as: ${manager.username || manager.firstName || `Manager ${manager.telegramId}`}_`;
+      `💡 *Master Bot — Справка*\n\n` +
+      `*Доступные команды:*\n` +
+      `${CMD.START}\n` +
+      `${CMD.STATS}\n` +
+      `${CMD.CODE}\n` +
+      `${CMD.SUBSCRIPTION}\n` +
+      `${CMD.BROADCAST}\n` +
+      `${CMD.HELP}\n\n` +
+      `_Logged in as: ${managerName}_`;
 
     await ctx.reply(helpMessage, {
       parse_mode: 'Markdown',
@@ -223,7 +223,6 @@ export class MasterbotUpdate {
   @Action(/^subscription_(\d+)$/)
   async onSubscriptionSelected(@Ctx() ctx: UserContext): Promise<void> {
     const me = await this.bot.telegram.getMe();
-    console.log(me);
 
     const manager = ctx.manager;
     if (!manager) {
@@ -358,9 +357,11 @@ export class MasterbotUpdate {
       ctx.session = {
         flowState: null,
         commandContext: null,
-        broadcastSubscriptionId: null,
+        broadcastSubscriptionIds: null,
         broadcastMessage: null,
         broadcastMessageEntities: null,
+        broadcastFilterStatus: null,
+        broadcastFilterBotId: null,
       } as UserContext['session'];
     }
   }
@@ -392,12 +393,6 @@ export class MasterbotUpdate {
               MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.SUBSCRIPTION_CLOSE,
             ),
           ],
-          [
-            Markup.button.callback(
-              '📢 Отправить сообщение',
-              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.SUBSCRIPTION_BROADCAST,
-            ),
-          ],
         ]),
       });
     } catch (error) {
@@ -425,8 +420,8 @@ export class MasterbotUpdate {
 
       await ctx.editMessageText(
         '📝 *Создание подписки*\n\n' +
-          'Введите название подписки:\n\n' +
-          '_Пример: Premium Market Analysis_',
+        'Введите название подписки:\n\n' +
+        '_Пример: Premium Market Analysis_',
         { parse_mode: 'Markdown' },
       );
 
@@ -540,10 +535,10 @@ export class MasterbotUpdate {
       // Show confirmation
       await ctx.editMessageText(
         `⚠️ *Подтвердите закрытие*\n\n` +
-          `Вы уверены, что хотите закрыть подписку *${subscription.name}*?\n\n` +
-          `• Новые пользователи не смогут присоединиться\n` +
-          `• Существующие подписчики сохранят доступ\n` +
-          `• Это действие можно отменить позже`,
+        `Вы уверены, что хотите закрыть подписку *${subscription.name}*?\n\n` +
+        `• Новые пользователи не смогут присоединиться\n` +
+        `• Существующие подписчики сохранят доступ\n` +
+        `• Это действие можно отменить позже`,
         {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
@@ -616,7 +611,7 @@ export class MasterbotUpdate {
 
       await ctx.editMessageText(
         '✅ *Подписка закрыта*\n\n' +
-          'Новые пользователи не смогут присоединиться к этой подписке.',
+        'Новые пользователи не смогут присоединиться к этой подписке.',
         { parse_mode: 'Markdown' },
       );
 
@@ -636,249 +631,16 @@ export class MasterbotUpdate {
     await ctx.answerCbQuery('Отменено');
   }
 
-  // ==================== Broadcast Message Flow ====================
-
-  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.SUBSCRIPTION_BROADCAST)
-  async onBroadcast(@Ctx() ctx: UserContext): Promise<void> {
-    const manager = ctx.manager;
-    if (!manager) {
-      await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
-      return;
-    }
-
-    try {
-      // Get active broadcast subscriptions
-      const subscriptions =
-        await this.subscriptionManagementService.getActiveBroadcastSubscriptions();
-
-      if (subscriptions.length === 0) {
-        await ctx.editMessageText(
-          MASTERBOT_CONSTANTS.ERRORS.NO_ACTIVE_SUBSCRIPTIONS,
-        );
-        await ctx.answerCbQuery();
-        return;
-      }
-
-      // Get subscriber counts for each subscription
-      const subscriptionsWithCounts = await Promise.all(
-        subscriptions.map(async (sub) => ({
-          ...sub,
-          subscriberCount: await this.broadcastService.countSubscribers(sub.id),
-        })),
-      );
-
-      // Filter out subscriptions with 0 subscribers
-      const activeWithSubscribers = subscriptionsWithCounts.filter(
-        (s) => s.subscriberCount > 0,
-      );
-
-      if (activeWithSubscribers.length === 0) {
-        await ctx.editMessageText('Нет подписок с активными подписчиками.');
-        await ctx.answerCbQuery();
-        return;
-      }
-
-      // Create inline keyboard
-      const buttons = activeWithSubscribers.map((sub) => [
-        Markup.button.callback(
-          `${sub.name} (${sub.subscriberCount} чел.)`,
-          `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${sub.id}`,
-        ),
-      ]);
-      buttons.push([
-        Markup.button.callback(
-          '🔙 Отмена',
-          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CANCEL,
-        ),
-      ]);
-
-      await ctx.editMessageText(
-        '📢 *Отправить сообщение*\n\n' + 'Выберите подписку для рассылки:',
-        {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard(buttons),
-        },
-      );
-
-      await ctx.answerCbQuery();
-    } catch (error) {
-      this.logger.error('Error in broadcast action', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Неизвестная ошибка';
-      await ctx.editMessageText(`❌ Ошибка: ${errorMessage}`);
-      await ctx.answerCbQuery('Ошибка');
-    }
-  }
-
-  @Action(
-    new RegExp(
-      `^${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}(\\d+)$`,
-    ),
-  )
-  async onBroadcastSubscriptionSelected(
-    @Ctx() ctx: UserContext,
-  ): Promise<void> {
-    const manager = ctx.manager;
-    if (!manager) {
-      await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
-      return;
-    }
-
-    try {
-      const callbackQuery = ctx.callbackQuery;
-      if (!callbackQuery || !('data' in callbackQuery)) {
-        await ctx.answerCbQuery('Неверный выбор');
-        return;
-      }
-
-      const match = callbackQuery.data.match(
-        new RegExp(
-          `^${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}(\\d+)$`,
-        ),
-      );
-      if (!match) {
-        await ctx.answerCbQuery('Неверный формат');
-        return;
-      }
-
-      const subscriptionId = parseInt(match[1], 10);
-
-      // Get subscription
-      const subscription =
-        await this.subscriptionManagementService.getSubscriptionById(
-          subscriptionId,
-        );
-
-      if (!subscription) {
-        await ctx.editMessageText(
-          MASTERBOT_CONSTANTS.ERRORS.SUBSCRIPTION_NOT_FOUND,
-        );
-        await ctx.answerCbQuery();
-        return;
-      }
-
-      // Ensure session is initialized
-      this.ensureSession(ctx);
-
-      // Set state and save subscription ID
-      ctx.session.flowState = 'awaiting_broadcast_message';
-      ctx.session.broadcastSubscriptionId = subscriptionId;
-
-      await ctx.editMessageText(
-        `📝 *Введите сообщение для рассылки*\n\n` +
-          `Подписка: ${subscription.name}\n\n` +
-          `_Совет: Вы можете использовать Markdown форматирование_`,
-        { parse_mode: 'Markdown' },
-      );
-
-      await ctx.answerCbQuery();
-    } catch (error) {
-      this.logger.error('Error in broadcast subscription selected', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Неизвестная ошибка';
-      await ctx.editMessageText(`❌ Ошибка: ${errorMessage}`);
-      await ctx.answerCbQuery('Ошибка');
-    }
-  }
-
-  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM)
-  async onBroadcastConfirm(@Ctx() ctx: UserContext): Promise<void> {
-    const manager = ctx.manager;
-    if (!manager) {
-      await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
-      return;
-    }
-
-    // Ensure session is initialized
-    this.ensureSession(ctx);
-
-    const subscriptionId = ctx.session.broadcastSubscriptionId;
-    const message = ctx.session.broadcastMessage;
-    const entities = ctx.session.broadcastMessageEntities;
-
-    if (!subscriptionId || !message) {
-      await ctx.editMessageText('❌ Ошибка: данные сессии потеряны');
-      await ctx.answerCbQuery('Ошибка');
-      return;
-    }
-
-    try {
-      // Send initial status
-      await ctx.editMessageText(
-        '⏳ *Рассылка запущена*\n\n' +
-          'Ваше сообщение отправляется...\n' +
-          'Это может занять некоторое время.',
-        { parse_mode: 'Markdown' },
-      );
-
-      await ctx.answerCbQuery('Рассылка началась...');
-
-      // Send broadcast with entities
-      const result = await this.broadcastService.sendBroadcast(
-        subscriptionId,
-        message,
-        entities || undefined,
-        manager.telegramId,
-      );
-
-      // Clear session
-      ctx.session.flowState = null;
-      ctx.session.broadcastSubscriptionId = null;
-      ctx.session.broadcastMessage = null;
-      ctx.session.broadcastMessageEntities = null;
-
-      // Log the action
-      this.masterbotService.logManagerAction(manager, 'BROADCAST_SENT', {
-        subscriptionId,
-        queuedCount: result.queuedCount,
-        errorCount: result.errorCount,
-        hasFormatting: entities && entities.length > 0,
-      });
-
-      // Send completion report
-      await ctx.reply(
-        `✅ *Рассылка завершена*\n\n` +
-          `Поставлено в очередь: ${result.queuedCount} сообщений\n` +
-          `Ошибок: ${result.errorCount}\n\n` +
-          `_Сообщения доставляются с учетом ограничений Telegram API._`,
-        { parse_mode: 'Markdown' },
-      );
-    } catch (error) {
-      // Clear session
-      ctx.session.flowState = null;
-      ctx.session.broadcastSubscriptionId = null;
-      ctx.session.broadcastMessage = null;
-      ctx.session.broadcastMessageEntities = null;
-
-      this.logger.error('Error confirming broadcast', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Неизвестная ошибка';
-      await ctx.reply(`❌ Ошибка при отправке: ${errorMessage}`);
-    }
-  }
-
-  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CANCEL)
-  async onBroadcastCancel(@Ctx() ctx: UserContext): Promise<void> {
-    // Ensure session is initialized
-    this.ensureSession(ctx);
-
-    // Clear session
-    ctx.session.flowState = null;
-    ctx.session.broadcastSubscriptionId = null;
-    ctx.session.broadcastMessage = null;
-    ctx.session.broadcastMessageEntities = null;
-
-    await ctx.editMessageText('❌ Рассылка отменена.');
-    await ctx.answerCbQuery('Отменено');
-  }
-
   // ==================== Text Message Handler ====================
 
   @On('text')
-  async onText(@Ctx() ctx: UserContext): Promise<void> {
+  async onText(
+    @Ctx() ctx: UserContext,
+    @Next() next: () => Promise<void>,
+  ): Promise<void> {
     const manager = ctx.manager;
     if (!manager) {
-      return; // Ignore messages from non-managers
+      return next(); // Pass to next handler for non-managers
     }
 
     // Ensure session is initialized
@@ -888,10 +650,11 @@ export class MasterbotUpdate {
 
     if (flowState === 'awaiting_subscription_name') {
       await this.handleSubscriptionNameInput(ctx);
-    } else if (flowState === 'awaiting_broadcast_message') {
-      await this.handleBroadcastMessageInput(ctx);
+      return; // Don't call next() - we handled this message
     }
-    // Other text handlers can be added here
+
+    // Pass to next handler (e.g., BroadcastUpdate) if not our flow state
+    return next();
   }
 
   // ==================== Private Helper Methods ====================
@@ -939,10 +702,10 @@ export class MasterbotUpdate {
       // Send success message
       await ctx.reply(
         '✅ *Подписка создана!*\n\n' +
-          `📋 Название: ${result.subscription.name}\n` +
-          `🆔 ID: ${result.subscription.id}\n` +
-          `📅 Создана: ${result.subscription.createdAt.toLocaleString('ru-RU')}\n\n` +
-          '💡 Для генерации кодов используйте команду /code',
+        `📋 Название: ${result.subscription.name}\n` +
+        `🆔 ID: ${result.subscription.id}\n` +
+        `📅 Создана: ${result.subscription.createdAt.toLocaleString('ru-RU')}\n\n` +
+        '💡 Для генерации кодов используйте команду /code',
         { parse_mode: 'Markdown' },
       );
     } catch (error) {
@@ -951,127 +714,6 @@ export class MasterbotUpdate {
       const errorMessage =
         error instanceof Error ? error.message : 'Неизвестная ошибка';
       await ctx.reply(`❌ Ошибка при создании подписки: ${errorMessage}`);
-    }
-  }
-
-  private async handleBroadcastMessageInput(ctx: UserContext): Promise<void> {
-    const manager = ctx.manager;
-    if (!manager) {
-      return;
-    }
-
-    // Ensure session is initialized
-    this.ensureSession(ctx);
-
-    const message =
-      ctx.message && 'text' in ctx.message ? ctx.message.text : null;
-    const entities =
-      ctx.message && 'entities' in ctx.message
-        ? ctx.message.entities
-        : undefined;
-    const subscriptionId = ctx.session.broadcastSubscriptionId;
-
-    if (!message || !subscriptionId) {
-      return;
-    }
-
-    // Validate message
-    const validation = this.broadcastService.validateMessage(message);
-    if (!validation.valid) {
-      await ctx.reply(`❌ ${validation.error}`);
-      return;
-    }
-
-    try {
-      // Get subscription and count
-      const subscription =
-        await this.subscriptionManagementService.getSubscriptionById(
-          subscriptionId,
-        );
-
-      if (!subscription) {
-        ctx.session.flowState = null;
-        ctx.session.broadcastSubscriptionId = null;
-        await ctx.reply(MASTERBOT_CONSTANTS.ERRORS.SUBSCRIPTION_NOT_FOUND);
-        return;
-      }
-
-      const subscriberCount =
-        await this.broadcastService.countSubscribers(subscriptionId);
-
-      // Save message and entities to session
-      ctx.session.broadcastMessage = message;
-      ctx.session.broadcastMessageEntities = entities || null;
-      ctx.session.flowState = 'confirming_broadcast';
-
-      // Show preview with confirmation
-      // If entities exist, show formatted message by copying the original message
-      if (entities && entities.length > 0) {
-        await ctx.reply(
-          `📊 *Предпросмотр рассылки*\n\n` +
-            `Подписка: ${subscription.name}\n` +
-            `Получателей: ${subscriberCount} активных пользователей\n\n` +
-            `*Сообщение (с форматированием):*`,
-          { parse_mode: 'Markdown' },
-        );
-
-        // Forward or copy the formatted message to show preview
-        await ctx.telegram.sendMessage(ctx.chat!.id, message, {
-          entities: entities,
-        });
-
-        // Show confirmation buttons
-        await ctx.reply(`Отправить это сообщение?`, {
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                '✅ Отправить',
-                MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM,
-              ),
-            ],
-            [
-              Markup.button.callback(
-                '❌ Отмена',
-                MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CANCEL,
-              ),
-            ],
-          ]),
-        });
-      } else {
-        // No entities, show plain text preview
-        await ctx.reply(
-          `📊 *Предпросмотр рассылки*\n\n` +
-            `Подписка: ${subscription.name}\n` +
-            `Получателей: ${subscriberCount} активных пользователей\n\n` +
-            `*Сообщение:*\n${message}\n\n` +
-            `Отправить это сообщение?`,
-          {
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-              [
-                Markup.button.callback(
-                  '✅ Отправить',
-                  MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM,
-                ),
-              ],
-              [
-                Markup.button.callback(
-                  '❌ Отмена',
-                  MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CANCEL,
-                ),
-              ],
-            ]),
-          },
-        );
-      }
-    } catch (error) {
-      ctx.session.flowState = null;
-      ctx.session.broadcastSubscriptionId = null;
-      ctx.session.broadcastMessageEntities = null;
-      this.logger.error('Error handling broadcast message input', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Неизвестная ошибка';
-      await ctx.reply(`❌ Ошибка: ${errorMessage}`);
     }
   }
 }

@@ -229,37 +229,26 @@ describe('PartnerFlowService', () => {
       );
     });
 
-    it('should activate trial directly when channelId is not configured', async () => {
+    it('should send channel prompt with empty channel info when channelId is not configured', async () => {
       const userId = 12345;
       const botId = 1;
       const lang = 'en';
-      const botUserId = 99;
-      const expiresAt = new Date('2025-01-01');
 
-      // Settings exist but no channelId - triggers direct trial activation
+      // Settings exist but no channelId - sendChannelPrompt sends welcome message
+      // Trial activation happens via handleVerificationRequest, not sendChannelPrompt
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
         botId,
         settings: {},
       } as never);
-      (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue({
-        id: botUserId,
-        userId,
-        botId,
-      } as never);
       (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue(null);
-      (mockTrialService.activate as jest.Mock).mockResolvedValue({
-        success: true,
-        expiresAt,
-      });
-      mockLocalizationContext.t.mockResolvedValue('Trial activated');
+      mockLocalizationContext.t.mockResolvedValue('Welcome message');
 
       await service.sendChannelPrompt(userId, botId, lang);
 
-      // Should have called trial activation
-      expect(mockTrialService.activate).toHaveBeenCalledWith(
-        botUserId,
-        undefined,
-      );
+      // sendChannelPrompt only sends messages and updates state, does NOT activate trial
+      expect(mockBotUsersRepository.updateState).toHaveBeenCalled();
+      // Trial activation is NOT called in sendChannelPrompt
+      expect(mockTrialService.activate).not.toHaveBeenCalled();
     });
   });
 

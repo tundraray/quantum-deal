@@ -25,7 +25,8 @@ export class MasterbotInitService implements OnApplicationBootstrap {
         { command: 'stats', description: '📊 Statistics' },
         { command: 'code', description: '🎫 Generate Code' },
         { command: 'help', description: '💡 Help' },
-        { command: 'subscription', description: '🔗 Subscription' },
+        { command: 'subscription', description: '📋 Manage subscriptions' },
+        { command: 'broadcast', description: '📢 Send message to subscribers' },
       ]);
 
       this.logger.log('Masterbot commands set up successfully');

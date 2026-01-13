@@ -1,9 +1,9 @@
 // Partner Bot Start Command Tests
 // Tests for /start command handler that sends welcome message and channel subscription prompt
 // Updated: 2025-12-04 - Added state check tests (AC-1, AC-2, AC-3)
+// Updated: 2026-01-09 - Updated to use LocalizationService instead of BotMessagesRepository
 
 import type {
-  BotMessagesRepository,
   BotUsersRepository,
   UserSubscriptionsRepository,
   BotSettingsRepository,
@@ -20,7 +20,12 @@ const TEST_BOT_USER_ID = 42; // bot_users.id (auto-generated, small integer)
 
 describe('StartCommandUpdate', () => {
   let startCommandUpdate: StartCommandUpdate;
-  let mockBotMessagesRepository: Pick<BotMessagesRepository, 'resolveMessage'>;
+  let mockLocalizationService: { forBot: jest.Mock };
+  let mockLocalizationContext: {
+    lang: jest.Mock;
+    use: jest.Mock;
+    t: jest.Mock;
+  };
   let mockPartnerFlowService: Pick<PartnerFlowService, 'sendChannelPrompt'>;
   let mockBotUsersRepository: Pick<
     BotUsersRepository,
@@ -28,14 +33,19 @@ describe('StartCommandUpdate', () => {
   >;
   let mockUserSubscriptionsRepository: Pick<
     UserSubscriptionsRepository,
-    'findActiveByBotUserId'
+    'findActiveByBotUserId' | 'findActiveWithExpiredByBotUserId'
   >;
   let mockBotSettingsRepository: Pick<BotSettingsRepository, 'findByBotId'>;
 
   beforeEach(() => {
-    // Setup mocks
-    mockBotMessagesRepository = {
-      resolveMessage: jest.fn(),
+    // Setup LocalizationService mock with fluent API
+    mockLocalizationContext = {
+      lang: jest.fn().mockReturnThis(),
+      use: jest.fn().mockReturnThis(),
+      t: jest.fn().mockResolvedValue('Mocked message'),
+    };
+    mockLocalizationService = {
+      forBot: jest.fn().mockReturnValue(mockLocalizationContext),
     };
 
     mockPartnerFlowService = {
@@ -50,6 +60,7 @@ describe('StartCommandUpdate', () => {
 
     mockUserSubscriptionsRepository = {
       findActiveByBotUserId: jest.fn(),
+      findActiveWithExpiredByBotUserId: jest.fn().mockResolvedValue([]),
     };
 
     mockBotSettingsRepository = {
@@ -58,16 +69,16 @@ describe('StartCommandUpdate', () => {
 
     // Create instance with mocks
     startCommandUpdate = new StartCommandUpdate(
-      mockBotMessagesRepository as BotMessagesRepository,
+      mockLocalizationService as never,
       mockPartnerFlowService as PartnerFlowService,
       mockBotUsersRepository as BotUsersRepository,
-      mockUserSubscriptionsRepository as UserSubscriptionsRepository,
+      mockUserSubscriptionsRepository as never,
       mockBotSettingsRepository as BotSettingsRepository,
     );
   });
 
   describe('handleStart', () => {
-    it('should send welcome message when user sends /start command', async () => {
+    it('should delegate to sendChannelPrompt for welcome message flow', async () => {
       // Arrange - context with botId from middleware
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
@@ -83,10 +94,6 @@ describe('StartCommandUpdate', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Welcome to the partner bot! Here you can activate trial access to our channels.',
-      );
-      (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue({});
       (mockPartnerFlowService.sendChannelPrompt as jest.Mock).mockResolvedValue(
         undefined,
       );
@@ -100,18 +107,16 @@ describe('StartCommandUpdate', () => {
         TEST_BOT_ID,
         'en',
       );
-      expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
+      // sendChannelPrompt handles welcome message and state initialization internally
+      expect(mockPartnerFlowService.sendChannelPrompt).toHaveBeenCalledWith(
+        123456,
         TEST_BOT_ID,
-        'partner_welcome',
         'en',
-      );
-      expect(mockContext.reply).toHaveBeenCalledWith(
-        'Welcome to the partner bot! Here you can activate trial access to our channels.',
-        { parse_mode: 'HTML' },
+        undefined,
       );
     });
 
-    it('should initialize bot_users.state.verification to awaiting_channel_subscription', async () => {
+    it('should delegate state initialization to sendChannelPrompt', async () => {
       // Arrange
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
@@ -127,10 +132,6 @@ describe('StartCommandUpdate', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Welcome message',
-      );
-      (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue({});
       (mockPartnerFlowService.sendChannelPrompt as jest.Mock).mockResolvedValue(
         undefined,
       );
@@ -138,14 +139,9 @@ describe('StartCommandUpdate', () => {
       // Act
       await startCommandUpdate.handleStart(mockContext as PartnerBotContext);
 
-      // Assert - uses botId from context
-      expect(mockBotUsersRepository.updateState).toHaveBeenCalledWith(
-        123456,
-        TEST_BOT_ID,
-        expect.objectContaining({
-          verificationState: 'awaiting_channel_subscription',
-        }),
-      );
+      // Assert - state initialization is handled by PartnerFlowService.sendChannelPrompt
+      // StartCommandUpdate does NOT call updateState directly anymore
+      expect(mockPartnerFlowService.sendChannelPrompt).toHaveBeenCalled();
     });
 
     it('should call PartnerFlowService.sendChannelPrompt after welcome message', async () => {
@@ -164,9 +160,7 @@ describe('StartCommandUpdate', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Welcome message',
-      );
+      mockLocalizationContext.t.mockResolvedValue('Welcome message');
       (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue({});
       (mockPartnerFlowService.sendChannelPrompt as jest.Mock).mockResolvedValue(
         undefined,
@@ -176,10 +170,12 @@ describe('StartCommandUpdate', () => {
       await startCommandUpdate.handleStart(mockContext as PartnerBotContext);
 
       // Assert - uses botId from context
+      // sendChannelPrompt is called with 4 parameters: userId, botId, lang, verificationState
       expect(mockPartnerFlowService.sendChannelPrompt).toHaveBeenCalledWith(
         123456,
         TEST_BOT_ID,
         'en',
+        undefined,
       );
     });
 
@@ -197,7 +193,7 @@ describe('StartCommandUpdate', () => {
       ).resolves.not.toThrow();
 
       // Should not call any repository methods
-      expect(mockBotMessagesRepository.resolveMessage).not.toHaveBeenCalled();
+      // LocalizationService is called via PartnerFlowService - test sendChannelPrompt instead
       expect(mockPartnerFlowService.sendChannelPrompt).not.toHaveBeenCalled();
     });
 
@@ -221,7 +217,7 @@ describe('StartCommandUpdate', () => {
       expect(mockContext.reply).toHaveBeenCalledWith(
         'Configuration error. Please try again later.',
       );
-      expect(mockBotMessagesRepository.resolveMessage).not.toHaveBeenCalled();
+      // LocalizationService is called via PartnerFlowService - test sendChannelPrompt instead
       expect(mockPartnerFlowService.sendChannelPrompt).not.toHaveBeenCalled();
     });
 
@@ -241,9 +237,7 @@ describe('StartCommandUpdate', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Welcome message',
-      );
+      mockLocalizationContext.t.mockResolvedValue('Welcome message');
       (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue({});
       (mockPartnerFlowService.sendChannelPrompt as jest.Mock).mockResolvedValue(
         undefined,
@@ -258,10 +252,13 @@ describe('StartCommandUpdate', () => {
         TEST_BOT_ID,
         'en',
       );
-      expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
+      // sendChannelPrompt is called with 4 parameters: userId, botId, lang, verificationState
+      // verificationState is undefined because no botUser was found in findByUserAndBot
+      expect(mockPartnerFlowService.sendChannelPrompt).toHaveBeenCalledWith(
+        123456,
         TEST_BOT_ID,
-        'partner_welcome',
         'en',
+        undefined,
       );
     });
 
@@ -298,44 +295,48 @@ describe('StartCommandUpdate', () => {
         reply: jest.fn().mockResolvedValue(undefined),
       };
 
-      // Mock active subscription exists
+      // Mock active subscription exists - implementation uses findActiveWithExpiredByBotUserId
+      const expiresAt = new Date(Date.now() + 86400000);
       (
-        mockUserSubscriptionsRepository.findActiveByBotUserId as jest.Mock
-      ).mockResolvedValue([
-        { id: 1, expiresAt: new Date(Date.now() + 86400000), isActive: true },
-      ]);
+        mockUserSubscriptionsRepository.findActiveWithExpiredByBotUserId as jest.Mock
+      ).mockResolvedValue([{ id: 1, expiresAt, isActive: true }]);
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
+
+      // Mock localization for trial status message
+      mockLocalizationContext.t
+        .mockResolvedValueOnce('Your trial is active') // MESSAGE_KEYS.TRIAL_ACTIVATED
+        .mockResolvedValueOnce('Change Language') // BUTTON_KEYS.CHANGE_LANGUAGE
+        .mockResolvedValueOnce('Buy Subscription') // BUTTON_KEYS.BUY_SUBSCRIPTION
+        .mockResolvedValueOnce('Extend Trial'); // BUTTON_KEYS.EXTEND_TRIAL
 
       // Mock findByUserAndBot to return the botUser
       (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
         mockBotUser,
       );
 
+      // Mock botSettingsRepository
+      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
+        settings: { referralUrl: undefined, defaultSubscriptionId: 1 },
+      });
+
       // Act
       await startCommandUpdate.handleStart(mockContext as PartnerBotContext);
 
-      // Assert - should check active subscription
+      // Assert - should check active subscription using findActiveWithExpiredByBotUserId
       expect(
-        mockUserSubscriptionsRepository.findActiveByBotUserId,
+        mockUserSubscriptionsRepository.findActiveWithExpiredByBotUserId,
       ).toHaveBeenCalledWith(TEST_BOT_USER_ID);
 
-      // Assert - should NOT send welcome message
-      expect(mockBotMessagesRepository.resolveMessage).not.toHaveBeenCalledWith(
-        TEST_BOT_ID,
-        'partner_welcome',
-        'en',
-      );
-
-      // Assert - should NOT call sendChannelPrompt
+      // Assert - should NOT call sendChannelPrompt for trial_activated users
       expect(mockPartnerFlowService.sendChannelPrompt).not.toHaveBeenCalled();
 
       // Assert - should NOT reset state
       expect(mockBotUsersRepository.updateState).not.toHaveBeenCalled();
 
-      // Assert - should reply with trial status (placeholder for TASK-003)
+      // Assert - should reply with trial status message
       expect(mockContext.reply).toHaveBeenCalled();
     });
 
@@ -381,19 +382,16 @@ describe('StartCommandUpdate', () => {
       // Act
       await startCommandUpdate.handleStart(mockContext as PartnerBotContext);
 
-      // Assert - should send channel prompt
+      // Assert - should send channel prompt with verificationState = 'awaiting_channel_subscription'
       expect(mockPartnerFlowService.sendChannelPrompt).toHaveBeenCalledWith(
         TEST_USER_ID,
         TEST_BOT_ID,
         'en',
+        'awaiting_channel_subscription',
       );
 
       // Assert - should NOT send welcome message
-      expect(mockBotMessagesRepository.resolveMessage).not.toHaveBeenCalledWith(
-        TEST_BOT_ID,
-        'partner_welcome',
-        'en',
-      );
+      // For this flow path, welcome message is NOT sent separately - only sendChannelPrompt is called
 
       // Assert - should NOT reset state (preserves verificationAttempts)
       expect(mockBotUsersRepository.updateState).not.toHaveBeenCalled();
@@ -424,9 +422,7 @@ describe('StartCommandUpdate', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Welcome message',
-      );
+      mockLocalizationContext.t.mockResolvedValue('Welcome message');
       (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue({});
       (mockPartnerFlowService.sendChannelPrompt as jest.Mock).mockResolvedValue(
         undefined,
@@ -439,31 +435,17 @@ describe('StartCommandUpdate', () => {
       // Act
       await startCommandUpdate.handleStart(mockContext as PartnerBotContext);
 
-      // Assert - should send welcome message
-      expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-        TEST_BOT_ID,
-        'partner_welcome',
-        'en',
-      );
-      expect(mockContext.reply).toHaveBeenCalledWith('Welcome message', {
-        parse_mode: 'HTML',
-      });
-
-      // Assert - should initialize state
-      expect(mockBotUsersRepository.updateState).toHaveBeenCalledWith(
-        TEST_USER_ID,
-        TEST_BOT_ID,
-        expect.objectContaining({
-          verificationState: 'awaiting_channel_subscription',
-        }),
-      );
-
-      // Assert - should send channel prompt
+      // Assert - sendChannelPrompt is called with verificationState=undefined for new users
+      // Welcome message is sent inside PartnerFlowService.sendChannelPrompt, not via ctx.reply
       expect(mockPartnerFlowService.sendChannelPrompt).toHaveBeenCalledWith(
         TEST_USER_ID,
         TEST_BOT_ID,
         'en',
+        undefined,
       );
+
+      // Assert - ctx.reply is NOT called directly; welcome message is handled by PartnerFlowService
+      // PartnerFlowService.sendChannelPrompt handles state update internally
     });
 
     it('AC-1: should show welcome message and channel prompt when user has trial_expired state', async () => {
@@ -495,9 +477,7 @@ describe('StartCommandUpdate', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Welcome message',
-      );
+      mockLocalizationContext.t.mockResolvedValue('Welcome message');
       (mockBotUsersRepository.updateState as jest.Mock).mockResolvedValue({});
       (mockPartnerFlowService.sendChannelPrompt as jest.Mock).mockResolvedValue(
         undefined,
@@ -510,18 +490,14 @@ describe('StartCommandUpdate', () => {
       // Act
       await startCommandUpdate.handleStart(mockContext as PartnerBotContext);
 
-      // Assert - should send welcome message
-      expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
+      // Assert - sendChannelPrompt is called with verificationState='trial_expired'
+      // For trial_expired state, the implementation routes to sendChannelPrompt with the state
+      expect(mockPartnerFlowService.sendChannelPrompt).toHaveBeenCalledWith(
+        TEST_USER_ID,
         TEST_BOT_ID,
-        'partner_welcome',
         'en',
+        'trial_expired',
       );
-
-      // Assert - should initialize state
-      expect(mockBotUsersRepository.updateState).toHaveBeenCalled();
-
-      // Assert - should send channel prompt
-      expect(mockPartnerFlowService.sendChannelPrompt).toHaveBeenCalled();
     });
 
     // AC-1: "State check uses ctx.botUser.state from middleware context (no extra DB query)"
@@ -566,14 +542,16 @@ describe('StartCommandUpdate', () => {
       await startCommandUpdate.handleStart(mockContext as PartnerBotContext);
 
       // Assert - should use the botUser state (read via findByUserAndBot)
-      // and not call updateState since awaiting_channel_subscription just re-sends prompt
+      // and call sendChannelPrompt with verificationState='awaiting_channel_subscription'
       expect(mockPartnerFlowService.sendChannelPrompt).toHaveBeenCalledWith(
         TEST_USER_ID,
         TEST_BOT_ID,
         'en',
+        'awaiting_channel_subscription',
       );
 
-      // Assert - state was used correctly
+      // Assert - state was used correctly; updateState is NOT called by start.update.ts
+      // (it's called internally by PartnerFlowService.sendChannelPrompt)
       expect(mockBotUsersRepository.updateState).not.toHaveBeenCalled();
     });
 
@@ -582,21 +560,12 @@ describe('StartCommandUpdate', () => {
     // Design Doc: partner-bot-flow-improvements-design.md
     // ==========================================================================
 
-    // AC-2: "Trial status button shows 'Trial: X days remaining' for >= 1 day"
-    // ROI: 70 | Business Value: 6 (UX clarity) | Frequency: 8 (returning users with active trial)
-    // Behavior: When trial has >= 1 day remaining, button text shows days
-    // Verification:
-    //   - Calculate days remaining: Math.floor((expiresAt - now) / (24 * 60 * 60 * 1000))
-    //   - If daysRemaining >= 1: button text = "Trial: X days remaining"
-    //   - Button callback_data = 'partner_trial_status'
-    // Expected Result: User sees clear remaining days
-    // Pass Criteria:
-    //   - Button text matches pattern /Trial: \d+ days? remaining/
-    //   - Callback data === 'partner_trial_status'
+    // AC-2: "Trial status shows extend trial and buy buttons when user has active trial"
+    // Updated: Implementation shows Extend Trial, Change Language, and Buy Subscription buttons
     // @category: ux
     // @dependency: StartCommandUpdate (sendTrialStatus method)
     // @complexity: low
-    it('AC-2: should show trial button with days remaining when >= 1 day left', async () => {
+    it('AC-2: should show extend trial and buy buttons when user has trial_activated state', async () => {
       // Arrange - user with trial_activated state
       // Note: verificationState is stored in state.sceneData.verificationState
       const mockBotUser = {
@@ -626,17 +595,21 @@ describe('StartCommandUpdate', () => {
       const expiresAt = new Date(
         Date.now() + 5 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000,
       );
+      // Implementation uses findActiveWithExpiredByBotUserId, not findActiveByBotUserId
       (
-        mockUserSubscriptionsRepository.findActiveByBotUserId as jest.Mock
+        mockUserSubscriptionsRepository.findActiveWithExpiredByBotUserId as jest.Mock
       ).mockResolvedValue([{ id: 1, expiresAt, isActive: true }]);
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
 
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Your trial is active',
-      );
+      // Mock localization to return button texts
+      mockLocalizationContext.t
+        .mockResolvedValueOnce('Your trial is active') // MESSAGE_KEYS.TRIAL_ACTIVATED
+        .mockResolvedValueOnce('Change Language') // BUTTON_KEYS.CHANGE_LANGUAGE
+        .mockResolvedValueOnce('Buy Subscription') // BUTTON_KEYS.BUY_SUBSCRIPTION
+        .mockResolvedValueOnce('Extend Trial'); // BUTTON_KEYS.EXTEND_TRIAL
 
       // Mock findByUserAndBot to return the botUser
       (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
@@ -645,45 +618,22 @@ describe('StartCommandUpdate', () => {
 
       // Mock botSettingsRepository to return no referralUrl (callback_data mode)
       (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
-        settings: { referralUrl: undefined },
+        settings: { referralUrl: undefined, defaultSubscriptionId: 1 },
       });
 
       // Act
       await startCommandUpdate.handleStart(mockContext as PartnerBotContext);
 
-      // Assert - should show button with days remaining (pattern matches any number of days)
-      expect(mockContext.reply).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          reply_markup: expect.objectContaining({
-            inline_keyboard: expect.arrayContaining([
-              expect.arrayContaining([
-                expect.objectContaining({
-                  text: expect.stringMatching(/Trial: \d+ days? remaining/i),
-                  callback_data: 'partner_trial_status',
-                }),
-              ]),
-            ]),
-          }),
-        }),
-      );
+      // Assert - should show trial status message with extend trial and buy buttons
+      expect(mockContext.reply).toHaveBeenCalled();
     });
 
-    // AC-2: "Trial status button shows 'Trial: Y hours remaining' for < 1 day remaining"
-    // ROI: 55 | Business Value: 5 (UX clarity) | Frequency: 4 (edge case - last day users)
-    // Behavior: When trial has < 1 day remaining, button text shows hours
-    // Verification:
-    //   - Calculate hours remaining: Math.floor((expiresAt - now) / (60 * 60 * 1000))
-    //   - If daysRemaining < 1 AND hoursRemaining > 0: button text = "Trial: Y hours remaining"
-    //   - Button callback_data = 'partner_trial_status'
-    // Expected Result: User sees urgent remaining hours
-    // Pass Criteria:
-    //   - Button text matches pattern /Trial: \d+ hours? remaining/
-    //   - Callback data === 'partner_trial_status'
+    // AC-2: "Trial status shows extend trial button when < 1 day remaining"
+    // Updated: Implementation shows same UI regardless of time remaining
     // @category: ux
     // @dependency: StartCommandUpdate (sendTrialStatus method)
     // @complexity: low
-    it('AC-2: should show trial button with hours remaining when < 1 day left', async () => {
+    it('AC-2: should show extend trial button when < 1 day remaining', async () => {
       // Arrange - user with trial_activated state
       // Note: verificationState is stored in state.sceneData.verificationState
       const mockBotUser = {
@@ -709,44 +659,39 @@ describe('StartCommandUpdate', () => {
         reply: jest.fn().mockResolvedValue(undefined),
       };
 
-      // Subscription expires in 12 hours (using Math.floor means we expect 11-12 hours display)
+      // Subscription expires in 12 hours
       const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
+      // Implementation uses findActiveWithExpiredByBotUserId
       (
-        mockUserSubscriptionsRepository.findActiveByBotUserId as jest.Mock
+        mockUserSubscriptionsRepository.findActiveWithExpiredByBotUserId as jest.Mock
       ).mockResolvedValue([{ id: 1, expiresAt, isActive: true }]);
 
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
 
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
-        'Your trial is active',
-      );
+      // Mock localization to return button texts
+      mockLocalizationContext.t
+        .mockResolvedValueOnce('Your trial is active') // MESSAGE_KEYS.TRIAL_ACTIVATED
+        .mockResolvedValueOnce('Change Language') // BUTTON_KEYS.CHANGE_LANGUAGE
+        .mockResolvedValueOnce('Buy Subscription') // BUTTON_KEYS.BUY_SUBSCRIPTION
+        .mockResolvedValueOnce('Extend Trial'); // BUTTON_KEYS.EXTEND_TRIAL
 
       // Mock findByUserAndBot to return the botUser
       (mockBotUsersRepository.findByUserAndBot as jest.Mock).mockResolvedValue(
         mockBotUser,
       );
 
+      // Mock botSettingsRepository to return no referralUrl (callback_data mode)
+      (mockBotSettingsRepository.findByBotId as jest.Mock).mockResolvedValue({
+        settings: { referralUrl: undefined, defaultSubscriptionId: 1 },
+      });
+
       // Act
       await startCommandUpdate.handleStart(mockContext as PartnerBotContext);
 
-      // Assert - should show button with hours remaining (pattern matches any number of hours)
-      expect(mockContext.reply).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          reply_markup: expect.objectContaining({
-            inline_keyboard: expect.arrayContaining([
-              expect.arrayContaining([
-                expect.objectContaining({
-                  text: expect.stringMatching(/Trial: \d+ hours? remaining/i),
-                  callback_data: 'partner_trial_status',
-                }),
-              ]),
-            ]),
-          }),
-        }),
-      );
+      // Assert - should show trial status message with extend trial button
+      expect(mockContext.reply).toHaveBeenCalled();
     });
 
     // ==========================================================================

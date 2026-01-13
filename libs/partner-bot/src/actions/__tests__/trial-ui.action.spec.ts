@@ -2,7 +2,6 @@
 // Tests for button handlers: "Extend Free Period" and "Buy Subscription"
 
 import type {
-  BotMessagesRepository,
   BotUsersRepository,
   BotSettingsRepository,
 } from '@quantumdeal/db';
@@ -14,14 +13,26 @@ const TEST_BOT_ID = 2;
 
 describe('TrialUIAction', () => {
   let trialUIAction: TrialUIAction;
-  let mockBotMessagesRepository: Pick<BotMessagesRepository, 'resolveMessage'>;
+  let mockLocalizationService: {
+    forBot: jest.Mock;
+  };
+  let mockLocalizationContext: {
+    lang: jest.Mock;
+    use: jest.Mock;
+    t: jest.Mock;
+  };
   let mockBotUsersRepository: Pick<BotUsersRepository, 'resolveLanguage'>;
   let mockBotSettingsRepository: Pick<BotSettingsRepository, 'findByBotId'>;
 
   beforeEach(() => {
-    // Setup mocks
-    mockBotMessagesRepository = {
-      resolveMessage: jest.fn(),
+    // Setup LocalizationService mock with fluent API
+    mockLocalizationContext = {
+      lang: jest.fn().mockReturnThis(),
+      use: jest.fn().mockReturnThis(),
+      t: jest.fn().mockResolvedValue('Mocked message'),
+    };
+    mockLocalizationService = {
+      forBot: jest.fn().mockReturnValue(mockLocalizationContext),
     };
 
     mockBotUsersRepository = {
@@ -34,7 +45,7 @@ describe('TrialUIAction', () => {
 
     // Create instance with mocks
     trialUIAction = new TrialUIAction(
-      mockBotMessagesRepository as BotMessagesRepository,
+      mockLocalizationService as never,
       mockBotUsersRepository as BotUsersRepository,
       mockBotSettingsRepository as BotSettingsRepository,
     );
@@ -341,18 +352,19 @@ describe('TrialUIAction', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
+      // Mock LocalizationService to return coming soon message
+      mockLocalizationContext.t.mockResolvedValue(
         'This feature is coming soon!',
       );
 
       // Act
       await trialUIAction.handleBuy(mockContext as PartnerBotContext);
 
-      // Assert - uses botId from context
-      expect(mockBotMessagesRepository.resolveMessage).toHaveBeenCalledWith(
-        TEST_BOT_ID,
+      // Assert - uses LocalizationService instead of BotMessagesRepository
+      expect(mockLocalizationService.forBot).toHaveBeenCalledWith(TEST_BOT_ID);
+      expect(mockLocalizationContext.lang).toHaveBeenCalledWith('en');
+      expect(mockLocalizationContext.t).toHaveBeenCalledWith(
         'partner_coming_soon',
-        'en',
       );
     });
 
@@ -373,7 +385,8 @@ describe('TrialUIAction', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockResolvedValue(
+      // Mock LocalizationService to return custom message
+      mockLocalizationContext.t.mockResolvedValue(
         'Payment integration coming soon!',
       );
 
@@ -387,7 +400,7 @@ describe('TrialUIAction', () => {
       );
     });
 
-    it('should fall back to hardcoded message if not found in database', async () => {
+    it('should fall back to hardcoded message if localization fails', async () => {
       // Arrange
       const mockContext: Partial<PartnerBotContext> = {
         botId: TEST_BOT_ID,
@@ -404,14 +417,15 @@ describe('TrialUIAction', () => {
       (mockBotUsersRepository.resolveLanguage as jest.Mock).mockResolvedValue(
         'en',
       );
-      (mockBotMessagesRepository.resolveMessage as jest.Mock).mockRejectedValue(
-        new Error('Message not found'),
+      // Mock LocalizationService to throw an error
+      mockLocalizationContext.t.mockRejectedValue(
+        new Error('Localization not found'),
       );
 
       // Act
       await trialUIAction.handleBuy(mockContext as PartnerBotContext);
 
-      // Assert
+      // Assert - should fall back to hardcoded message
       expect(mockContext.reply).toHaveBeenCalledWith(
         'This feature is coming soon!',
       );
@@ -431,8 +445,8 @@ describe('TrialUIAction', () => {
         trialUIAction.handleBuy(mockContext as PartnerBotContext),
       ).resolves.not.toThrow();
 
-      // Should not call message repository
-      expect(mockBotMessagesRepository.resolveMessage).not.toHaveBeenCalled();
+      // Should not call LocalizationService
+      expect(mockLocalizationService.forBot).not.toHaveBeenCalled();
     });
 
     it('should handle missing botId in context gracefully', async () => {
@@ -456,7 +470,7 @@ describe('TrialUIAction', () => {
       expect(mockContext.reply).toHaveBeenCalledWith(
         'Configuration error. Please try again later.',
       );
-      expect(mockBotMessagesRepository.resolveMessage).not.toHaveBeenCalled();
+      expect(mockLocalizationService.forBot).not.toHaveBeenCalled();
     });
 
     it('should never crash or error on any input', async () => {

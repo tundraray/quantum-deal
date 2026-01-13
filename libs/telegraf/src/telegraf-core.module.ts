@@ -36,7 +36,7 @@ export class TelegrafCoreModule implements OnApplicationShutdown {
     @Inject(TELEGRAF_BOT_NAME)
     private readonly botName: string,
     private readonly moduleRef: ModuleRef,
-  ) { }
+  ) {}
 
   public static forRoot(options: TelegrafModuleOptions): DynamicModule {
     const telegrafBotName = getBotToken(options.botName);

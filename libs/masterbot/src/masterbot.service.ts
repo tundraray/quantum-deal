@@ -5,6 +5,7 @@ import {
   Manager,
 } from '@quantumdeal/db';
 import { AdminStats } from './interfaces';
+import { MASTERBOT_CONSTANTS } from './constants';
 
 @Injectable()
 export class MasterbotService {
@@ -20,16 +21,19 @@ export class MasterbotService {
       `Master bot start command from manager ${manager.telegramId}`,
     );
 
+    const { COMMAND_DESCRIPTIONS: CMD } = MASTERBOT_CONSTANTS;
     const managerName =
       manager.firstName || manager.username || `Manager ${manager.telegramId}`;
+
     const welcomeMessage =
-      `🔧 *Master Bot Admin Panel*\n\n` +
-      `Welcome, ${managerName}! You have access to the following commands:\n\n` +
-      `📊 /stats - View user and subscription statistics\n` +
-      `🎫 /code - Generate subscription codes\n` +
-      `💡 /help - Show available commands\n\n` +
-      `🔗 /subscription - Manage subscriptions (create, close, broadcast)\n` +
-      `Use these commands to monitor and manage the bot ecosystem.\n\n` +
+      `🔧 *Master Bot — Панель управления*\n\n` +
+      `Добро пожаловать, ${managerName}!\n\n` +
+      `*Доступные команды:*\n` +
+      `${CMD.STATS}\n` +
+      `${CMD.CODE}\n` +
+      `${CMD.SUBSCRIPTION}\n` +
+      `${CMD.BROADCAST}\n` +
+      `${CMD.HELP}\n\n` +
       `_Manager ID: ${manager.telegramId}_`;
 
     return welcomeMessage;
