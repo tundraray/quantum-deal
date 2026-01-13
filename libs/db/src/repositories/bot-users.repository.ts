@@ -1,7 +1,7 @@
 // libs/db/src/repositories/bot-users.repository.ts
 
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { BaseRepository } from './base.repository';
 import { DRIZZLE_CLIENT, type DrizzleClient } from '../database.provider';
 import {
@@ -12,6 +12,7 @@ import {
   BotUserState,
 } from '../schema/bot-users';
 import { users, User } from '../schema/users';
+import { userSubscriptions } from '../schema/user-subscriptions';
 
 /**
  * BotUsersRepository
@@ -207,5 +208,55 @@ export class BotUsersRepository extends BaseRepository<
     if (botUser?.lang) return botUser.lang;
 
     return defaultLang;
+  }
+
+  /**
+   * Find bot users who have no records in user_subscriptions table
+   * Used for targeting users who never activated any subscription
+   *
+   * Uses LEFT JOIN with IS NULL exclusion pattern:
+   * SELECT bot_users.* FROM bot_users
+   * LEFT JOIN user_subscriptions ON bot_users.id = user_subscriptions.bot_user_id
+   * WHERE bot_users.bot_id = ? AND bot_users.is_active = true AND user_subscriptions.id IS NULL
+   *
+   * @param botId - The bot ID to filter by
+   * @returns Array of bot users without any subscription record
+   */
+  async findWithoutSubscription(
+    botId: number,
+  ): Promise<Array<{ botUser: BotUser }>> {
+    return this.db
+      .select({ botUser: botUsers })
+      .from(botUsers)
+      .leftJoin(userSubscriptions, eq(botUsers.id, userSubscriptions.botUserId))
+      .where(
+        and(
+          eq(botUsers.botId, botId),
+          eq(botUsers.isActive, true),
+          isNull(userSubscriptions.id),
+        ),
+      );
+  }
+
+  /**
+   * Count bot users who have no records in user_subscriptions table
+   * Optimized count query for displaying user counts in UI
+   *
+   * @param botId - The bot ID to filter by
+   * @returns Count of bot users without any subscription record
+   */
+  async countWithoutSubscription(botId: number): Promise<number> {
+    const result = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(botUsers)
+      .leftJoin(userSubscriptions, eq(botUsers.id, userSubscriptions.botUserId))
+      .where(
+        and(
+          eq(botUsers.botId, botId),
+          eq(botUsers.isActive, true),
+          isNull(userSubscriptions.id),
+        ),
+      );
+    return result[0]?.count ?? 0;
   }
 }

@@ -18,20 +18,20 @@ These methods use LEFT JOIN with exclusion pattern to find bot users who have NO
 
 ## Target Files
 
-- [ ] `libs/db/src/repositories/bot-users.repository.ts`
+- [x] `libs/db/src/repositories/bot-users.repository.ts`
 
 ## Implementation Steps (TDD: Red-Green-Refactor)
 
 ### 1. Red Phase
 
-- [ ] Review existing repository methods for pattern reference
-- [ ] Understand bot_users and user_subscriptions table relationship
-- [ ] Identify existing import for user_subscriptions table
-- [ ] No failing tests for L3 verification (type definitions only)
+- [x] Review existing repository methods for pattern reference
+- [x] Understand bot_users and user_subscriptions table relationship
+- [x] Identify existing import for user_subscriptions table
+- [x] No failing tests for L3 verification (type definitions only)
 
 ### 2. Green Phase
 
-- [ ] Add `findWithoutSubscription` method:
+- [x] Add `findWithoutSubscription` method:
   ```typescript
   /**
    * Find bot users who have no records in user_subscriptions table
@@ -54,7 +54,7 @@ These methods use LEFT JOIN with exclusion pattern to find bot users who have NO
   }
   ```
 
-- [ ] Add `countWithoutSubscription` method (optimized count):
+- [x] Add `countWithoutSubscription` method (optimized count):
   ```typescript
   /**
    * Count bot users who have no records in user_subscriptions table
@@ -77,19 +77,19 @@ These methods use LEFT JOIN with exclusion pattern to find bot users who have NO
   }
   ```
 
-- [ ] Add required imports if not present:
+- [x] Add required imports if not present:
   ```typescript
   import { isNull, sql } from 'drizzle-orm';
   import { userSubscriptions } from '../schemas';
   ```
 
-- [ ] Run type check to verify build succeeds
+- [x] Run type check to verify build succeeds
 
 ### 3. Refactor Phase
 
-- [ ] Ensure method signatures match existing repository patterns
-- [ ] Verify JSDoc comments are accurate and complete
-- [ ] Confirm type check passes
+- [x] Ensure method signatures match existing repository patterns
+- [x] Verify JSDoc comments are accurate and complete
+- [x] Confirm type check passes
 
 ## Expected Method Signatures
 
@@ -123,12 +123,12 @@ This returns only bot_users rows that have NO matching row in user_subscriptions
 
 ## Completion Criteria
 
-- [ ] `findWithoutSubscription` method added with correct signature
-- [ ] `countWithoutSubscription` method added with correct signature
-- [ ] Methods use LEFT JOIN with IS NULL exclusion pattern
-- [ ] Filter by botId and isActive = true applied
-- [ ] Build succeeds without errors (`pnpm build`)
-- [ ] Type check passes (`pnpm typecheck`)
+- [x] `findWithoutSubscription` method added with correct signature
+- [x] `countWithoutSubscription` method added with correct signature
+- [x] Methods use LEFT JOIN with IS NULL exclusion pattern
+- [x] Filter by botId and isActive = true applied
+- [x] Build succeeds without errors (`pnpm build`)
+- [x] Type check passes (`pnpm typecheck`)
 
 ## Operational Verification Procedures
 

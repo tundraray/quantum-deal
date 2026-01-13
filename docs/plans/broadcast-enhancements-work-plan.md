@@ -150,7 +150,7 @@ flowchart LR
 **Technical Dependencies**: None (prerequisite for Phase 3)
 
 #### Tasks
-- [ ] Add `findWithoutSubscription(botId: number)` method to bot-users.repository.ts
+- [x] Add `findWithoutSubscription(botId: number)` method to bot-users.repository.ts
   ```typescript
   /**
    * Find bot users who have no records in user_subscriptions table
@@ -160,17 +160,17 @@ flowchart LR
    */
   async findWithoutSubscription(botId: number): Promise<Array<{ botUser: BotUser }>>
   ```
-- [ ] Implement using LEFT JOIN with exclusion pattern:
+- [x] Implement using LEFT JOIN with exclusion pattern:
   - Join bot_users with user_subscriptions on botUserId
   - Filter WHERE user_subscriptions.id IS NULL
   - Filter by botId and isActive = true
-- [ ] Add `countWithoutSubscription(botId: number)` method (optimized count)
-- [ ] Quality check: Type check passes
+- [x] Add `countWithoutSubscription(botId: number)` method (optimized count)
+- [x] Quality check: Type check passes
 
 #### Phase Completion Criteria
-- [ ] `findWithoutSubscription` returns only active bot users with NO subscription records
-- [ ] `countWithoutSubscription` returns correct count matching findWithoutSubscription length
-- [ ] Type check passes
+- [x] `findWithoutSubscription` returns only active bot users with NO subscription records
+- [x] `countWithoutSubscription` returns correct count matching findWithoutSubscription length
+- [x] Type check passes
 
 #### Operational Verification Procedures
 1. Create test query in database with known data
@@ -368,9 +368,9 @@ flowchart LR
 - Notes:
 
 ### Phase 2: Repository Layer
-- Start:
-- Complete:
-- Notes:
+- Start: 2026-01-13
+- Complete: 2026-01-13
+- Notes: Added findWithoutSubscription and countWithoutSubscription methods to BotUsersRepository using LEFT JOIN with IS NULL exclusion pattern. Build passes.
 
 ### Phase 3: Service Layer
 - Start:
