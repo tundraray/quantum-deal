@@ -248,34 +248,34 @@ flowchart LR
 - [x] Update button text to include counts: "Active (N)" / "Expired (M)"
 
 **Task 4.3: Add BROADCAST_FILTER_NO_SUBSCRIPTION constant (FR2)**
-- [ ] Add to constants.ts:
+- [x] Add to constants.ts:
   ```typescript
   BROADCAST_FILTER_NO_SUBSCRIPTION: 'broadcast_filter_no_subscription',
   ```
 
 **Task 4.4: Add onBroadcastFilterNoSubscription handler (FR2)**
-- [ ] Add new handler in broadcast.update.ts:
+- [x] Add new handler in broadcast.update.ts:
   ```typescript
   @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_NO_SUBSCRIPTION)
   async onBroadcastFilterNoSubscription(@Ctx() ctx: UserContext): Promise<void>
   ```
-- [ ] Handler logic:
+- [x] Handler logic:
   - Set `ctx.session.broadcastFilterStatus = 'no_subscription'`
   - Clear `ctx.session.broadcastSubscriptionIds = []`
   - Set `ctx.session.flowState = 'awaiting_broadcast_message'`
   - Show message input prompt
 
 **Task 4.5: Update broadcast confirmation to handle 'no_subscription' status**
-- [ ] Modify `onBroadcastConfirm()` to check for 'no_subscription' status
-- [ ] Call `sendBroadcastToNonSubscribers()` when status is 'no_subscription'
+- [x] Modify `onBroadcastConfirm()` to check for 'no_subscription' status
+- [x] Call `sendBroadcastToNonSubscribers()` when status is 'no_subscription'
 
 - [ ] Quality check: Type check, lint, build passes
 
 #### Phase Completion Criteria
-- [ ] AC3: "Without subscription" option is available in subscription selection keyboard
+- [x] AC3: "Without subscription" option is available in subscription selection keyboard
 - [x] AC4: Status filter buttons display subscriber counts
 - [ ] AC5: Subscription toggle keyboard shows total user counts
-- [ ] AC6: "Without subscription" broadcast executes correctly
+- [x] AC6: "Without subscription" broadcast executes correctly
 - [ ] Type check, lint, and build pass
 
 #### Operational Verification Procedures

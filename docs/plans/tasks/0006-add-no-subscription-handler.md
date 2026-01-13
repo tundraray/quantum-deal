@@ -17,30 +17,30 @@ Complete the "Without subscription" targeting feature by:
 
 ## Target Files
 
-- [ ] `libs/masterbot/src/constants.ts`
-- [ ] `libs/masterbot/src/broadcast.update.ts`
+- [x] `libs/masterbot/src/constants.ts`
+- [x] `libs/masterbot/src/broadcast.update.ts`
 
 ## Implementation Steps (TDD: Red-Green-Refactor)
 
 ### 1. Red Phase
 
-- [ ] Review existing callback action constants structure
-- [ ] Review existing filter handlers (onBroadcastFilterActive, onBroadcastFilterExpired)
-- [ ] Review onBroadcastConfirm handler for status handling
-- [ ] No unit tests for L1 verification (manual operation test)
+- [x] Review existing callback action constants structure
+- [x] Review existing filter handlers (onBroadcastFilterActive, onBroadcastFilterExpired)
+- [x] Review onBroadcastConfirm handler for status handling
+- [x] No unit tests for L1 verification (manual operation test)
 
 ### 2. Green Phase
 
 #### Step 1: Add callback constant (constants.ts)
 
-- [ ] Add to CALLBACK_ACTIONS:
+- [x] Add to CALLBACK_ACTIONS:
   ```typescript
   BROADCAST_FILTER_NO_SUBSCRIPTION: 'broadcast_filter_no_subscription',
   ```
 
 #### Step 2: Add handler (broadcast.update.ts)
 
-- [ ] Add new handler method:
+- [x] Add new handler method:
   ```typescript
   @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_NO_SUBSCRIPTION)
   async onBroadcastFilterNoSubscription(@Ctx() ctx: UserContext): Promise<void> {
@@ -58,7 +58,7 @@ Complete the "Without subscription" targeting feature by:
 
 #### Step 3: Update session type (if needed)
 
-- [ ] Extend broadcastFilterStatus type to include 'no_subscription':
+- [x] Extend broadcastFilterStatus type to include 'no_subscription':
   ```typescript
   // In user-context.interface.ts
   broadcastFilterStatus?: 'active' | 'expired' | 'no_subscription' | null;
@@ -66,7 +66,7 @@ Complete the "Without subscription" targeting feature by:
 
 #### Step 4: Update broadcast confirmation handler
 
-- [ ] Modify `onBroadcastConfirm()` to handle 'no_subscription':
+- [x] Modify `onBroadcastConfirm()` to handle 'no_subscription':
   ```typescript
   async onBroadcastConfirm(@Ctx() ctx: UserContext): Promise<void> {
     // ... existing code ...
@@ -99,10 +99,10 @@ Complete the "Without subscription" targeting feature by:
 
 ### 3. Refactor Phase
 
-- [ ] Ensure handler follows existing filter handler patterns
-- [ ] Verify session state is properly cleared after broadcast
-- [ ] Verify error handling is consistent
-- [ ] Run quality checks
+- [x] Ensure handler follows existing filter handler patterns
+- [x] Verify session state is properly cleared after broadcast
+- [x] Verify error handling is consistent
+- [x] Run quality checks
 
 ## Expected Flow
 
@@ -123,14 +123,14 @@ User clicks "Without subscription" button in subscription selection
 
 ## Completion Criteria
 
-- [ ] `BROADCAST_FILTER_NO_SUBSCRIPTION` constant added
-- [ ] `onBroadcastFilterNoSubscription` handler added
-- [ ] Session type extended with 'no_subscription' status
-- [ ] `onBroadcastConfirm` handles 'no_subscription' status
-- [ ] Flow skips status filter step when "Without subscription" selected
-- [ ] Broadcast sent only to users with NO subscription records
-- [ ] Build succeeds without errors (`pnpm build`)
-- [ ] Type check passes (`pnpm typecheck`)
+- [x] `BROADCAST_FILTER_NO_SUBSCRIPTION` constant added
+- [x] `onBroadcastFilterNoSubscription` handler added
+- [x] Session type extended with 'no_subscription' status
+- [x] `onBroadcastConfirm` handles 'no_subscription' status
+- [x] Flow skips status filter step when "Without subscription" selected
+- [x] Broadcast sent only to users with NO subscription records
+- [x] Build succeeds without errors (`pnpm build`)
+- [x] Type check passes (`pnpm typecheck`)
 
 ## Operational Verification Procedures
 
