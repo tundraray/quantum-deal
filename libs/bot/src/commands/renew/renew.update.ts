@@ -1,9 +1,6 @@
-import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
+import { Logger, UseFilters } from '@nestjs/common';
 import { Command, Update, Ctx, On } from '@quantumdeal/telegraf';
-import {
-  ResponseTimeInterceptor,
-  TelegrafExceptionFilter,
-} from '@quantumdeal/framework';
+import { TelegrafExceptionFilter } from '@quantumdeal/framework';
 import type { UserContext } from '../../interfaces';
 import { RENEWAL_SCENE_ID } from './renewal.scene';
 import {
@@ -22,7 +19,6 @@ import { getRenewalMessage } from './renewal.i18n';
  * - successful_payment: Processes completed payments
  */
 @Update()
-@UseInterceptors(ResponseTimeInterceptor)
 @UseFilters(TelegrafExceptionFilter)
 export class RenewUpdate {
   private readonly logger = new Logger(RenewUpdate.name);

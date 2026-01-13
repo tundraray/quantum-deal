@@ -1,8 +1,7 @@
-import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
+import { Logger, UseFilters } from '@nestjs/common';
 import { Command, Update, Ctx, Action } from '@quantumdeal/telegraf';
 import { deunionize } from 'telegraf';
 import {
-  ResponseTimeInterceptor,
   TelegrafExceptionFilter,
   CallbackQueryData,
   SplitCommandPipe,
@@ -25,7 +24,6 @@ import { langKeyboard } from '../../lang';
  * - Provides localized confirmation messages
  */
 @Update()
-@UseInterceptors(ResponseTimeInterceptor)
 @UseFilters(TelegrafExceptionFilter)
 export class LangUpdate {
   private readonly logger = new Logger(LangUpdate.name);

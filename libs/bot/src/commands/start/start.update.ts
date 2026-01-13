@@ -1,9 +1,8 @@
-import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
+import { Logger, UseFilters } from '@nestjs/common';
 import { Start, Update, Ctx, Message, InjectBot } from '@quantumdeal/telegraf';
 import { Telegraf } from 'telegraf';
 import { ConfigService } from '@nestjs/config';
 import {
-  ResponseTimeInterceptor,
   TelegrafExceptionFilter,
   SplitCommandPipe,
   LLMService,
@@ -42,7 +41,6 @@ import telegramifyMarkdown from 'telegramify-markdown';
  * - Updates bot commands menu based on user's features
  */
 @Update()
-@UseInterceptors(ResponseTimeInterceptor)
 @UseFilters(TelegrafExceptionFilter)
 export class StartUpdate {
   private readonly logger = new Logger(StartUpdate.name);

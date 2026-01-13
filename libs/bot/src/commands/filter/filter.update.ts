@@ -1,9 +1,6 @@
-import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
+import { Logger, UseFilters } from '@nestjs/common';
 import { Command, Update, Ctx } from '@quantumdeal/telegraf';
-import {
-  ResponseTimeInterceptor,
-  TelegrafExceptionFilter,
-} from '@quantumdeal/framework';
+import { TelegrafExceptionFilter } from '@quantumdeal/framework';
 import type { UserContext } from '../../interfaces';
 import { FILTER_SCENE_ID } from '../../constants';
 
@@ -14,7 +11,6 @@ import { FILTER_SCENE_ID } from '../../constants';
  * Enters the filter scene for multi-step UI navigation.
  */
 @Update()
-@UseInterceptors(ResponseTimeInterceptor)
 @UseFilters(TelegrafExceptionFilter)
 export class FilterUpdate {
   private readonly logger = new Logger(FilterUpdate.name);

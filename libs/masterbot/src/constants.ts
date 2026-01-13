@@ -47,6 +47,7 @@ export const MASTERBOT_CONSTANTS = {
     BROADCAST_CONFIRM: 'broadcast_confirm',
     BROADCAST_CANCEL: 'broadcast_cancel',
     // Broadcast filter callback actions
+    BROADCAST_FILTER_PREFIX: 'broadcast_filter_', // Usage: `broadcast_filter_${status}` where status is active|expired|all
     BROADCAST_FILTER_ACTIVE: 'broadcast_filter_active',
     BROADCAST_FILTER_EXPIRED: 'broadcast_filter_expired',
     BROADCAST_FILTER_ALL: 'broadcast_filter_all',

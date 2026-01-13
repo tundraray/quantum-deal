@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  UseFilters,
-  UseInterceptors,
-} from '@nestjs/common';
+import { Injectable, Logger, UseFilters } from '@nestjs/common';
 import {
   Action,
   Command,
@@ -15,10 +10,7 @@ import {
 } from '@quantumdeal/telegraf';
 import { Telegraf, Markup } from 'telegraf';
 
-import {
-  ResponseTimeInterceptor,
-  TelegrafExceptionFilter,
-} from '@quantumdeal/framework';
+import { TelegrafExceptionFilter } from '@quantumdeal/framework';
 import { SubscriptionsRepository, BotsRepository } from '@quantumdeal/db';
 
 import { MASTERBOT_BOT_NAME } from './constants';
@@ -28,7 +20,6 @@ import { BroadcastService } from './services/broadcast.service';
 import { MasterbotService } from './masterbot.service';
 
 @Update()
-@UseInterceptors(ResponseTimeInterceptor)
 @UseFilters(TelegrafExceptionFilter)
 @Injectable()
 export class BroadcastUpdate {
@@ -41,7 +32,7 @@ export class BroadcastUpdate {
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly botsRepository: BotsRepository,
     private readonly masterbotService: MasterbotService,
-  ) { }
+  ) {}
 
   /**
    * Ensures session is initialized with default values
@@ -96,8 +87,7 @@ export class BroadcastUpdate {
       await this.showBotSelectionKeyboardReply(ctx);
     } catch (error) {
       this.logger.error('Error in broadcast command', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Неизвестная ошибка';
+      const errorMessage = this.getErrorMessage(error);
       await ctx.reply(`❌ Ошибка: ${errorMessage}`);
     }
   }
@@ -119,23 +109,15 @@ export class BroadcastUpdate {
     }
 
     try {
-      const callbackQuery = ctx.callbackQuery;
-      if (!callbackQuery || !('data' in callbackQuery)) {
-        await ctx.answerCbQuery('Неверный выбор');
-        return;
-      }
-
-      const match = callbackQuery.data.match(
-        new RegExp(
-          `^${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}(\\d+)$`,
-        ),
+      const subscriptionId = this.extractCallbackId(
+        ctx,
+        MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX,
       );
-      if (!match) {
+
+      if (subscriptionId === null) {
         await ctx.answerCbQuery('Неверный формат');
         return;
       }
-
-      const subscriptionId = parseInt(match[1], 10);
 
       // Get subscription
       const subscription =
@@ -166,19 +148,22 @@ export class BroadcastUpdate {
       await ctx.answerCbQuery();
     } catch (error) {
       this.logger.error('Error in broadcast subscription selected', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Неизвестная ошибка';
+      const errorMessage = this.getErrorMessage(error);
       await ctx.editMessageText(`❌ Ошибка: ${errorMessage}`);
       await ctx.answerCbQuery('Ошибка');
     }
   }
 
   /**
-   * Handler for selecting "Active subscribers" filter
-   * Sets session state to track active filter and shows message input prompt
+   * Unified handler for selecting subscriber status filter (active/expired/all)
+   * Extracts filter type from callback data and sets session state accordingly
    */
-  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE)
-  async onBroadcastFilterActive(@Ctx() ctx: UserContext): Promise<void> {
+  @Action(
+    new RegExp(
+      `^${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_PREFIX}(active|expired|all)$`,
+    ),
+  )
+  async onBroadcastFilterStatus(@Ctx() ctx: UserContext): Promise<void> {
     const manager = ctx.manager;
     if (!manager) {
       await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
@@ -186,77 +171,28 @@ export class BroadcastUpdate {
     }
 
     try {
-      // Ensure session is initialized
-      this.ensureSession(ctx);
-
-      // Set filter status to active
-      ctx.session.broadcastFilterStatus = 'active';
-      ctx.session.flowState = 'awaiting_broadcast_message';
-
-      // Show message input prompt
-      await ctx.editMessageText(
-        `📝 *Введите сообщение для рассылки*\n\n` +
-        `_Совет: Вы можете использовать форматирование текста_`,
-        { parse_mode: 'Markdown' },
+      // Extract filter status from callback data
+      const filterStatus = this.extractCallbackSuffix(
+        ctx,
+        MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_PREFIX,
       );
-      await ctx.answerCbQuery();
-    } catch (error) {
-      this.logger.error('Error in filter active handler', error);
-      await ctx.answerCbQuery('Ошибка');
-    }
-  }
 
-  /**
-   * Handler for selecting "Expired subscribers" filter
-   * Sets session state to track expired filter and shows message input prompt
-   */
-  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED)
-  async onBroadcastFilterExpired(@Ctx() ctx: UserContext): Promise<void> {
-    const manager = ctx.manager;
-    if (!manager) {
-      await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
-      return;
-    }
+      if (
+        !filterStatus ||
+        !['active', 'expired', 'all'].includes(filterStatus)
+      ) {
+        await ctx.answerCbQuery('Неверный фильтр');
+        return;
+      }
 
-    try {
       // Ensure session is initialized
       this.ensureSession(ctx);
 
-      // Set filter status to expired
-      ctx.session.broadcastFilterStatus = 'expired';
-      ctx.session.flowState = 'awaiting_broadcast_message';
-
-      // Show message input prompt
-      await ctx.editMessageText(
-        `📝 *Введите сообщение для рассылки*\n\n` +
-        `_Совет: Вы можете использовать форматирование текста_`,
-        { parse_mode: 'Markdown' },
-      );
-      await ctx.answerCbQuery();
-    } catch (error) {
-      this.logger.error('Error in filter expired handler', error);
-      await ctx.answerCbQuery('Ошибка');
-    }
-  }
-
-  /**
-   * Handler for selecting "All subscribers" filter
-   * Sets session state to track all filter (active + expired) and shows message input prompt
-   */
-  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ALL)
-  async onBroadcastFilterAll(@Ctx() ctx: UserContext): Promise<void> {
-    const manager = ctx.manager;
-    if (!manager) {
-      await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
-      return;
-    }
-
-    try {
-      // Ensure session is initialized
-      this.ensureSession(ctx);
-
-      // Set filter status to all (active + expired)
-      ctx.session.broadcastFilterStatus = 'all';
+      // Set filter status
+      ctx.session.broadcastFilterStatus = filterStatus as
+        | 'active'
+        | 'expired'
+        | 'all';
       ctx.session.flowState = 'awaiting_broadcast_message';
 
       // Show message input prompt
@@ -267,7 +203,7 @@ export class BroadcastUpdate {
       );
       await ctx.answerCbQuery();
     } catch (error) {
-      this.logger.error('Error in filter all handler', error);
+      this.logger.error('Error in filter status handler', error);
       await ctx.answerCbQuery('Ошибка');
     }
   }
@@ -317,8 +253,8 @@ export class BroadcastUpdate {
       // Show message input prompt with recipient count info
       await ctx.editMessageText(
         `📝 *Введите сообщение для рассылки*\n\n` +
-        `🎯 Получатели: ${count} пользователей без подписки\n\n` +
-        `_Совет: Вы можете использовать форматирование текста_`,
+          `🎯 Получатели: ${count} пользователей без подписки\n\n` +
+          `_Совет: Вы можете использовать форматирование текста_`,
         { parse_mode: 'Markdown' },
       );
       await ctx.answerCbQuery();
@@ -345,30 +281,14 @@ export class BroadcastUpdate {
     }
 
     try {
-      const callbackQuery = ctx.callbackQuery;
-      if (!callbackQuery || !('data' in callbackQuery)) {
-        await ctx.editMessageText('❌ Неверный выбор');
-        await ctx.answerCbQuery('Ошибка');
-        return;
-      }
-
       // Parse bot ID from callback data
-      const match = callbackQuery.data.match(
-        new RegExp(
-          `^${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_PREFIX}(\\d+)$`,
-        ),
+      const botId = this.extractCallbackId(
+        ctx,
+        MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_PREFIX,
       );
 
-      if (!match) {
+      if (botId === null) {
         await ctx.editMessageText('❌ Неверный формат выбора бота');
-        await ctx.answerCbQuery('Ошибка');
-        return;
-      }
-
-      const botId = parseInt(match[1], 10);
-
-      if (isNaN(botId)) {
-        await ctx.editMessageText('❌ Неверный ID бота');
         await ctx.answerCbQuery('Ошибка');
         return;
       }
@@ -394,8 +314,7 @@ export class BroadcastUpdate {
       await ctx.answerCbQuery();
     } catch (error) {
       this.logger.error('Error in bot selected handler', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Неизвестная ошибка';
+      const errorMessage = this.getErrorMessage(error);
       await ctx.editMessageText(`❌ Ошибка: ${errorMessage}`);
       await ctx.answerCbQuery('Ошибка');
     }
@@ -418,23 +337,15 @@ export class BroadcastUpdate {
     }
 
     try {
-      const callbackQuery = ctx.callbackQuery;
-      if (!callbackQuery || !('data' in callbackQuery)) {
-        await ctx.answerCbQuery('Неверный выбор');
-        return;
-      }
-
-      const match = callbackQuery.data.match(
-        new RegExp(
-          `^${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_TOGGLE_PREFIX}(\\d+)$`,
-        ),
+      const subscriptionId = this.extractCallbackId(
+        ctx,
+        MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_TOGGLE_PREFIX,
       );
-      if (!match) {
+
+      if (subscriptionId === null) {
         await ctx.answerCbQuery('Неверный формат');
         return;
       }
-
-      const subscriptionId = parseInt(match[1], 10);
 
       // Ensure session is initialized
       this.ensureSession(ctx);
@@ -457,12 +368,9 @@ export class BroadcastUpdate {
       );
 
       // Get bot name for keyboard refresh
-      const botId = ctx.session.broadcastFilterBotId;
-      let botName = 'Все боты';
-      if (botId != null) {
-        const bot = await this.botsRepository.findById(botId);
-        botName = bot?.name || 'Неизвестный бот';
-      }
+      const botName = await this.getBotDisplayName(
+        ctx.session.broadcastFilterBotId,
+      );
 
       // Refresh keyboard to show updated checkmarks
       await this.showSubscriptionToggleKeyboard(ctx, botName);
@@ -532,11 +440,7 @@ export class BroadcastUpdate {
       }
 
       // Get bot name for keyboard refresh
-      let botName = 'Все боты';
-      if (botId != null) {
-        const bot = await this.botsRepository.findById(botId);
-        botName = bot?.name || 'Неизвестный бот';
-      }
+      const botName = await this.getBotDisplayName(botId);
 
       // Refresh keyboard with updated checkmarks
       await this.showSubscriptionToggleKeyboard(ctx, botName);
@@ -623,8 +527,8 @@ export class BroadcastUpdate {
       // Send initial status
       await ctx.editMessageText(
         '⏳ *Рассылка запущена*\n\n' +
-        'Ваше сообщение отправляется...\n' +
-        'Это может занять некоторое время.',
+          'Ваше сообщение отправляется...\n' +
+          'Это может занять некоторое время.',
         { parse_mode: 'Markdown' },
       );
 
@@ -697,8 +601,7 @@ export class BroadcastUpdate {
       }
     } catch (error) {
       this.logger.error('Broadcast failed', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Неизвестная ошибка';
+      const errorMessage = this.getErrorMessage(error);
       await ctx.reply(`❌ Ошибка при отправке: ${errorMessage}`);
     } finally {
       // Clear session state
@@ -852,7 +755,7 @@ export class BroadcastUpdate {
 
     await ctx.editMessageText(
       `🤖 *Выберите бота*\n\n` +
-      `Выберите, подписчикам какого бота отправить рассылку:`,
+        `Выберите, подписчикам какого бота отправить рассылку:`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
@@ -994,8 +897,8 @@ export class BroadcastUpdate {
 
     await ctx.editMessageText(
       `📋 *Выберите подписки для рассылки*\n\n` +
-      `🤖 Бот: ${botName}\n\n` +
-      `_Выберите одну или несколько подписок:_`,
+        `🤖 Бот: ${botName}\n\n` +
+        `_Выберите одну или несколько подписок:_`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard(buttons),
@@ -1052,12 +955,8 @@ export class BroadcastUpdate {
     }
 
     try {
-      // Get bot name if specific bot is selected
-      let botLabel = 'Все боты';
-      if (filterBotId != null) {
-        const bot = await this.botsRepository.findById(filterBotId);
-        botLabel = bot?.name || 'Неизвестный бот';
-      }
+      // Get bot name for display
+      const botLabel = await this.getBotDisplayName(filterBotId);
 
       // Handle preview differently based on broadcast type
       let total: number;
@@ -1125,12 +1024,12 @@ export class BroadcastUpdate {
       if (entities && entities.length > 0) {
         await ctx.reply(
           `📊 *Предпросмотр рассылки*\n\n` +
-          `🤖 Бот: ${botLabel}\n` +
-          `🎯 Цель: ${filterStatusLabel}\n` +
-          `📋 Подписки:\n${subscriptionsText}\n` +
-          `👥 Всего получателей: *${total}* уникальных пользователей\n` +
-          overlapText +
-          `\n*Сообщение (с форматированием):*`,
+            `🤖 Бот: ${botLabel}\n` +
+            `🎯 Цель: ${filterStatusLabel}\n` +
+            `📋 Подписки:\n${subscriptionsText}\n` +
+            `👥 Всего получателей: *${total}* уникальных пользователей\n` +
+            overlapText +
+            `\n*Сообщение (с форматированием):*`,
           { parse_mode: 'Markdown' },
         );
 
@@ -1167,13 +1066,13 @@ export class BroadcastUpdate {
         // No entities, show plain text preview
         await ctx.reply(
           `📊 *Предпросмотр рассылки*\n\n` +
-          `🤖 Бот: ${botLabel}\n` +
-          `🎯 Цель: ${filterStatusLabel}\n` +
-          `📋 Подписки:\n${subscriptionsText}\n` +
-          `👥 Всего получателей: *${total}* уникальных пользователей\n` +
-          overlapText +
-          `\n*Сообщение:*\n${message}\n\n` +
-          `Отправить это сообщение?`,
+            `🤖 Бот: ${botLabel}\n` +
+            `🎯 Цель: ${filterStatusLabel}\n` +
+            `📋 Подписки:\n${subscriptionsText}\n` +
+            `👥 Всего получателей: *${total}* уникальных пользователей\n` +
+            overlapText +
+            `\n*Сообщение:*\n${message}\n\n` +
+            `Отправить это сообщение?`,
           {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
@@ -1198,8 +1097,7 @@ export class BroadcastUpdate {
       ctx.session.broadcastSubscriptionIds = null;
       ctx.session.broadcastMessageEntities = null;
       this.logger.error('Error handling broadcast message input', error);
-      const errorMessage =
-        error instanceof Error ? error.message : 'Неизвестная ошибка';
+      const errorMessage = this.getErrorMessage(error);
       await ctx.reply(`❌ Ошибка: ${errorMessage}`);
     }
   }
@@ -1229,6 +1127,78 @@ export class BroadcastUpdate {
     }
     report += `\n_(Пользователи в нескольких подписках получили сообщение один раз)_`;
     return report;
+  }
+
+  /**
+   * Extract suffix from callback data after a known prefix
+   * Used to parse callback actions like 'broadcast_filter_active' -> 'active'
+   *
+   * @param ctx - User context with callback query
+   * @param prefix - The prefix to strip (e.g., 'broadcast_filter_')
+   * @returns The suffix string or null if extraction fails
+   */
+  private extractCallbackSuffix(
+    ctx: UserContext,
+    prefix: string,
+  ): string | null {
+    const callbackQuery = ctx.callbackQuery;
+    if (!callbackQuery || !('data' in callbackQuery)) {
+      return null;
+    }
+
+    const data = callbackQuery.data;
+    if (!data.startsWith(prefix)) {
+      return null;
+    }
+
+    return data.slice(prefix.length);
+  }
+
+  /**
+   * Extract numeric ID from callback data after a known prefix
+   * Used to parse callback actions like 'broadcast_bot_123' -> 123
+   *
+   * @param ctx - User context with callback query
+   * @param prefix - The prefix to strip (e.g., 'broadcast_bot_')
+   * @returns The parsed ID or null if extraction fails
+   */
+  private extractCallbackId(ctx: UserContext, prefix: string): number | null {
+    const suffix = this.extractCallbackSuffix(ctx, prefix);
+    if (!suffix) {
+      return null;
+    }
+
+    const id = parseInt(suffix, 10);
+    return isNaN(id) ? null : id;
+  }
+
+  /**
+   * Get display name for a bot by ID
+   * Returns 'Все боты' if botId is null/undefined, or bot name if found
+   *
+   * @param botId - Bot ID or null
+   * @returns Display name for the bot
+   */
+  private async getBotDisplayName(
+    botId: number | null | undefined,
+  ): Promise<string> {
+    if (botId == null) {
+      return 'Все боты';
+    }
+
+    const bot = await this.botsRepository.findById(botId);
+    return bot?.name || 'Неизвестный бот';
+  }
+
+  /**
+   * Extract error message from unknown error
+   * Handles both Error instances and unknown types
+   *
+   * @param error - The caught error
+   * @returns Human-readable error message
+   */
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : 'Неизвестная ошибка';
   }
 
   /**

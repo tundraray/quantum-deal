@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  UseFilters,
-  UseInterceptors,
-} from '@nestjs/common';
+import { Injectable, Logger, UseFilters } from '@nestjs/common';
 import {
   Update,
   Command,
@@ -13,7 +8,6 @@ import {
 } from '@quantumdeal/telegraf';
 import { Markup, deunionize } from 'telegraf';
 import {
-  ResponseTimeInterceptor,
   TelegrafExceptionFilter,
   CallbackQueryData,
   SplitCommandPipe,
@@ -42,7 +36,6 @@ import { PARTNER_FLOW_FEATURE_KEY } from '../../constants';
  * Available to all users (no @RequiresFeature restriction).
  */
 @Update()
-@UseInterceptors(ResponseTimeInterceptor)
 @UseFilters(TelegrafExceptionFilter)
 @RequiresFeature(PARTNER_FLOW_FEATURE_KEY)
 @Injectable()

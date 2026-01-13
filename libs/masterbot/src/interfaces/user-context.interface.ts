@@ -72,7 +72,12 @@ export interface UserContext extends Context {
      * - 'no_subscription': users who never activated any subscription
      * null = not selected yet (default behavior targets active)
      */
-    broadcastFilterStatus?: 'active' | 'expired' | 'all' | 'no_subscription' | null;
+    broadcastFilterStatus?:
+      | 'active'
+      | 'expired'
+      | 'all'
+      | 'no_subscription'
+      | null;
 
     /**
      * Filter for broadcast bot selection

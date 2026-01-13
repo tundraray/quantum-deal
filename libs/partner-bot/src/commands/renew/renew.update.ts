@@ -1,4 +1,4 @@
-import { Logger, UseFilters, UseInterceptors } from '@nestjs/common';
+import { Logger, UseFilters } from '@nestjs/common';
 import {
   Command,
   Update,
@@ -7,7 +7,6 @@ import {
   RequiresFeature,
 } from '@quantumdeal/telegraf';
 import {
-  ResponseTimeInterceptor,
   TelegrafExceptionFilter,
   LocalizationService,
   ILocalizationContext,
@@ -32,7 +31,6 @@ import { PARTNER_FLOW_FEATURE_KEY } from '@quantumdeal/partner-bot/constants';
  */
 @Update()
 @RequiresFeature(PARTNER_FLOW_FEATURE_KEY)
-@UseInterceptors(ResponseTimeInterceptor)
 @UseFilters(TelegrafExceptionFilter)
 export class RenewUpdate {
   private readonly logger = new Logger(RenewUpdate.name);

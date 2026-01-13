@@ -11,8 +11,6 @@ import { tap } from 'rxjs/operators';
 @Injectable()
 export class ResponseTimeInterceptor implements NestInterceptor {
   intercept(_context: ExecutionContext, next: CallHandler): Observable<any> {
-    Logger.debug('Starting...');
-
     const start = Date.now();
     return next
       .handle()
