@@ -175,7 +175,7 @@ export class BroadcastUpdate {
 
   /**
    * Handler for selecting "Active subscribers" filter
-   * Sets session state to track active filter and shows bot selection keyboard
+   * Sets session state to track active filter and shows message input prompt
    */
   @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE)
   async onBroadcastFilterActive(@Ctx() ctx: UserContext): Promise<void> {
@@ -208,7 +208,7 @@ export class BroadcastUpdate {
 
   /**
    * Handler for selecting "Expired subscribers" filter
-   * Sets session state to track expired filter and shows bot selection keyboard
+   * Sets session state to track expired filter and shows message input prompt
    */
   @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED)
   async onBroadcastFilterExpired(@Ctx() ctx: UserContext): Promise<void> {
@@ -235,39 +235,6 @@ export class BroadcastUpdate {
       await ctx.answerCbQuery();
     } catch (error) {
       this.logger.error('Error in filter expired handler', error);
-      await ctx.answerCbQuery('Ошибка');
-    }
-  }
-
-  /**
-   * Handler for selecting "All bots" filter
-   * Sets session state to target all bots and proceeds to message input
-   */
-  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL)
-  async onBroadcastBotAll(@Ctx() ctx: UserContext): Promise<void> {
-    const manager = ctx.manager;
-    if (!manager) {
-      await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
-      return;
-    }
-
-    try {
-      // Ensure session is initialized
-      this.ensureSession(ctx);
-
-      // Set bot filter to null (all bots)
-      ctx.session.broadcastFilterBotId = null;
-      ctx.session.flowState = 'awaiting_broadcast_message';
-
-      // Show message input prompt
-      await ctx.editMessageText(
-        `📝 *Введите сообщение для рассылки*\n\n` +
-          `_Совет: Вы можете использовать форматирование текста_`,
-        { parse_mode: 'Markdown' },
-      );
-      await ctx.answerCbQuery();
-    } catch (error) {
-      this.logger.error('Error in bot all handler', error);
       await ctx.answerCbQuery('Ошибка');
     }
   }
@@ -701,12 +668,6 @@ export class BroadcastUpdate {
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              '📱 Все боты',
-              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
-            ),
-          ],
           ...botButtons,
           [
             Markup.button.callback(
@@ -740,12 +701,6 @@ export class BroadcastUpdate {
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              '📱 Все боты',
-              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
-            ),
-          ],
           ...botButtons,
           [
             Markup.button.callback(
@@ -940,7 +895,14 @@ export class BroadcastUpdate {
         );
 
         // Forward or copy the formatted message to show preview
-        await ctx.telegram.sendMessage(ctx.chat!.id, message, {
+        if (!ctx.chat) {
+          this.logger.error(
+            'ctx.chat is undefined, cannot send preview message',
+          );
+          await ctx.reply('❌ Ошибка: не удалось определить чат');
+          return;
+        }
+        await ctx.telegram.sendMessage(ctx.chat.id, message, {
           entities: entities,
         });
 
@@ -993,7 +955,7 @@ export class BroadcastUpdate {
       }
     } catch (error) {
       ctx.session.flowState = null;
-      ctx.session.broadcastSubscriptionIds = [];
+      ctx.session.broadcastSubscriptionIds = null;
       ctx.session.broadcastMessageEntities = null;
       this.logger.error('Error handling broadcast message input', error);
       const errorMessage =

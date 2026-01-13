@@ -53,14 +53,14 @@ describe('Broadcast Command Extraction Integration Tests', () => {
   // Verification:
   //   - onBroadcastSubscriptionSelected: stores subscriptionId, shows status filter keyboard
   //   - onBroadcastFilterActive/Expired: stores filterStatus, shows bot filter keyboard
-  //   - onBroadcastBotAll/Selected: stores filterBotId, shows message input prompt
+  //   - onBroadcastBotSelected: stores filterBotId, shows subscription toggle keyboard
   //   - Session flowState transitions: selecting_status_filter -> selecting_bot_filter -> awaiting_broadcast_message
   //   - All handlers in BroadcastUpdate (NOT MasterbotUpdate)
   // Expected Result: Manager can navigate through complete filter selection flow
   // Pass Criteria:
   //   - BroadcastUpdate.onBroadcastSubscriptionSelected stores subscription and shows status keyboard
   //   - BroadcastUpdate.onBroadcastFilterActive/Expired stores status and shows bot keyboard
-  //   - BroadcastUpdate.onBroadcastBotAll/Selected stores bot and shows message prompt
+  //   - BroadcastUpdate.onBroadcastBotSelected stores bot and shows subscription toggle keyboard
   //   - Session state correctly tracks all filter selections
   // @category: core-functionality
   // @dependency: BroadcastUpdate, BotsRepository, Session
