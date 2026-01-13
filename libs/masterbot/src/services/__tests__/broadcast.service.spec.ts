@@ -2,6 +2,8 @@ import { BroadcastService } from '../broadcast.service';
 import type {
   UserSubscriptionsRepository,
   SubscriptionsRepository,
+  BotUsersRepository,
+  BotsRepository,
 } from '@quantumdeal/db';
 import type { NotificationService } from '@quantumdeal/framework/notifications';
 import type { LLMService } from '@quantumdeal/framework';
@@ -31,6 +33,13 @@ describe('BroadcastService', () => {
     Pick<NotificationService, 'addMessages'>
   >;
   let mockLLMService: jest.Mocked<Pick<LLMService, 'generateObject'>>;
+  let mockBotUsersRepository: jest.Mocked<
+    Pick<
+      BotUsersRepository,
+      'countWithoutSubscription' | 'findWithoutSubscription'
+    >
+  >;
+  let mockBotsRepository: jest.Mocked<Pick<BotsRepository, 'findById'>>;
 
   const TEST_SUBSCRIPTION_ID = 1;
   const TEST_BOT_ID = 5;
@@ -200,12 +209,49 @@ describe('BroadcastService', () => {
       }),
     };
 
+    mockBotUsersRepository = {
+      countWithoutSubscription: jest.fn().mockResolvedValue(5),
+      findWithoutSubscription: jest.fn().mockResolvedValue([
+        {
+          botUser: createMockBotUser({
+            id: 10,
+            userId: 1001,
+            botId: TEST_BOT_ID,
+            lang: 'en',
+            isActive: true,
+          }),
+        },
+        {
+          botUser: createMockBotUser({
+            id: 11,
+            userId: 1002,
+            botId: TEST_BOT_ID,
+            lang: 'ru',
+            isActive: true,
+          }),
+        },
+      ]),
+    };
+
+    mockBotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: TEST_BOT_ID,
+        name: 'TestBot',
+        token: 'test-token-123',
+        username: 'testbot',
+        isActive: true,
+        isDynamic: true,
+      }),
+    };
+
     // Create service instance
     broadcastService = new BroadcastService(
       mockUserSubscriptionsRepository as never,
       mockSubscriptionsRepository as never,
       mockNotificationService as never,
       mockLLMService as never,
+      mockBotUsersRepository as never,
+      mockBotsRepository as never,
     );
   });
 
@@ -1094,6 +1140,224 @@ describe('BroadcastService', () => {
 
       // Verify the correct set of unique users
       expect(userIds.sort()).toEqual([111, 222, 333, 444].sort());
+    });
+  });
+
+  describe('countUsersWithoutSubscription', () => {
+    it('should return count from repository', async () => {
+      // Arrange
+      const botId = TEST_BOT_ID;
+      mockBotUsersRepository.countWithoutSubscription.mockResolvedValue(5);
+
+      // Act
+      const result =
+        await broadcastService.countUsersWithoutSubscription(botId);
+
+      // Assert
+      expect(result).toBe(5);
+      expect(
+        mockBotUsersRepository.countWithoutSubscription,
+      ).toHaveBeenCalledWith(botId);
+    });
+
+    it('should return 0 when no users without subscription exist', async () => {
+      // Arrange
+      mockBotUsersRepository.countWithoutSubscription.mockResolvedValue(0);
+
+      // Act
+      const result =
+        await broadcastService.countUsersWithoutSubscription(TEST_BOT_ID);
+
+      // Assert
+      expect(result).toBe(0);
+    });
+  });
+
+  describe('countAllSubscribers', () => {
+    it('should count all subscribers regardless of status', async () => {
+      // Arrange: Mock active returns 3, expired returns 2
+      mockUserSubscriptionsRepository.findSubscribersWithUserDetails.mockResolvedValue(
+        activeSubscribers,
+      );
+      // Expired subscribers for bot 5 - we need to filter to bot 5
+      mockUserSubscriptionsRepository.findExpired.mockResolvedValue([
+        {
+          botUser: createMockBotUser({
+            id: 4,
+            userId: 444,
+            botId: TEST_BOT_ID,
+            lang: 'en',
+            isActive: true,
+          }),
+          subscription: mockSubscription,
+          userSubscription: {
+            id: 4,
+            botUserId: 4,
+            subscriptionId: TEST_SUBSCRIPTION_ID,
+            isActive: false,
+            expiresAt: new Date('2025-11-01'),
+          },
+        },
+      ]);
+
+      // Act
+      const result = await broadcastService.countAllSubscribers(
+        TEST_SUBSCRIPTION_ID,
+        TEST_BOT_ID,
+      );
+
+      // Assert: Active (0 for bot 5) + Expired (1 for bot 5) = 1
+      expect(result).toBe(1);
+      // Verify both active and expired queries were called
+      expect(
+        mockUserSubscriptionsRepository.findSubscribersWithUserDetails,
+      ).toHaveBeenCalledWith(TEST_SUBSCRIPTION_ID);
+      expect(mockUserSubscriptionsRepository.findExpired).toHaveBeenCalledWith(
+        undefined,
+        TEST_BOT_ID,
+        TEST_SUBSCRIPTION_ID,
+      );
+    });
+
+    it('should work without bot filter', async () => {
+      // Arrange: 3 active + 2 expired = 5 total
+      mockUserSubscriptionsRepository.findSubscribersWithUserDetails.mockResolvedValue(
+        activeSubscribers,
+      );
+      mockUserSubscriptionsRepository.findExpired.mockResolvedValue(
+        expiredSubscribers,
+      );
+
+      // Act
+      const result =
+        await broadcastService.countAllSubscribers(TEST_SUBSCRIPTION_ID);
+
+      // Assert: 3 active + 2 expired = 5 total
+      expect(result).toBe(5);
+    });
+
+    it('should pass null filterBotId correctly (same as undefined)', async () => {
+      // Arrange
+      mockUserSubscriptionsRepository.findSubscribersWithUserDetails.mockResolvedValue(
+        activeSubscribers,
+      );
+      mockUserSubscriptionsRepository.findExpired.mockResolvedValue(
+        expiredSubscribers,
+      );
+
+      // Act
+      const result = await broadcastService.countAllSubscribers(
+        TEST_SUBSCRIPTION_ID,
+        null,
+      );
+
+      // Assert: Same as no filter
+      expect(result).toBe(5);
+    });
+  });
+
+  describe('sendBroadcastToNonSubscribers', () => {
+    const TEST_MESSAGE = 'Welcome to our service!';
+    const TEST_MANAGER_ID = 12345;
+
+    it('should queue messages for users without subscription', async () => {
+      // Arrange: Mocks already set up in beforeEach with 2 users without subscription
+
+      // Act
+      const result = await broadcastService.sendBroadcastToNonSubscribers(
+        TEST_BOT_ID,
+        TEST_MESSAGE,
+        undefined,
+        TEST_MANAGER_ID,
+      );
+
+      // Assert
+      expect(
+        mockBotUsersRepository.findWithoutSubscription,
+      ).toHaveBeenCalledWith(TEST_BOT_ID);
+      expect(mockBotsRepository.findById).toHaveBeenCalledWith(TEST_BOT_ID);
+      expect(mockNotificationService.addMessages).toHaveBeenCalled();
+      expect(result.recipientCount).toBe(2);
+      expect(result.status).toBe('queued');
+    });
+
+    it('should return completed with 0 recipients when no users without subscription', async () => {
+      // Arrange: No users without subscription
+      mockBotUsersRepository.findWithoutSubscription.mockResolvedValue([]);
+
+      // Act
+      const result = await broadcastService.sendBroadcastToNonSubscribers(
+        TEST_BOT_ID,
+        TEST_MESSAGE,
+        undefined,
+        TEST_MANAGER_ID,
+      );
+
+      // Assert
+      expect(result.recipientCount).toBe(0);
+      expect(result.status).toBe('completed');
+      expect(mockNotificationService.addMessages).not.toHaveBeenCalled();
+    });
+
+    it('should throw error when bot not found', async () => {
+      // Arrange: Bot not found
+      mockBotsRepository.findById.mockResolvedValue(null);
+
+      // Act & Assert
+      await expect(
+        broadcastService.sendBroadcastToNonSubscribers(
+          TEST_BOT_ID,
+          TEST_MESSAGE,
+          undefined,
+          TEST_MANAGER_ID,
+        ),
+      ).rejects.toThrow(`Bot ${TEST_BOT_ID} not found`);
+    });
+
+    it('should pass message entities to notification service', async () => {
+      // Arrange: Message with entities
+      const entities = [{ type: 'bold' as const, offset: 0, length: 7 }];
+
+      // Act
+      await broadcastService.sendBroadcastToNonSubscribers(
+        TEST_BOT_ID,
+        TEST_MESSAGE,
+        entities,
+        TEST_MANAGER_ID,
+      );
+
+      // Assert: NotificationService receives messages
+      expect(mockNotificationService.addMessages).toHaveBeenCalledTimes(1);
+      const addMessagesCall = mockNotificationService.addMessages.mock.calls[0];
+      const messages = addMessagesCall[0];
+
+      // Verify correct number of messages
+      expect(messages).toHaveLength(2);
+
+      // Verify messages contain correct user telegramIds
+      const telegramIds = messages.map(
+        (m: { telegramId: number }) => m.telegramId,
+      );
+      expect(telegramIds).toContain(1001);
+      expect(telegramIds).toContain(1002);
+    });
+
+    it('should log broadcast operation', async () => {
+      // Arrange: Spy on logger
+      const loggerSpy = jest.spyOn(broadcastService['logger'], 'log');
+
+      // Act
+      await broadcastService.sendBroadcastToNonSubscribers(
+        TEST_BOT_ID,
+        TEST_MESSAGE,
+        undefined,
+        TEST_MANAGER_ID,
+      );
+
+      // Assert: Logger was called with relevant info
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining('without subscription'),
+      );
     });
   });
 });

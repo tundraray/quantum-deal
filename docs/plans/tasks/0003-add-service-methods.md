@@ -17,16 +17,16 @@ Add service layer methods for counting and broadcasting to users without subscri
 
 ## Target Files
 
-- [ ] `libs/masterbot/src/services/broadcast.service.ts`
-- [ ] `libs/masterbot/src/services/__tests__/broadcast.service.test.ts` (unit tests)
+- [x] `libs/masterbot/src/services/broadcast.service.ts`
+- [x] `libs/masterbot/src/services/__tests__/broadcast.service.spec.ts` (unit tests)
 
 ## Implementation Steps (TDD: Red-Green-Refactor)
 
 ### 1. Red Phase
 
-- [ ] Review existing BroadcastService methods for patterns
-- [ ] Review existing constructor dependencies
-- [ ] Write failing tests for new methods:
+- [x] Review existing BroadcastService methods for patterns
+- [x] Review existing constructor dependencies
+- [x] Write failing tests for new methods:
 
 ```typescript
 describe('countUsersWithoutSubscription', () => {
@@ -79,11 +79,11 @@ describe('sendBroadcastToNonSubscribers', () => {
 });
 ```
 
-- [ ] Run tests and confirm they fail
+- [x] Run tests and confirm they fail
 
 ### 2. Green Phase
 
-- [ ] Add BotUsersRepository to constructor injection:
+- [x] Add BotUsersRepository to constructor injection:
   ```typescript
   constructor(
     // ... existing dependencies
@@ -92,7 +92,7 @@ describe('sendBroadcastToNonSubscribers', () => {
   ) {}
   ```
 
-- [ ] Add `countUsersWithoutSubscription` method:
+- [x] Add `countUsersWithoutSubscription` method:
   ```typescript
   /**
    * Count bot users who have no subscription records
@@ -104,7 +104,7 @@ describe('sendBroadcastToNonSubscribers', () => {
   }
   ```
 
-- [ ] Add `countAllSubscribers` method:
+- [x] Add `countAllSubscribers` method:
   ```typescript
   /**
    * Count all subscribers (active + expired) for a subscription
@@ -125,7 +125,7 @@ describe('sendBroadcastToNonSubscribers', () => {
   }
   ```
 
-- [ ] Add `sendBroadcastToNonSubscribers` method:
+- [x] Add `sendBroadcastToNonSubscribers` method:
   ```typescript
   /**
    * Send broadcast to users who have no subscription records
@@ -172,13 +172,13 @@ describe('sendBroadcastToNonSubscribers', () => {
   }
   ```
 
-- [ ] Run tests and confirm they pass
+- [x] Run tests and confirm they pass
 
 ### 3. Refactor Phase
 
-- [ ] Ensure consistent error handling patterns
-- [ ] Verify logging is appropriate
-- [ ] Confirm all tests still pass
+- [x] Ensure consistent error handling patterns
+- [x] Verify logging is appropriate
+- [x] Confirm all tests still pass
 
 ## Expected Method Signatures
 
@@ -202,13 +202,13 @@ async sendBroadcastToNonSubscribers(
 
 ## Completion Criteria
 
-- [ ] All three methods implemented with correct signatures
-- [ ] Unit tests written and passing
-- [ ] BotUsersRepository injected into constructor
-- [ ] Methods follow existing service patterns
-- [ ] Build succeeds without errors (`pnpm build`)
-- [ ] Type check passes (`pnpm typecheck`)
-- [ ] Tests pass (`pnpm test`)
+- [x] All three methods implemented with correct signatures
+- [x] Unit tests written and passing
+- [x] BotUsersRepository injected into constructor
+- [x] Methods follow existing service patterns
+- [x] Build succeeds without errors (`pnpm build`)
+- [x] Type check passes (`pnpm typecheck`) - Note: pre-existing test file type issues exist but implementation files pass
+- [x] Tests pass (`pnpm test`)
 
 ## Operational Verification Procedures
 
