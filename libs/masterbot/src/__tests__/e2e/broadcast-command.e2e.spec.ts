@@ -181,7 +181,7 @@ describe('Broadcast Command Extraction E2E Tests', () => {
       session: {
         flowState: null,
         commandContext: null,
-        broadcastSubscriptionId: null,
+        broadcastSubscriptionIds: null,
         broadcastMessage: null,
         broadcastMessageEntities: null,
         broadcastFilterStatus: null,
@@ -296,6 +296,40 @@ describe('Broadcast Command Extraction E2E Tests', () => {
             );
           },
         ),
+      sendBroadcastMulti: jest
+        .fn()
+        .mockImplementation(
+          async (
+            subscriptionIds,
+            message,
+            entities,
+            managerId,
+            filterStatus,
+            filterBotId,
+          ) => {
+            // Call actual BroadcastService.sendBroadcast for E2E verification (first subscription)
+            return broadcastService.sendBroadcast(
+              subscriptionIds[0],
+              message,
+              entities,
+              managerId,
+              filterStatus,
+              filterBotId,
+            );
+          },
+        ),
+      getUniqueUserCount: jest
+        .fn()
+        .mockImplementation(
+          async (subscriptionIds, filterStatus, filterBotId) => ({
+            total: signalsSubscribers.length,
+            breakdown: subscriptionIds.map((id: number) => ({
+              subscriptionId: id,
+              name: 'Premium Signals',
+              count: signalsSubscribers.length,
+            })),
+          }),
+        ),
       validateMessage: jest.fn().mockReturnValue({ valid: true }),
     } as unknown as jest.Mocked<BroadcastService>;
 
@@ -333,23 +367,23 @@ describe('Broadcast Command Extraction E2E Tests', () => {
   // @dependency: full-system (BroadcastUpdate, BroadcastService, SubscriptionsRepository, NotificationService)
   // @complexity: high
   it('User Journey: Manager broadcasts to signals subscribers via /broadcast command', async () => {
-    // Step 1: Manager sends /broadcast command
+    // NEW FLOW: /broadcast -> bot selection -> subscription selection -> status filter -> message -> confirm
+
+    // Step 1: Manager sends /broadcast command (now shows bot selection first)
     const broadcastCmdCtx = createMockContext();
     await broadcastUpdate.onBroadcastCommand(broadcastCmdCtx);
 
-    // Verify: Signals subscription appears in subscription list (AC1)
-    expect(
-      mockSubscriptionsRepository.findActiveSubscriptions,
-    ).toHaveBeenCalled();
+    // Verify: Bot selection keyboard is shown first (new flow)
+    expect(mockBotsRepository.findAllActive).toHaveBeenCalled();
     expect(broadcastCmdCtx.reply).toHaveBeenCalledWith(
-      expect.stringContaining('Выберите подписку для рассылки'),
+      expect.stringContaining('Отправить сообщение'),
       expect.objectContaining({
         parse_mode: 'Markdown',
         reply_markup: expect.objectContaining({
           inline_keyboard: expect.arrayContaining([
             expect.arrayContaining([
               expect.objectContaining({
-                text: expect.stringContaining('Premium Signals'),
+                text: expect.stringContaining('Все боты'),
               }),
             ]),
           ]),
@@ -357,7 +391,22 @@ describe('Broadcast Command Extraction E2E Tests', () => {
       }),
     );
 
-    // Step 2: Manager selects signals subscription
+    // Step 2: Manager selects "All bots" (skips subscription selection, goes to message input)
+    const selectAllBotsCtx = createMockContext(
+      MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
+      {
+        flowState: 'selecting_bot_filter',
+      },
+    );
+    await broadcastUpdate.onBroadcastBotAll(selectAllBotsCtx);
+
+    // Verify: Goes to message input (for "All bots", skips subscription selection)
+    expect(selectAllBotsCtx.session.broadcastFilterBotId).toBeNull();
+    expect(selectAllBotsCtx.session.flowState).toBe(
+      'awaiting_broadcast_message',
+    );
+
+    // Step 3: Manager selects signals subscription via legacy flow (for testing purposes)
     const selectSubCtx = createMockContext(
       `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${TEST_SUBSCRIPTION_ID}`,
     );
@@ -365,46 +414,46 @@ describe('Broadcast Command Extraction E2E Tests', () => {
 
     // Verify: Status filter keyboard shown
     expect(selectSubCtx.session.flowState).toBe('selecting_status_filter');
-    expect(selectSubCtx.session.broadcastSubscriptionId).toBe(
+    expect(selectSubCtx.session.broadcastSubscriptionIds).toEqual([
       TEST_SUBSCRIPTION_ID,
-    );
+    ]);
 
-    // Step 3: Manager selects "Active subscribers" filter
+    // Step 4: Manager selects "Active subscribers" filter
     const selectActiveCtx = createMockContext(
       MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
       {
-        broadcastSubscriptionId: TEST_SUBSCRIPTION_ID,
+        broadcastSubscriptionIds: [TEST_SUBSCRIPTION_ID],
         flowState: 'selecting_status_filter',
       },
     );
     await broadcastUpdate.onBroadcastFilterActive(selectActiveCtx);
 
-    // Verify: Bot filter keyboard shown
+    // Verify: Goes directly to message input after status selection (new flow)
     expect(selectActiveCtx.session.broadcastFilterStatus).toBe('active');
-    expect(selectActiveCtx.session.flowState).toBe('selecting_bot_filter');
+    expect(selectActiveCtx.session.flowState).toBe('awaiting_broadcast_message');
 
-    // Step 4: Manager selects "All bots" filter
-    const selectAllBotsCtx = createMockContext(
+    // Step 5: Manager selects "All bots" filter again
+    const selectAllBotsCtx2 = createMockContext(
       MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
       {
-        broadcastSubscriptionId: TEST_SUBSCRIPTION_ID,
+        broadcastSubscriptionIds: [TEST_SUBSCRIPTION_ID],
         broadcastFilterStatus: 'active',
         flowState: 'selecting_bot_filter',
       },
     );
-    await broadcastUpdate.onBroadcastBotAll(selectAllBotsCtx);
+    await broadcastUpdate.onBroadcastBotAll(selectAllBotsCtx2);
 
     // Verify: Message input prompt shown
-    expect(selectAllBotsCtx.session.broadcastFilterBotId).toBeNull();
-    expect(selectAllBotsCtx.session.flowState).toBe(
+    expect(selectAllBotsCtx2.session.broadcastFilterBotId).toBeNull();
+    expect(selectAllBotsCtx2.session.flowState).toBe(
       'awaiting_broadcast_message',
     );
 
-    // Step 5: Manager confirms broadcast
+    // Step 6: Manager confirms broadcast
     const confirmCtx = createMockContext(
       MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM,
       {
-        broadcastSubscriptionId: TEST_SUBSCRIPTION_ID,
+        broadcastSubscriptionIds: [TEST_SUBSCRIPTION_ID],
         broadcastMessage: 'Special announcement for signals subscribers!',
         broadcastMessageEntities: null,
         broadcastFilterStatus: 'active',
@@ -413,9 +462,9 @@ describe('Broadcast Command Extraction E2E Tests', () => {
     );
     await broadcastUpdate.onBroadcastConfirm(confirmCtx);
 
-    // Verify: BroadcastService called with signals subscription (AC4)
-    expect(mockBroadcastService.sendBroadcast).toHaveBeenCalledWith(
-      TEST_SUBSCRIPTION_ID,
+    // Verify: BroadcastService.sendBroadcastMulti called with signals subscription (AC4)
+    expect(mockBroadcastService.sendBroadcastMulti).toHaveBeenCalledWith(
+      [TEST_SUBSCRIPTION_ID],
       'Special announcement for signals subscribers!',
       undefined,
       TEST_MANAGER_ID,
@@ -498,7 +547,7 @@ describe('Broadcast Command Extraction - Separation of Concerns E2E Tests', () =
       session: {
         flowState: null,
         commandContext: null,
-        broadcastSubscriptionId: null,
+        broadcastSubscriptionIds: null,
         broadcastMessage: null,
         broadcastMessageEntities: null,
         broadcastFilterStatus: null,
@@ -567,6 +616,16 @@ describe('Broadcast Command Extraction - Separation of Concerns E2E Tests', () =
         errorCount: 0,
         queuedIds: ['1', '2', '3'],
         errors: [],
+      }),
+      sendBroadcastMulti: jest.fn().mockResolvedValue({
+        queuedCount: 3,
+        errorCount: 0,
+        queuedIds: ['1', '2', '3'],
+        errors: [],
+      }),
+      getUniqueUserCount: jest.fn().mockResolvedValue({
+        total: 3,
+        breakdown: [{ subscriptionId: 1, name: 'Premium Signals', count: 3 }],
       }),
       validateMessage: jest.fn().mockReturnValue({ valid: true }),
     } as unknown as jest.Mocked<BroadcastService>;
@@ -658,13 +717,12 @@ describe('Broadcast Command Extraction - Separation of Concerns E2E Tests', () =
     expect(allButtons.length).toBe(2);
 
     // Part 2: Test /broadcast command - should provide broadcast functionality
+    // NEW FLOW: Now shows bot selection first instead of subscription list
     const broadcastCtx = createMockContext();
     await broadcastUpdate.onBroadcastCommand(broadcastCtx);
 
-    // Verify: /broadcast shows subscription list for broadcasting
-    expect(
-      mockSubscriptionsRepository.findActiveSubscriptions,
-    ).toHaveBeenCalled();
+    // Verify: /broadcast shows bot selection keyboard (new flow)
+    expect(mockBotsRepository.findAllActive).toHaveBeenCalled();
     expect(broadcastCtx.reply).toHaveBeenCalledWith(
       expect.stringContaining('Отправить сообщение'),
       expect.objectContaining({
@@ -673,10 +731,9 @@ describe('Broadcast Command Extraction - Separation of Concerns E2E Tests', () =
           inline_keyboard: expect.arrayContaining([
             expect.arrayContaining([
               expect.objectContaining({
-                text: expect.stringContaining('Premium Signals'),
-                callback_data: expect.stringContaining(
-                  MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX,
-                ),
+                text: expect.stringContaining('Все боты'),
+                callback_data:
+                  MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
               }),
             ]),
           ]),
@@ -684,19 +741,18 @@ describe('Broadcast Command Extraction - Separation of Concerns E2E Tests', () =
       }),
     );
 
-    // Verify: /broadcast menu contains subscription for broadcast selection
+    // Verify: /broadcast menu contains bot selection options (not subscription list)
     const broadcastReplyCall = (broadcastCtx.reply as jest.Mock).mock.calls[0];
     const broadcastReplyMarkup = broadcastReplyCall[1]?.reply_markup;
     const broadcastButtons =
       broadcastReplyMarkup?.inline_keyboard?.flat() || [];
 
-    // Check that there IS a subscription button for broadcast
-    const hasSubscriptionButton = broadcastButtons.some(
+    // Check that there IS a "All bots" button for broadcast
+    const hasAllBotsButton = broadcastButtons.some(
       (btn: { callback_data?: string }) =>
-        btn.callback_data?.startsWith(
-          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX,
-        ),
+        btn.callback_data ===
+        MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
     );
-    expect(hasSubscriptionButton).toBe(true);
+    expect(hasAllBotsButton).toBe(true);
   });
 });

@@ -358,7 +358,7 @@ export class MasterbotUpdate {
       ctx.session = {
         flowState: null,
         commandContext: null,
-        broadcastSubscriptionId: null,
+        broadcastSubscriptionIds: null,
         broadcastMessage: null,
         broadcastMessageEntities: null,
         broadcastFilterStatus: null,

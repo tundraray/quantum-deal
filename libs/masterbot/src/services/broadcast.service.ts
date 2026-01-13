@@ -24,6 +24,21 @@ import {
 type Translations = Record<string, string>;
 
 /**
+ * User count breakdown for multi-subscription broadcast preview
+ * Used to show total unique users and per-subscription counts
+ */
+export interface UserCountBreakdown {
+  /** Total unique users across all subscriptions (deduplicated by userId) */
+  total: number;
+  /** Per-subscription breakdown (counts may overlap) */
+  breakdown: Array<{
+    subscriptionId: number;
+    name: string;
+    count: number;
+  }>;
+}
+
+/**
  * Service for broadcasting messages to subscription subscribers
  *
  * CRITICAL: All operations validate subscription is broadcast type INLINE
@@ -98,6 +113,88 @@ export class BroadcastService {
     }
 
     return subscribers.length;
+  }
+
+  /**
+   * Get unique user count across multiple subscriptions with deduplication
+   *
+   * CRITICAL: Validates all subscriptions exist INLINE before counting
+   *
+   * Used for preview display showing:
+   * - Total unique users (deduplicated by userId)
+   * - Per-subscription breakdown (raw counts, may overlap)
+   *
+   * @param subscriptionIds - Array of subscription IDs to count
+   * @param filterStatus - 'active' | 'expired'
+   * @param filterBotId - Specific bot ID or null for all bots
+   * @returns UserCountBreakdown with total and breakdown array
+   * @throws Error if any subscription not found
+   */
+  async getUniqueUserCount(
+    subscriptionIds: number[],
+    filterStatus: 'active' | 'expired',
+    filterBotId: number | null,
+  ): Promise<UserCountBreakdown> {
+    // Collect all unique users using Set (deduplicated by userId)
+    const uniqueUserIds = new Set<number>();
+    const breakdown: UserCountBreakdown['breakdown'] = [];
+
+    for (const subscriptionId of subscriptionIds) {
+      // Validate subscription exists
+      const subscription =
+        await this.subscriptionsRepository.findById(subscriptionId);
+
+      if (!subscription) {
+        throw new Error('Subscription not found');
+      }
+
+      // Get subscribers based on filter status
+      let subscribers: Array<{
+        botUser: { userId: number; botId: number };
+      }>;
+
+      if (filterStatus === 'expired') {
+        // Use findExpired for expired subscribers
+        const expiredSubscribers =
+          await this.userSubscriptionsRepository.findExpired(
+            undefined, // subscriptionType - not filtering by type
+            filterBotId ?? undefined, // botId filter
+            subscriptionId, // subscriptionId filter
+          );
+        subscribers = expiredSubscribers;
+      } else {
+        // Active subscribers
+        let activeSubscribers =
+          await this.userSubscriptionsRepository.findSubscribersWithUserDetails(
+            subscriptionId,
+          );
+
+        // Apply bot filter if provided (in-memory filtering)
+        if (filterBotId != null) {
+          activeSubscribers = activeSubscribers.filter(
+            (s) => s.botUser.botId === filterBotId,
+          );
+        }
+        subscribers = activeSubscribers;
+      }
+
+      // Add to breakdown with subscription name
+      breakdown.push({
+        subscriptionId,
+        name: subscription.name,
+        count: subscribers.length,
+      });
+
+      // Collect unique user IDs
+      for (const sub of subscribers) {
+        uniqueUserIds.add(sub.botUser.userId);
+      }
+    }
+
+    return {
+      total: uniqueUserIds.size,
+      breakdown,
+    };
   }
 
   /**
@@ -380,6 +477,188 @@ export class BroadcastService {
     }
 
     return translatedMessages;
+  }
+
+  /**
+   * Send broadcast message to subscribers across multiple subscriptions with deduplication
+   *
+   * CRITICAL: Validates all subscriptions exist INLINE before sending
+   *
+   * Features:
+   * - Collects users from all specified subscriptions
+   * - Deduplicates by userId (each user receives message only once)
+   * - Automatic translation based on user language preferences
+   * - Groups users by language to minimize LLM calls
+   * - Preserves message formatting via entities (bold, italic, etc.)
+   * - Supports filtering by subscription status (active/expired)
+   * - Supports filtering by bot ID
+   *
+   * @param subscriptionIds - Array of subscription IDs to broadcast to
+   * @param message - The message content
+   * @param entities - Message entities for formatting (optional)
+   * @param managerId - The manager's Telegram ID who is broadcasting
+   * @param filterStatus - 'active' | 'expired'
+   * @param filterBotId - Bot ID filter or null for all bots
+   * @returns Broadcast result with deduplicated statistics
+   * @throws Error if any subscription not found or message invalid
+   */
+  async sendBroadcastMulti(
+    subscriptionIds: number[],
+    message: string,
+    entities: MessageEntity[] | undefined,
+    managerId: number,
+    filterStatus: 'active' | 'expired',
+    filterBotId: number | null,
+  ): Promise<BroadcastResultDto> {
+    // Validate message
+    const validation = this.validateMessage(message);
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+
+    // Log filter parameters
+    this.logger.log(
+      `BroadcastMulti filter: status=${filterStatus}, botId=${filterBotId ?? 'all'}, subscriptions=${subscriptionIds.join(',')}`,
+    );
+
+    // Collect unique users using Map (deduplicated by userId)
+    // Map preserves first occurrence, ensuring each user receives message only once
+    const uniqueUsers = new Map<
+      number,
+      {
+        botUser: { userId: number; botId: number; lang: string | null };
+        userSubscription: { id: number; subscriptionId: number };
+      }
+    >();
+
+    for (const subscriptionId of subscriptionIds) {
+      // Validate subscription exists
+      const subscription =
+        await this.subscriptionsRepository.findById(subscriptionId);
+
+      if (!subscription) {
+        throw new Error('Subscription not found');
+      }
+
+      // Get subscribers based on filter status
+      let subscribers: Array<{
+        botUser: { userId: number; botId: number; lang: string | null };
+        userSubscription: { id: number; subscriptionId: number };
+      }>;
+
+      if (filterStatus === 'expired') {
+        // Use findExpired for expired subscribers
+        const expiredSubscribers =
+          await this.userSubscriptionsRepository.findExpired(
+            undefined, // subscriptionType - not filtering by type
+            filterBotId ?? undefined, // botId filter
+            subscriptionId, // subscriptionId filter
+          );
+        subscribers = expiredSubscribers;
+      } else {
+        // Active subscribers
+        let activeSubscribers =
+          await this.userSubscriptionsRepository.findSubscribersWithUserDetails(
+            subscriptionId,
+          );
+
+        // Apply bot filter if provided (in-memory filtering)
+        if (filterBotId != null) {
+          activeSubscribers = activeSubscribers.filter(
+            (s) => s.botUser.botId === filterBotId,
+          );
+        }
+        subscribers = activeSubscribers;
+      }
+
+      // Add to unique users map (first occurrence wins)
+      for (const sub of subscribers) {
+        if (!uniqueUsers.has(sub.botUser.userId)) {
+          uniqueUsers.set(sub.botUser.userId, sub);
+        }
+      }
+    }
+
+    const uniqueSubscribers = Array.from(uniqueUsers.values());
+
+    this.logger.log(
+      `Broadcasting message to ${uniqueSubscribers.length} unique users across ${subscriptionIds.length} subscriptions`,
+    );
+
+    // Check if message has formatting entities
+    const hasFormatting = hasFormattingEntities(entities);
+
+    // Convert entities to Markdown for translation if present
+    const messageForTranslation = hasFormatting
+      ? convertEntitiesToMarkdown(message, entities)
+      : message;
+
+    this.logger.log(
+      `Message has formatting: ${hasFormatting}, using ${hasFormatting ? 'Markdown conversion' : 'plain text'} for translation`,
+    );
+
+    // Group users by language preference
+    const usersByLang = this.groupUsersByLanguage(uniqueSubscribers);
+
+    this.logger.debug(
+      `Users grouped by language: ${Array.from(usersByLang.keys()).join(', ')}`,
+    );
+
+    // Translate message for each language group
+    const translatedMessages = await this.translateMessagesForLanguages(
+      messageForTranslation,
+      usersByLang,
+    );
+
+    // Send broadcast via NotificationService
+    try {
+      const batchResult = this.notificationService.addMessages(
+        uniqueSubscribers.map((sub) => {
+          const userLang = sub.botUser.lang || 'en';
+          const translatedMessage =
+            translatedMessages.get(userLang) || messageForTranslation;
+
+          return {
+            telegramId: sub.botUser.userId,
+            botId: sub.botUser.botId,
+            message: translatedMessage,
+            options: {
+              priority: MessagePriority.CRITICAL,
+              // Use MARKDOWN if we converted entities, otherwise use TEXT
+              messageType: hasFormatting
+                ? QueuedMessageType.MARKDOWN
+                : QueuedMessageType.TEXT,
+              metadata: {
+                subscriptionIds,
+                managerId,
+                broadcastType: 'multi-subscription',
+                targetLanguage: userLang,
+                hasFormatting,
+              },
+            },
+          };
+        }),
+      );
+
+      // Map BatchSendResult to BroadcastResultDto
+      const result: BroadcastResultDto = {
+        recipientCount: uniqueSubscribers.length,
+        queuedCount: batchResult.queuedCount,
+        errorCount: batchResult.errorCount,
+        queuedIds: batchResult.queuedIds,
+        errors: batchResult.errors,
+      };
+
+      this.logger.log(
+        `BroadcastMulti queued: ${result.queuedCount} messages, ${result.errorCount} errors, ${translatedMessages.size} languages`,
+      );
+
+      return result;
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error('Failed to queue broadcast multi messages:', err);
+      throw new Error('Failed to queue broadcast messages');
+    }
   }
 
   /**

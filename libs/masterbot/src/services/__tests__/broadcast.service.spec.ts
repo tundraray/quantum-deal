@@ -498,4 +498,602 @@ describe('BroadcastService', () => {
       });
     });
   });
+
+  describe('getUniqueUserCount', () => {
+    // Test fixtures for multi-subscription scenarios
+    const SUB_1_ID = 1;
+    const SUB_2_ID = 2;
+
+    const sub1 = {
+      id: SUB_1_ID,
+      type: 'signals',
+      name: 'Premium Signals',
+      isActive: true,
+    };
+
+    const sub2 = {
+      id: SUB_2_ID,
+      type: 'subscription_basic',
+      name: 'Basic Plan',
+      isActive: true,
+    };
+
+    // Users A, B, C for subscription 1
+    const sub1Subscribers = [
+      {
+        botUser: createMockBotUser({
+          id: 1,
+          userId: 111, // User A
+          botId: 1,
+          lang: 'en',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 1,
+          botUserId: 1,
+          subscriptionId: SUB_1_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+      {
+        botUser: createMockBotUser({
+          id: 2,
+          userId: 222, // User B
+          botId: 1,
+          lang: 'ru',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 2,
+          botUserId: 2,
+          subscriptionId: SUB_1_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+      {
+        botUser: createMockBotUser({
+          id: 3,
+          userId: 333, // User C
+          botId: 1,
+          lang: 'es',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 3,
+          botUserId: 3,
+          subscriptionId: SUB_1_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+    ];
+
+    // Users B, C, D for subscription 2 (B and C overlap with sub1)
+    const sub2Subscribers = [
+      {
+        botUser: createMockBotUser({
+          id: 4,
+          userId: 222, // User B (overlaps with sub1)
+          botId: 1,
+          lang: 'ru',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 4,
+          botUserId: 4,
+          subscriptionId: SUB_2_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+      {
+        botUser: createMockBotUser({
+          id: 5,
+          userId: 333, // User C (overlaps with sub1)
+          botId: 1,
+          lang: 'es',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 5,
+          botUserId: 5,
+          subscriptionId: SUB_2_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+      {
+        botUser: createMockBotUser({
+          id: 6,
+          userId: 444, // User D (unique to sub2)
+          botId: TEST_BOT_ID,
+          lang: 'en',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 6,
+          botUserId: 6,
+          subscriptionId: SUB_2_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+    ];
+
+    it('should return correct total for single subscription', async () => {
+      // Arrange: Mock repository to return 3 users for subscription 1
+      mockSubscriptionsRepository.findById.mockResolvedValue(sub1);
+      mockUserSubscriptionsRepository.findSubscribersWithUserDetails.mockResolvedValue(
+        sub1Subscribers,
+      );
+
+      // Act: Call getUniqueUserCount([1], 'active', null)
+      const result = await broadcastService.getUniqueUserCount(
+        [SUB_1_ID],
+        'active',
+        null,
+      );
+
+      // Assert: total = 3, breakdown has 1 entry with count 3
+      expect(result.total).toBe(3);
+      expect(result.breakdown).toHaveLength(1);
+      expect(result.breakdown[0]).toEqual({
+        subscriptionId: SUB_1_ID,
+        name: 'Premium Signals',
+        count: 3,
+      });
+    });
+
+    it('should return deduplicated total for multiple subscriptions', async () => {
+      // Arrange: Mock repository
+      //   - Sub 1: users [A, B, C] (3 users)
+      //   - Sub 2: users [B, C, D] (3 users, B and C overlap)
+      mockSubscriptionsRepository.findById.mockImplementation(async (id) => {
+        if (id === SUB_1_ID) return sub1;
+        if (id === SUB_2_ID) return sub2;
+        return null;
+      });
+      mockUserSubscriptionsRepository.findSubscribersWithUserDetails.mockImplementation(
+        async (subscriptionId) => {
+          if (subscriptionId === SUB_1_ID) return sub1Subscribers;
+          if (subscriptionId === SUB_2_ID) return sub2Subscribers;
+          return [];
+        },
+      );
+
+      // Act: Call getUniqueUserCount([1, 2], 'active', null)
+      const result = await broadcastService.getUniqueUserCount(
+        [SUB_1_ID, SUB_2_ID],
+        'active',
+        null,
+      );
+
+      // Assert: total = 4 (A, B, C, D), breakdown[0].count = 3, breakdown[1].count = 3
+      expect(result.total).toBe(4); // Users 111, 222, 333, 444 (deduplicated)
+      expect(result.breakdown).toHaveLength(2);
+      expect(result.breakdown[0].count).toBe(3);
+      expect(result.breakdown[1].count).toBe(3);
+    });
+
+    it('should return correct breakdown per subscription', async () => {
+      // Arrange: Mock subscriptions with names and counts
+      mockSubscriptionsRepository.findById.mockImplementation(async (id) => {
+        if (id === SUB_1_ID) return sub1;
+        if (id === SUB_2_ID) return sub2;
+        return null;
+      });
+      mockUserSubscriptionsRepository.findSubscribersWithUserDetails.mockImplementation(
+        async (subscriptionId) => {
+          if (subscriptionId === SUB_1_ID) return sub1Subscribers;
+          if (subscriptionId === SUB_2_ID) return sub2Subscribers;
+          return [];
+        },
+      );
+
+      // Act: Call getUniqueUserCount
+      const result = await broadcastService.getUniqueUserCount(
+        [SUB_1_ID, SUB_2_ID],
+        'active',
+        null,
+      );
+
+      // Assert: breakdown contains correct subscriptionId, name, count for each
+      expect(result.breakdown).toContainEqual({
+        subscriptionId: SUB_1_ID,
+        name: 'Premium Signals',
+        count: 3,
+      });
+      expect(result.breakdown).toContainEqual({
+        subscriptionId: SUB_2_ID,
+        name: 'Basic Plan',
+        count: 3,
+      });
+    });
+
+    it('should filter by status when filterStatus=expired', async () => {
+      // Arrange: Mock repository with filterStatus parameter check
+      const expiredSub1Subscribers = [
+        {
+          botUser: createMockBotUser({
+            id: 10,
+            userId: 1001,
+            botId: 1,
+            lang: 'en',
+            isActive: true,
+          }),
+          subscription: sub1,
+          userSubscription: {
+            id: 10,
+            botUserId: 10,
+            subscriptionId: SUB_1_ID,
+            isActive: false,
+            expiresAt: new Date('2025-11-01'),
+          },
+        },
+      ];
+      mockSubscriptionsRepository.findById.mockResolvedValue(sub1);
+      mockUserSubscriptionsRepository.findExpired.mockResolvedValue(
+        expiredSub1Subscribers,
+      );
+
+      // Act: Call getUniqueUserCount([1], 'expired', null)
+      const result = await broadcastService.getUniqueUserCount(
+        [SUB_1_ID],
+        'expired',
+        null,
+      );
+
+      // Assert: Repository called with 'expired' filter (findExpired method used)
+      expect(mockUserSubscriptionsRepository.findExpired).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        SUB_1_ID,
+      );
+      expect(result.total).toBe(1);
+      expect(result.breakdown[0].count).toBe(1);
+    });
+
+    it('should filter by bot when filterBotId specified', async () => {
+      // Arrange: Mock repository with botId parameter check
+      // Only user D (id 6) has botId = TEST_BOT_ID (5)
+      const filteredSub2Subscribers = sub2Subscribers.filter(
+        (s) => s.botUser.botId === TEST_BOT_ID,
+      );
+      mockSubscriptionsRepository.findById.mockResolvedValue(sub2);
+      mockUserSubscriptionsRepository.findSubscribersWithUserDetails.mockResolvedValue(
+        sub2Subscribers, // Returns all, filtering happens in service
+      );
+
+      // Act: Call getUniqueUserCount([2], 'active', 5)
+      const result = await broadcastService.getUniqueUserCount(
+        [SUB_2_ID],
+        'active',
+        TEST_BOT_ID,
+      );
+
+      // Assert: Only users from bot 5 are counted
+      expect(result.total).toBe(1); // Only user D with botId=5
+      expect(result.breakdown[0].count).toBe(1);
+    });
+  });
+
+  describe('sendBroadcastMulti', () => {
+    const TEST_MESSAGE = 'Hello subscribers!';
+    const TEST_MANAGER_ID = 12345;
+    const SUB_1_ID = 1;
+    const SUB_2_ID = 2;
+
+    const sub1 = {
+      id: SUB_1_ID,
+      type: 'signals',
+      name: 'Premium Signals',
+      isActive: true,
+    };
+
+    const sub2 = {
+      id: SUB_2_ID,
+      type: 'subscription_basic',
+      name: 'Basic Plan',
+      isActive: true,
+    };
+
+    // Users A, B, C for subscription 1
+    const sub1Subscribers = [
+      {
+        botUser: createMockBotUser({
+          id: 1,
+          userId: 111, // User A
+          botId: 1,
+          lang: 'en',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 1,
+          botUserId: 1,
+          subscriptionId: SUB_1_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+      {
+        botUser: createMockBotUser({
+          id: 2,
+          userId: 222, // User B
+          botId: 1,
+          lang: 'ru',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 2,
+          botUserId: 2,
+          subscriptionId: SUB_1_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+      {
+        botUser: createMockBotUser({
+          id: 3,
+          userId: 333, // User C
+          botId: 1,
+          lang: 'es',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 3,
+          botUserId: 3,
+          subscriptionId: SUB_1_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+    ];
+
+    // Users B, C, D for subscription 2 (B and C overlap with sub1)
+    const sub2Subscribers = [
+      {
+        botUser: createMockBotUser({
+          id: 4,
+          userId: 222, // User B (overlaps with sub1)
+          botId: 1,
+          lang: 'ru',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 4,
+          botUserId: 4,
+          subscriptionId: SUB_2_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+      {
+        botUser: createMockBotUser({
+          id: 5,
+          userId: 333, // User C (overlaps with sub1)
+          botId: 1,
+          lang: 'es',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 5,
+          botUserId: 5,
+          subscriptionId: SUB_2_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+      {
+        botUser: createMockBotUser({
+          id: 6,
+          userId: 444, // User D (unique to sub2)
+          botId: TEST_BOT_ID,
+          lang: 'en',
+          isActive: true,
+        }),
+        userSubscription: {
+          id: 6,
+          botUserId: 6,
+          subscriptionId: SUB_2_ID,
+          isActive: true,
+          expiresAt: new Date('2026-12-31'),
+        },
+      },
+    ];
+
+    it('should deduplicate users across subscriptions', async () => {
+      // Arrange: Mock repository
+      //   - Sub 1: users [A, B, C] (userIds: 111, 222, 333)
+      //   - Sub 2: users [B, C, D] (userIds: 222, 333, 444) - B and C overlap
+      mockSubscriptionsRepository.findById.mockImplementation(async (id) => {
+        if (id === SUB_1_ID) return sub1;
+        if (id === SUB_2_ID) return sub2;
+        return null;
+      });
+      mockUserSubscriptionsRepository.findSubscribersWithUserDetails.mockImplementation(
+        async (subscriptionId) => {
+          if (subscriptionId === SUB_1_ID) return sub1Subscribers;
+          if (subscriptionId === SUB_2_ID) return sub2Subscribers;
+          return [];
+        },
+      );
+
+      // Act: Call sendBroadcastMulti([1, 2], message, ...)
+      const result = await broadcastService.sendBroadcastMulti(
+        [SUB_1_ID, SUB_2_ID],
+        TEST_MESSAGE,
+        undefined,
+        TEST_MANAGER_ID,
+        'active',
+        null,
+      );
+
+      // Assert: NotificationService.addMessages called with 4 unique users (not 6)
+      expect(mockNotificationService.addMessages).toHaveBeenCalledTimes(1);
+      const addMessagesCall = mockNotificationService.addMessages.mock.calls[0];
+      const messagesArg = addMessagesCall[0];
+      expect(messagesArg).toHaveLength(4); // Unique users: A, B, C, D
+
+      // Verify unique userIds
+      const userIds = messagesArg.map(
+        (m: { telegramId: number }) => m.telegramId,
+      );
+      expect(new Set(userIds).size).toBe(4);
+      expect(userIds).toContain(111); // User A
+      expect(userIds).toContain(222); // User B
+      expect(userIds).toContain(333); // User C
+      expect(userIds).toContain(444); // User D
+
+      // Verify result counts reflect deduplication
+      expect(result.recipientCount).toBe(4);
+    });
+
+    it('should work with single subscription (backward compatible)', async () => {
+      // Arrange: Mock single subscription with 3 users
+      mockSubscriptionsRepository.findById.mockResolvedValue(sub1);
+      mockUserSubscriptionsRepository.findSubscribersWithUserDetails.mockResolvedValue(
+        sub1Subscribers,
+      );
+
+      // Act: Call sendBroadcastMulti([1], message, ...)
+      const result = await broadcastService.sendBroadcastMulti(
+        [SUB_1_ID],
+        TEST_MESSAGE,
+        undefined,
+        TEST_MANAGER_ID,
+        'active',
+        null,
+      );
+
+      // Assert: Works same as sendBroadcast for single sub
+      expect(mockNotificationService.addMessages).toHaveBeenCalledTimes(1);
+      const addMessagesCall = mockNotificationService.addMessages.mock.calls[0];
+      const messagesArg = addMessagesCall[0];
+      expect(messagesArg).toHaveLength(3); // All 3 users
+      expect(result.recipientCount).toBe(3);
+    });
+
+    it('should respect filterStatus=expired parameter', async () => {
+      // Arrange: Mock repository with expired users
+      const expiredSub1Subscribers = [
+        {
+          botUser: createMockBotUser({
+            id: 10,
+            userId: 1001,
+            botId: 1,
+            lang: 'en',
+            isActive: true,
+          }),
+          subscription: sub1,
+          userSubscription: {
+            id: 10,
+            botUserId: 10,
+            subscriptionId: SUB_1_ID,
+            isActive: false,
+            expiresAt: new Date('2025-11-01'),
+          },
+        },
+      ];
+      mockSubscriptionsRepository.findById.mockResolvedValue(sub1);
+      mockUserSubscriptionsRepository.findExpired.mockResolvedValue(
+        expiredSub1Subscribers,
+      );
+
+      // Act: Call sendBroadcastMulti([1], message, ..., 'expired', null)
+      await broadcastService.sendBroadcastMulti(
+        [SUB_1_ID],
+        TEST_MESSAGE,
+        undefined,
+        TEST_MANAGER_ID,
+        'expired',
+        null,
+      );
+
+      // Assert: Repository queried with 'expired' filter (findExpired method used)
+      expect(mockUserSubscriptionsRepository.findExpired).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        SUB_1_ID,
+      );
+      // findSubscribersWithUserDetails should NOT be called
+      expect(
+        mockUserSubscriptionsRepository.findSubscribersWithUserDetails,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should respect filterBotId parameter', async () => {
+      // Arrange: Mock repository with specific bot users
+      mockSubscriptionsRepository.findById.mockResolvedValue(sub2);
+      mockUserSubscriptionsRepository.findSubscribersWithUserDetails.mockResolvedValue(
+        sub2Subscribers, // Returns all, filtering happens in service
+      );
+
+      // Act: Call sendBroadcastMulti([2], message, ..., 'active', 5)
+      const result = await broadcastService.sendBroadcastMulti(
+        [SUB_2_ID],
+        TEST_MESSAGE,
+        undefined,
+        TEST_MANAGER_ID,
+        'active',
+        TEST_BOT_ID,
+      );
+
+      // Assert: Only bot 5 user is targeted
+      expect(mockNotificationService.addMessages).toHaveBeenCalledTimes(1);
+      const addMessagesCall = mockNotificationService.addMessages.mock.calls[0];
+      const messagesArg = addMessagesCall[0];
+      expect(messagesArg).toHaveLength(1); // Only user D with botId=5
+      expect(messagesArg[0].telegramId).toBe(444); // User D
+      expect(result.recipientCount).toBe(1);
+    });
+
+    it('should call NotificationService with unique user list only', async () => {
+      // Arrange: Mock overlapping users
+      mockSubscriptionsRepository.findById.mockImplementation(async (id) => {
+        if (id === SUB_1_ID) return sub1;
+        if (id === SUB_2_ID) return sub2;
+        return null;
+      });
+      mockUserSubscriptionsRepository.findSubscribersWithUserDetails.mockImplementation(
+        async (subscriptionId) => {
+          if (subscriptionId === SUB_1_ID) return sub1Subscribers;
+          if (subscriptionId === SUB_2_ID) return sub2Subscribers;
+          return [];
+        },
+      );
+
+      // Act: Call sendBroadcastMulti
+      await broadcastService.sendBroadcastMulti(
+        [SUB_1_ID, SUB_2_ID],
+        TEST_MESSAGE,
+        undefined,
+        TEST_MANAGER_ID,
+        'active',
+        null,
+      );
+
+      // Assert: Each unique userId appears exactly once in notification calls
+      const addMessagesCall = mockNotificationService.addMessages.mock.calls[0];
+      const messagesArg = addMessagesCall[0];
+      const userIds = messagesArg.map(
+        (m: { telegramId: number }) => m.telegramId,
+      );
+
+      // Count occurrences of each userId
+      const userIdCounts = new Map<number, number>();
+      for (const userId of userIds) {
+        userIdCounts.set(userId, (userIdCounts.get(userId) || 0) + 1);
+      }
+
+      // Verify each userId appears exactly once
+      for (const [userId, count] of userIdCounts) {
+        expect(count).toBe(1);
+      }
+
+      // Verify the correct set of unique users
+      expect(userIds.sort()).toEqual([111, 222, 333, 444].sort());
+    });
+  });
 });

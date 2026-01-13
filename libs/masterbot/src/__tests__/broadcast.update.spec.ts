@@ -45,7 +45,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
       session: {
         flowState: null,
         commandContext: null,
-        broadcastSubscriptionId: null,
+        broadcastSubscriptionIds: null,
         broadcastMessage: null,
         broadcastMessageEntities: null,
         broadcastFilterStatus: null,
@@ -134,7 +134,16 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
       sendBroadcast: jest
         .fn()
         .mockResolvedValue({ queuedCount: 10, errorCount: 0 }),
+      sendBroadcastMulti: jest
+        .fn()
+        .mockResolvedValue({ queuedCount: 10, errorCount: 0 }),
       validateMessage: jest.fn().mockReturnValue({ valid: true }),
+      getUniqueUserCount: jest.fn().mockResolvedValue({
+        total: 10,
+        breakdown: [
+          { subscriptionId: 1, name: 'Test Subscription', count: 10 },
+        ],
+      }),
     } as unknown as jest.Mocked<BroadcastService>;
 
     mockBotsRepository = {
@@ -159,35 +168,34 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
       it('should set broadcastFilterStatus to active', async () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
-          { broadcastSubscriptionId: 1 },
+          { broadcastSubscriptionIds: [1] },
         );
         await broadcastUpdate.onBroadcastFilterActive(ctx);
         expect(ctx.session.broadcastFilterStatus).toBe('active');
       });
 
-      it('should set flowState to selecting_bot_filter', async () => {
+      it('should set flowState to awaiting_broadcast_message', async () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
-          { broadcastSubscriptionId: 1 },
+          { broadcastSubscriptionIds: [1] },
         );
         await broadcastUpdate.onBroadcastFilterActive(ctx);
-        expect(ctx.session.flowState).toBe('selecting_bot_filter');
+        expect(ctx.session.flowState).toBe('awaiting_broadcast_message');
       });
 
-      it('should show bot selection keyboard after selection', async () => {
+      it('should show message input prompt after selection', async () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
-          { broadcastSubscriptionId: 1 },
+          { broadcastSubscriptionIds: [1] },
         );
         await broadcastUpdate.onBroadcastFilterActive(ctx);
         expect(ctx.editMessageText).toHaveBeenCalled();
-        expect(mockBotsRepository.findAllActive).toHaveBeenCalled();
       });
 
       it('should answer callback query', async () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
-          { broadcastSubscriptionId: 1 },
+          { broadcastSubscriptionIds: [1] },
         );
         await broadcastUpdate.onBroadcastFilterActive(ctx);
         expect(ctx.answerCbQuery).toHaveBeenCalled();
@@ -198,19 +206,19 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
       it('should set broadcastFilterStatus to expired', async () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED,
-          { broadcastSubscriptionId: 1 },
+          { broadcastSubscriptionIds: [1] },
         );
         await broadcastUpdate.onBroadcastFilterExpired(ctx);
         expect(ctx.session.broadcastFilterStatus).toBe('expired');
       });
 
-      it('should set flowState to selecting_bot_filter', async () => {
+      it('should set flowState to awaiting_broadcast_message', async () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED,
-          { broadcastSubscriptionId: 1 },
+          { broadcastSubscriptionIds: [1] },
         );
         await broadcastUpdate.onBroadcastFilterExpired(ctx);
-        expect(ctx.session.flowState).toBe('selecting_bot_filter');
+        expect(ctx.session.flowState).toBe('awaiting_broadcast_message');
       });
     });
   });
@@ -220,7 +228,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
       it('should set broadcastFilterBotId to null', async () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
-          { broadcastSubscriptionId: 1, broadcastFilterStatus: 'active' },
+          { broadcastSubscriptionIds: [1], broadcastFilterStatus: 'active' },
         );
         await broadcastUpdate.onBroadcastBotAll(ctx);
         expect(ctx.session.broadcastFilterBotId).toBeNull();
@@ -229,7 +237,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
       it('should set flowState to awaiting_broadcast_message', async () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
-          { broadcastSubscriptionId: 1, broadcastFilterStatus: 'active' },
+          { broadcastSubscriptionIds: [1], broadcastFilterStatus: 'active' },
         );
         await broadcastUpdate.onBroadcastBotAll(ctx);
         expect(ctx.session.flowState).toBe('awaiting_broadcast_message');
@@ -241,7 +249,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
         const botId = 5;
         const ctx = createMockContext(
           `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_PREFIX}${botId}`,
-          { broadcastSubscriptionId: 1, broadcastFilterStatus: 'active' },
+          { broadcastSubscriptionIds: [1], broadcastFilterStatus: 'active' },
         );
         await broadcastUpdate.onBroadcastBotSelected(ctx);
         expect(ctx.session.broadcastFilterBotId).toBe(botId);
@@ -252,7 +260,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
         mockBotsRepository.findById.mockResolvedValue(null);
         const ctx = createMockContext(
           `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_PREFIX}${nonExistentBotId}`,
-          { broadcastSubscriptionId: 1, broadcastFilterStatus: 'active' },
+          { broadcastSubscriptionIds: [1], broadcastFilterStatus: 'active' },
         );
         await broadcastUpdate.onBroadcastBotSelected(ctx);
         expect(ctx.editMessageText).toHaveBeenCalled();
@@ -323,11 +331,11 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
     });
 
     describe('onBroadcastConfirm', () => {
-      it('should pass filter parameters to sendBroadcast', async () => {
+      it('should pass filter parameters to sendBroadcastMulti', async () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM,
           {
-            broadcastSubscriptionId: 1,
+            broadcastSubscriptionIds: [1],
             broadcastMessage: 'Test broadcast message',
             broadcastMessageEntities: null,
             broadcastFilterStatus: 'expired',
@@ -335,8 +343,8 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
           },
         );
         await broadcastUpdate.onBroadcastConfirm(ctx);
-        expect(mockBroadcastService.sendBroadcast).toHaveBeenCalledWith(
-          1,
+        expect(mockBroadcastService.sendBroadcastMulti).toHaveBeenCalledWith(
+          [1],
           'Test broadcast message',
           undefined,
           12345,
@@ -349,7 +357,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM,
           {
-            broadcastSubscriptionId: 1,
+            broadcastSubscriptionIds: [1],
             broadcastMessage: 'Test broadcast message',
             broadcastMessageEntities: null,
             broadcastFilterStatus: null,
@@ -357,8 +365,8 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
           },
         );
         await broadcastUpdate.onBroadcastConfirm(ctx);
-        expect(mockBroadcastService.sendBroadcast).toHaveBeenCalledWith(
-          1,
+        expect(mockBroadcastService.sendBroadcastMulti).toHaveBeenCalledWith(
+          [1],
           'Test broadcast message',
           undefined,
           12345,
@@ -371,7 +379,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CONFIRM,
           {
-            broadcastSubscriptionId: 1,
+            broadcastSubscriptionIds: [1],
             broadcastMessage: 'Test broadcast message',
             broadcastMessageEntities: null,
             broadcastFilterStatus: 'expired',
@@ -389,7 +397,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CANCEL,
           {
-            broadcastSubscriptionId: 1,
+            broadcastSubscriptionIds: [1],
             broadcastFilterStatus: 'expired',
             broadcastFilterBotId: 5,
           },

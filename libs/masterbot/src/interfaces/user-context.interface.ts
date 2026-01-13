@@ -35,6 +35,7 @@ export interface UserContext extends Context {
       | 'confirming_broadcast'
       | 'selecting_status_filter'
       | 'selecting_bot_filter'
+      | 'selecting_subscriptions'
       | null;
 
     /**
@@ -44,10 +45,10 @@ export interface UserContext extends Context {
     commandContext?: string | null;
 
     /**
-     * ID of the subscription selected for broadcasting
-     * Stored during the broadcast flow
+     * IDs of subscriptions selected for broadcasting
+     * Supports multiple subscription selection in the redesigned broadcast flow
      */
-    broadcastSubscriptionId?: number | null;
+    broadcastSubscriptionIds?: number[] | null;
 
     /**
      * Message content to be broadcast

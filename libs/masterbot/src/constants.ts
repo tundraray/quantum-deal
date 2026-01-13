@@ -51,6 +51,10 @@ export const MASTERBOT_CONSTANTS = {
     BROADCAST_FILTER_EXPIRED: 'broadcast_filter_expired',
     BROADCAST_BOT_ALL: 'broadcast_bot_all',
     BROADCAST_BOT_PREFIX: 'broadcast_bot_', // Usage: `broadcast_bot_${botId}`
+    // Subscription toggle actions for multi-select UI
+    BROADCAST_SUB_TOGGLE_PREFIX: 'broadcast_sub_toggle_', // Usage: `broadcast_sub_toggle_${subscriptionId}`
+    BROADCAST_SUB_SELECT_ALL: 'broadcast_sub_select_all',
+    BROADCAST_SUB_DONE: 'broadcast_sub_done',
     MENU_STATS: 'menu_stats',
     MENU_CODE: 'menu_code',
     MENU_HELP: 'menu_help',
