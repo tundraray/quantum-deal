@@ -67,7 +67,7 @@ export class BroadcastService {
     private readonly llmService: LLMService,
     private readonly botUsersRepository: BotUsersRepository,
     private readonly botsRepository: BotsRepository,
-  ) {}
+  ) { }
 
   /**
    * Count subscribers with optional filters

@@ -568,3 +568,4 @@ Test cases derived from acceptance criteria. Each AC has at least one test.
 | Date | Version | Changes | Author |
 |------|---------|---------|--------|
 | 2026-01-13 | 1.0 | Initial version | Claude Code |
+| 2026-01-14 | 1.1 | Bug fix: findExpired() now uses isActive=true (expired by date, not deactivated). UX: "Without subscription" button moved below Done/Cancel with 👤 icon | User + Claude Code |
