@@ -54,7 +54,7 @@ export class BroadcastService {
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly notificationService: NotificationService,
     private readonly llmService: LLMService,
-  ) {}
+  ) { }
 
   /**
    * Count subscribers with optional filters
@@ -734,7 +734,7 @@ ${message}
 
 Return a JSON object with language codes as keys and translated messages as values.
 
-Example format:
+Example output format:
 {
   "en": "translated English text",
   "ru": "переведенный русский текст",

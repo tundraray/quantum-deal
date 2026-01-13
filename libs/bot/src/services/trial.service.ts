@@ -14,7 +14,7 @@ export class TrialService {
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   /**
    * Check if user is eligible for trial
@@ -24,7 +24,6 @@ export class TrialService {
   async isEligible(botUserId: number): Promise<boolean> {
     // Check if TRIAL_ENABLED is true
     const trialSubscription = await this.getTrialSubscription(botUserId);
-    console.log('trialSubscription', trialSubscription);
     return trialSubscription === null;
   }
 
