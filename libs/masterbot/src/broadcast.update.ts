@@ -41,7 +41,7 @@ export class BroadcastUpdate {
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly botsRepository: BotsRepository,
     private readonly masterbotService: MasterbotService,
-  ) {}
+  ) { }
 
   /**
    * Ensures session is initialized with default values
@@ -196,7 +196,7 @@ export class BroadcastUpdate {
       // Show message input prompt
       await ctx.editMessageText(
         `📝 *Введите сообщение для рассылки*\n\n` +
-          `_Совет: Вы можете использовать форматирование текста_`,
+        `_Совет: Вы можете использовать форматирование текста_`,
         { parse_mode: 'Markdown' },
       );
       await ctx.answerCbQuery();
@@ -229,7 +229,7 @@ export class BroadcastUpdate {
       // Show message input prompt
       await ctx.editMessageText(
         `📝 *Введите сообщение для рассылки*\n\n` +
-          `_Совет: Вы можете использовать форматирование текста_`,
+        `_Совет: Вы можете использовать форматирование текста_`,
         { parse_mode: 'Markdown' },
       );
       await ctx.answerCbQuery();
@@ -284,8 +284,8 @@ export class BroadcastUpdate {
       // Show message input prompt with recipient count info
       await ctx.editMessageText(
         `📝 *Введите сообщение для рассылки*\n\n` +
-          `🎯 Получатели: ${count} пользователей без подписки\n\n` +
-          `_Совет: Вы можете использовать форматирование текста_`,
+        `🎯 Получатели: ${count} пользователей без подписки\n\n` +
+        `_Совет: Вы можете использовать форматирование текста_`,
         { parse_mode: 'Markdown' },
       );
       await ctx.answerCbQuery();
@@ -590,8 +590,8 @@ export class BroadcastUpdate {
       // Send initial status
       await ctx.editMessageText(
         '⏳ *Рассылка запущена*\n\n' +
-          'Ваше сообщение отправляется...\n' +
-          'Это может занять некоторое время.',
+        'Ваше сообщение отправляется...\n' +
+        'Это может занять некоторое время.',
         { parse_mode: 'Markdown' },
       );
 
@@ -739,7 +739,7 @@ export class BroadcastUpdate {
 
     await ctx.editMessageText(
       `📊 *Выберите тип подписчиков*\n\n` +
-        `Выберите, каких подписчиков включить в рассылку:`,
+      `Выберите, каких подписчиков включить в рассылку:`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
@@ -810,7 +810,7 @@ export class BroadcastUpdate {
 
     await ctx.editMessageText(
       `🤖 *Выберите бота*\n\n` +
-        `Выберите, подписчикам какого бота отправить рассылку:`,
+      `Выберите, подписчикам какого бота отправить рассылку:`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
@@ -876,7 +876,7 @@ export class BroadcastUpdate {
 
     // Fetch active subscriptions
     const subscriptions =
-      await this.subscriptionsRepository.findActiveSubscriptions();
+      await this.subscriptionsRepository.findAllActiveSubscriptions();
 
     // Get TOTAL subscriber counts (active + expired) for each subscription filtered by bot
     // Also get count of users without any subscription - execute in parallel for performance
@@ -924,7 +924,7 @@ export class BroadcastUpdate {
     if (botId != null) {
       buttons.push([
         Markup.button.callback(
-          `[ ] Без подписки (${noSubCount})`,
+          `👤 Без подписки (${noSubCount})`,
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_NO_SUBSCRIPTION,
         ),
       ]);
@@ -952,8 +952,8 @@ export class BroadcastUpdate {
 
     await ctx.editMessageText(
       `📋 *Выберите подписки для рассылки*\n\n` +
-        `🤖 Бот: ${botName}\n\n` +
-        `_Выберите одну или несколько подписок:_`,
+      `🤖 Бот: ${botName}\n\n` +
+      `_Выберите одну или несколько подписок:_`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard(buttons),
@@ -1081,12 +1081,12 @@ export class BroadcastUpdate {
       if (entities && entities.length > 0) {
         await ctx.reply(
           `📊 *Предпросмотр рассылки*\n\n` +
-            `🤖 Бот: ${botLabel}\n` +
-            `🎯 Цель: ${filterStatusLabel}\n` +
-            `📋 Подписки:\n${subscriptionsText}\n` +
-            `👥 Всего получателей: *${total}* уникальных пользователей\n` +
-            overlapText +
-            `\n*Сообщение (с форматированием):*`,
+          `🤖 Бот: ${botLabel}\n` +
+          `🎯 Цель: ${filterStatusLabel}\n` +
+          `📋 Подписки:\n${subscriptionsText}\n` +
+          `👥 Всего получателей: *${total}* уникальных пользователей\n` +
+          overlapText +
+          `\n*Сообщение (с форматированием):*`,
           { parse_mode: 'Markdown' },
         );
 
@@ -1123,13 +1123,13 @@ export class BroadcastUpdate {
         // No entities, show plain text preview
         await ctx.reply(
           `📊 *Предпросмотр рассылки*\n\n` +
-            `🤖 Бот: ${botLabel}\n` +
-            `🎯 Цель: ${filterStatusLabel}\n` +
-            `📋 Подписки:\n${subscriptionsText}\n` +
-            `👥 Всего получателей: *${total}* уникальных пользователей\n` +
-            overlapText +
-            `\n*Сообщение:*\n${message}\n\n` +
-            `Отправить это сообщение?`,
+          `🤖 Бот: ${botLabel}\n` +
+          `🎯 Цель: ${filterStatusLabel}\n` +
+          `📋 Подписки:\n${subscriptionsText}\n` +
+          `👥 Всего получателей: *${total}* уникальных пользователей\n` +
+          overlapText +
+          `\n*Сообщение:*\n${message}\n\n` +
+          `Отправить это сообщение?`,
           {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
