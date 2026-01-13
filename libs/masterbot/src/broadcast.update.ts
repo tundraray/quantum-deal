@@ -460,7 +460,7 @@ export class BroadcastUpdate {
 
       // Fetch active subscriptions
       const subscriptions =
-        await this.subscriptionsRepository.findActiveSubscriptions();
+        await this.subscriptionsRepository.findAllActiveSubscriptions();
 
       // Get same filtered list as keyboard shows
       const subsWithCounts = await Promise.all(
