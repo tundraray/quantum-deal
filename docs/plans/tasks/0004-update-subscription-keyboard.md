@@ -18,20 +18,20 @@ This gives managers visibility into total reach and new targeting option.
 
 ## Target Files
 
-- [ ] `libs/masterbot/src/broadcast.update.ts`
+- [x] `libs/masterbot/src/broadcast.update.ts`
 
 ## Implementation Steps (TDD: Red-Green-Refactor)
 
 ### 1. Red Phase
 
-- [ ] Review existing `showSubscriptionToggleKeyboard()` implementation
-- [ ] Identify where `countSubscribers(sub.id, 'active', botId)` is called
-- [ ] Understand current button text format
-- [ ] No unit tests for L1 verification (manual operation test)
+- [x] Review existing `showSubscriptionToggleKeyboard()` implementation
+- [x] Identify where `countSubscribers(sub.id, 'active', botId)` is called
+- [x] Understand current button text format
+- [x] No unit tests for L1 verification (manual operation test)
 
 ### 2. Green Phase
 
-- [ ] Change count method call from active-only to total:
+- [x] Change count method call from active-only to total:
   ```typescript
   // Before
   const count = await this.broadcastService.countSubscribers(sub.id, 'active', botId);
@@ -40,7 +40,7 @@ This gives managers visibility into total reach and new targeting option.
   const count = await this.broadcastService.countAllSubscribers(sub.id, botId);
   ```
 
-- [ ] Add "Without subscription" button after subscription list:
+- [x] Add "Without subscription" button after subscription list:
   ```typescript
   // After subscription toggle buttons, before "Done" button
   const noSubCount = await this.broadcastService.countUsersWithoutSubscription(botId);
@@ -52,19 +52,19 @@ This gives managers visibility into total reach and new targeting option.
   ]);
   ```
 
-- [ ] Verify button text format matches existing pattern: "Name (N users)"
+- [x] Verify button text format matches existing pattern: "Name (N users)"
 
 ### 3. Refactor Phase
 
-- [ ] Ensure parallel query execution for performance:
+- [x] Ensure parallel query execution for performance:
   ```typescript
   const [subscriptionCounts, noSubCount] = await Promise.all([
     Promise.all(subscriptions.map(sub => this.broadcastService.countAllSubscribers(sub.id, botId))),
     this.broadcastService.countUsersWithoutSubscription(botId),
   ]);
   ```
-- [ ] Verify consistent button text formatting
-- [ ] Run quality checks
+- [x] Verify consistent button text formatting
+- [x] Run quality checks
 
 ## Expected UI Changes
 
@@ -85,11 +85,11 @@ This gives managers visibility into total reach and new targeting option.
 
 ## Completion Criteria
 
-- [ ] `countAllSubscribers()` used instead of `countSubscribers(sub.id, 'active', botId)`
-- [ ] "Without subscription" button added with count
-- [ ] Button text shows total counts (active + expired)
-- [ ] Build succeeds without errors (`pnpm build`)
-- [ ] Type check passes (`pnpm typecheck`)
+- [x] `countAllSubscribers()` used instead of `countSubscribers(sub.id, 'active', botId)`
+- [x] "Without subscription" button added with count
+- [x] Button text shows total counts (active + expired)
+- [x] Build succeeds without errors (`pnpm build`)
+- [x] Type check passes (`pnpm typecheck`)
 
 ## Operational Verification Procedures
 

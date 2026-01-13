@@ -55,6 +55,8 @@ export const MASTERBOT_CONSTANTS = {
     BROADCAST_SUB_TOGGLE_PREFIX: 'broadcast_sub_toggle_', // Usage: `broadcast_sub_toggle_${subscriptionId}`
     BROADCAST_SUB_SELECT_ALL: 'broadcast_sub_select_all',
     BROADCAST_SUB_DONE: 'broadcast_sub_done',
+    // No-subscription filter (users who never activated any subscription)
+    BROADCAST_FILTER_NO_SUBSCRIPTION: 'broadcast_filter_no_subscription',
     MENU_STATS: 'menu_stats',
     MENU_CODE: 'menu_code',
     MENU_HELP: 'menu_help',
