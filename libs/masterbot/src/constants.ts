@@ -49,6 +49,7 @@ export const MASTERBOT_CONSTANTS = {
     // Broadcast filter callback actions
     BROADCAST_FILTER_ACTIVE: 'broadcast_filter_active',
     BROADCAST_FILTER_EXPIRED: 'broadcast_filter_expired',
+    BROADCAST_FILTER_ALL: 'broadcast_filter_all',
     BROADCAST_BOT_ALL: 'broadcast_bot_all',
     BROADCAST_BOT_PREFIX: 'broadcast_bot_', // Usage: `broadcast_bot_${botId}`
     // Subscription toggle actions for multi-select UI

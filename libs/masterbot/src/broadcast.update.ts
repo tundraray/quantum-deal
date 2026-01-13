@@ -240,6 +240,39 @@ export class BroadcastUpdate {
   }
 
   /**
+   * Handler for selecting "All subscribers" filter
+   * Sets session state to track all filter (active + expired) and shows message input prompt
+   */
+  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ALL)
+  async onBroadcastFilterAll(@Ctx() ctx: UserContext): Promise<void> {
+    const manager = ctx.manager;
+    if (!manager) {
+      await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
+      return;
+    }
+
+    try {
+      // Ensure session is initialized
+      this.ensureSession(ctx);
+
+      // Set filter status to all (active + expired)
+      ctx.session.broadcastFilterStatus = 'all';
+      ctx.session.flowState = 'awaiting_broadcast_message';
+
+      // Show message input prompt
+      await ctx.editMessageText(
+        `📝 *Введите сообщение для рассылки*\n\n` +
+          `_Совет: Вы можете использовать форматирование текста_`,
+        { parse_mode: 'Markdown' },
+      );
+      await ctx.answerCbQuery();
+    } catch (error) {
+      this.logger.error('Error in filter all handler', error);
+      await ctx.answerCbQuery('Ошибка');
+    }
+  }
+
+  /**
    * Handler for selecting "Without subscription" filter
    * Targets users who have NEVER activated any subscription for the selected bot
    * Skips subscription and status filter selection, goes directly to message input
@@ -737,12 +770,21 @@ export class BroadcastUpdate {
       ),
     ]);
 
+    // Total count (note: may have overlap, actual send will deduplicate)
+    const totalCount = activeCount + expiredCount;
+
     await ctx.editMessageText(
       `📊 *Выберите тип подписчиков*\n\n` +
-      `Выберите, каких подписчиков включить в рассылку:`,
+        `Выберите, каких подписчиков включить в рассылку:`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              `👥 Все (${totalCount})`,
+              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ALL,
+            ),
+          ],
           [
             Markup.button.callback(
               `✅ Активные (${activeCount})`,
@@ -1054,9 +1096,11 @@ export class BroadcastUpdate {
 
         // Build filter description labels for preview
         filterStatusLabel =
-          filterStatus === 'expired'
-            ? 'Истекшие подписки'
-            : 'Активные подписчики';
+          filterStatus === 'all'
+            ? 'Все подписчики'
+            : filterStatus === 'expired'
+              ? 'Истекшие подписки'
+              : 'Активные подписчики';
 
         // Build subscriptions breakdown text
         subscriptionsText = '';

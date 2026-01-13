@@ -145,7 +145,7 @@ export class BroadcastService {
    */
   async getUniqueUserCount(
     subscriptionIds: number[],
-    filterStatus: 'active' | 'expired',
+    filterStatus: 'active' | 'expired' | 'all',
     filterBotId: number | null,
   ): Promise<UserCountBreakdown> {
     // Collect all unique users using Set (deduplicated by userId)
@@ -162,21 +162,12 @@ export class BroadcastService {
       }
 
       // Get subscribers based on filter status
-      let subscribers: Array<{
+      const subscribers: Array<{
         botUser: { userId: number; botId: number };
-      }>;
+      }> = [];
 
-      if (filterStatus === 'expired') {
-        // Use findExpired for expired subscribers
-        const expiredSubscribers =
-          await this.userSubscriptionsRepository.findExpired(
-            undefined, // subscriptionType - not filtering by type
-            filterBotId ?? undefined, // botId filter
-            subscriptionId, // subscriptionId filter
-          );
-        subscribers = expiredSubscribers;
-      } else {
-        // Active subscribers
+      // Fetch active subscribers if status is 'active' or 'all'
+      if (filterStatus === 'active' || filterStatus === 'all') {
         let activeSubscribers =
           await this.userSubscriptionsRepository.findSubscribersWithUserDetails(
             subscriptionId,
@@ -188,7 +179,18 @@ export class BroadcastService {
             (s) => s.botUser.botId === filterBotId,
           );
         }
-        subscribers = activeSubscribers;
+        subscribers.push(...activeSubscribers);
+      }
+
+      // Fetch expired subscribers if status is 'expired' or 'all'
+      if (filterStatus === 'expired' || filterStatus === 'all') {
+        const expiredSubscribers =
+          await this.userSubscriptionsRepository.findExpired(
+            undefined, // subscriptionType - not filtering by type
+            filterBotId ?? undefined, // botId filter
+            subscriptionId, // subscriptionId filter
+          );
+        subscribers.push(...expiredSubscribers);
       }
 
       // Add to breakdown with subscription name
@@ -514,7 +516,7 @@ export class BroadcastService {
     message: string,
     entities: MessageEntity[] | undefined,
     managerId: number,
-    filterStatus: 'active' | 'expired',
+    filterStatus: 'active' | 'expired' | 'all',
     filterBotId: number | null,
   ): Promise<BroadcastResultDto> {
     // Validate message
@@ -548,22 +550,13 @@ export class BroadcastService {
       }
 
       // Get subscribers based on filter status
-      let subscribers: Array<{
+      const subscribers: Array<{
         botUser: { userId: number; botId: number; lang: string | null };
         userSubscription: { id: number; subscriptionId: number };
-      }>;
+      }> = [];
 
-      if (filterStatus === 'expired') {
-        // Use findExpired for expired subscribers
-        const expiredSubscribers =
-          await this.userSubscriptionsRepository.findExpired(
-            undefined, // subscriptionType - not filtering by type
-            filterBotId ?? undefined, // botId filter
-            subscriptionId, // subscriptionId filter
-          );
-        subscribers = expiredSubscribers;
-      } else {
-        // Active subscribers
+      // Fetch active subscribers if status is 'active' or 'all'
+      if (filterStatus === 'active' || filterStatus === 'all') {
         let activeSubscribers =
           await this.userSubscriptionsRepository.findSubscribersWithUserDetails(
             subscriptionId,
@@ -575,7 +568,18 @@ export class BroadcastService {
             (s) => s.botUser.botId === filterBotId,
           );
         }
-        subscribers = activeSubscribers;
+        subscribers.push(...activeSubscribers);
+      }
+
+      // Fetch expired subscribers if status is 'expired' or 'all'
+      if (filterStatus === 'expired' || filterStatus === 'all') {
+        const expiredSubscribers =
+          await this.userSubscriptionsRepository.findExpired(
+            undefined, // subscriptionType - not filtering by type
+            filterBotId ?? undefined, // botId filter
+            subscriptionId, // subscriptionId filter
+          );
+        subscribers.push(...expiredSubscribers);
       }
 
       // Add to unique users map (first occurrence wins)
