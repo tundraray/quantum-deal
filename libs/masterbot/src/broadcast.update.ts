@@ -919,17 +919,6 @@ export class BroadcastUpdate {
       ];
     });
 
-    // Add "Without subscription" button (users who never had any subscription)
-    // Only show if botId is selected (required for this filter)
-    if (botId != null) {
-      buttons.push([
-        Markup.button.callback(
-          `👤 Без подписки (${noSubCount})`,
-          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_NO_SUBSCRIPTION,
-        ),
-      ]);
-    }
-
     // Add Select All button
     buttons.push([
       Markup.button.callback(
@@ -949,6 +938,17 @@ export class BroadcastUpdate {
         MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CANCEL,
       ),
     ]);
+
+    // Add "Without subscription" button below Done/Cancel (separate action path)
+    // Only show if botId is selected (required for this filter)
+    if (botId != null) {
+      buttons.push([
+        Markup.button.callback(
+          `👤 Без подписки (${noSubCount})`,
+          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_NO_SUBSCRIPTION,
+        ),
+      ]);
+    }
 
     await ctx.editMessageText(
       `📋 *Выберите подписки для рассылки*\n\n` +
