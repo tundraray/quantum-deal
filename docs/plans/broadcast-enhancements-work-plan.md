@@ -239,13 +239,13 @@ flowchart LR
   ```
 
 **Task 4.2: Update showStatusFilterKeyboard with counts (FR3)**
-- [ ] Modify `showStatusFilterKeyboard()` in broadcast.update.ts
-- [ ] Add count queries for active and expired:
+- [x] Modify `showStatusFilterKeyboard()` in broadcast.update.ts
+- [x] Add count queries for active and expired:
   ```typescript
   const activeCount = await this.broadcastService.countSubscribers(subscriptionIds, 'active', botId);
   const expiredCount = await this.broadcastService.countSubscribers(subscriptionIds, 'expired', botId);
   ```
-- [ ] Update button text to include counts: "Active (N)" / "Expired (M)"
+- [x] Update button text to include counts: "Active (N)" / "Expired (M)"
 
 **Task 4.3: Add BROADCAST_FILTER_NO_SUBSCRIPTION constant (FR2)**
 - [ ] Add to constants.ts:
@@ -273,7 +273,7 @@ flowchart LR
 
 #### Phase Completion Criteria
 - [ ] AC3: "Without subscription" option is available in subscription selection keyboard
-- [ ] AC4: Status filter buttons display subscriber counts
+- [x] AC4: Status filter buttons display subscriber counts
 - [ ] AC5: Subscription toggle keyboard shows total user counts
 - [ ] AC6: "Without subscription" broadcast executes correctly
 - [ ] Type check, lint, and build pass

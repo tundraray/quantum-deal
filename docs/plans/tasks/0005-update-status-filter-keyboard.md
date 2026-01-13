@@ -18,26 +18,26 @@ Changes:
 
 ## Target Files
 
-- [ ] `libs/masterbot/src/broadcast.update.ts`
+- [x] `libs/masterbot/src/broadcast.update.ts`
 
 ## Implementation Steps (TDD: Red-Green-Refactor)
 
 ### 1. Red Phase
 
-- [ ] Review existing `showStatusFilterKeyboard()` implementation
-- [ ] Identify current button creation code
-- [ ] Understand session state access for subscriptionIds and botId
-- [ ] No unit tests for L1 verification (manual operation test)
+- [x] Review existing `showStatusFilterKeyboard()` implementation
+- [x] Identify current button creation code
+- [x] Understand session state access for subscriptionIds and botId
+- [x] No unit tests for L1 verification (manual operation test)
 
 ### 2. Green Phase
 
-- [ ] Get subscription IDs and bot ID from session:
+- [x] Get subscription IDs and bot ID from session:
   ```typescript
   const subscriptionIds = ctx.session.broadcastSubscriptionIds ?? [];
   const botId = ctx.session.broadcastFilterBotId;
   ```
 
-- [ ] Add count queries:
+- [x] Add count queries:
   ```typescript
   const [activeCount, expiredCount] = await Promise.all([
     this.broadcastService.countSubscribers(subscriptionIds, 'active', botId),
@@ -45,7 +45,7 @@ Changes:
   ]);
   ```
 
-- [ ] Update button text to include counts:
+- [x] Update button text to include counts:
   ```typescript
   const buttons = [
     [
@@ -71,10 +71,10 @@ Changes:
 
 ### 3. Refactor Phase
 
-- [ ] Ensure parallel query execution with `Promise.all`
-- [ ] Handle edge cases (empty subscriptionIds, null botId)
-- [ ] Verify consistent button text formatting
-- [ ] Run quality checks
+- [x] Ensure parallel query execution with `Promise.all`
+- [x] Handle edge cases (empty subscriptionIds, null botId)
+- [x] Verify consistent button text formatting
+- [x] Run quality checks
 
 ## Expected UI Changes
 
@@ -94,11 +94,11 @@ Changes:
 
 ## Completion Criteria
 
-- [ ] Count queries added for active and expired
-- [ ] Button text updated to include counts: "Active (N)" / "Expired (M)"
-- [ ] Parallel query execution for performance
-- [ ] Build succeeds without errors (`pnpm build`)
-- [ ] Type check passes (`pnpm typecheck`)
+- [x] Count queries added for active and expired
+- [x] Button text updated to include counts: "Active (N)" / "Expired (M)"
+- [x] Parallel query execution for performance
+- [x] Build succeeds without errors (`pnpm build`)
+- [x] Type check passes (`pnpm typecheck`) - No separate typecheck script, build includes type checking
 
 ## Operational Verification Procedures
 

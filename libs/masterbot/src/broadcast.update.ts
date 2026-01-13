@@ -716,8 +716,27 @@ export class BroadcastUpdate {
 
   /**
    * Shows inline keyboard for selecting subscription status filter (Active/Expired)
+   * Displays subscriber counts in each button for better visibility of audience size
    */
   private async showStatusFilterKeyboard(ctx: UserContext): Promise<void> {
+    // Get subscription IDs and bot ID from session for counting
+    const subscriptionIds = ctx.session.broadcastSubscriptionIds ?? [];
+    const botId = ctx.session.broadcastFilterBotId;
+
+    // Query counts for active and expired subscribers in parallel
+    const [activeCount, expiredCount] = await Promise.all([
+      this.countSubscribersForMultipleSubscriptions(
+        subscriptionIds,
+        'active',
+        botId,
+      ),
+      this.countSubscribersForMultipleSubscriptions(
+        subscriptionIds,
+        'expired',
+        botId,
+      ),
+    ]);
+
     await ctx.editMessageText(
       `📊 *Выберите тип подписчиков*\n\n` +
         `Выберите, каких подписчиков включить в рассылку:`,
@@ -726,11 +745,11 @@ export class BroadcastUpdate {
         ...Markup.inlineKeyboard([
           [
             Markup.button.callback(
-              '🟢 Активные подписчики',
+              `✅ Активные (${activeCount})`,
               MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
             ),
             Markup.button.callback(
-              '🔴 Истекшие подписки',
+              `⏰ Истёкшие (${expiredCount})`,
               MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED,
             ),
           ],
@@ -743,6 +762,34 @@ export class BroadcastUpdate {
         ]),
       },
     );
+  }
+
+  /**
+   * Count subscribers across multiple subscriptions with deduplication
+   * Used by status filter keyboard to show counts in buttons
+   *
+   * @param subscriptionIds - Array of subscription IDs
+   * @param status - 'active' | 'expired'
+   * @param botId - Bot ID filter or null for all bots
+   * @returns Deduplicated count of subscribers
+   */
+  private async countSubscribersForMultipleSubscriptions(
+    subscriptionIds: number[],
+    status: 'active' | 'expired',
+    botId: number | null | undefined,
+  ): Promise<number> {
+    if (subscriptionIds.length === 0) {
+      return 0;
+    }
+
+    // Use getUniqueUserCount for deduplication across multiple subscriptions
+    const result = await this.broadcastService.getUniqueUserCount(
+      subscriptionIds,
+      status,
+      botId ?? null,
+    );
+
+    return result.total;
   }
 
   /**
