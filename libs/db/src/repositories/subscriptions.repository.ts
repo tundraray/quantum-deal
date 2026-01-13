@@ -332,6 +332,15 @@ export class SubscriptionsRepository extends BaseRepository<
   }
 
   /**
+   * Find all active subscriptions (both signals and broadcast)
+   *
+   * @returns Array of active subscriptions
+   */
+  async findAllActiveSubscriptions(): Promise<Subscription[]> {
+    return this.findBy(eq(this.table.isActive, true));
+  }
+
+  /**
    * Find subscription by name
    *
    * @param name - The subscription name

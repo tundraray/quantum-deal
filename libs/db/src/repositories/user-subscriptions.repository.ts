@@ -147,10 +147,10 @@ export class UserSubscriptionsRepository extends BaseRepository<
     }>
   > {
     // Base conditions (contrast to findExpiring):
-    // - isActive = false (expired) vs findExpiring's isActive = true (active)
+    // - isActive = true (expired) vs findExpiring's isActive = true (active)
     // - expiresAt < NOW() (past) vs findExpiring's expiresAt::date = CURRENT_DATE + N (future)
     const conditions = [
-      eq(this.table.isActive, false), // EXPIRED = isActive false
+      eq(this.table.isActive, true), // EXPIRED = isActive true
       eq(botUsers.isActive, true), // Only active bot users
       sql`${this.table.expiresAt} IS NOT NULL`,
       sql`${this.table.expiresAt} < NOW()`, // Already expired (no days param)
