@@ -379,50 +379,58 @@ describe('Broadcast Command Extraction E2E Tests', () => {
       expect.stringContaining('Отправить сообщение'),
       expect.objectContaining({
         parse_mode: 'Markdown',
-        reply_markup: expect.objectContaining({
-          inline_keyboard: expect.arrayContaining([
-            expect.arrayContaining([
-              expect.objectContaining({
-                text: expect.stringContaining('Все боты'),
-              }),
-            ]),
-          ]),
-        }),
       }),
     );
 
-    // Step 2: Manager selects "All bots" (skips subscription selection, goes to message input)
-    const selectAllBotsCtx = createMockContext(
-      MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
+    // Step 2: Manager selects a specific bot (new flow - no "All bots" option)
+    const selectBotCtx = createMockContext(
+      `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_PREFIX}${TEST_BOT_ID}`,
       {
         flowState: 'selecting_bot_filter',
       },
     );
-    await broadcastUpdate.onBroadcastBotAll(selectAllBotsCtx);
+    await broadcastUpdate.onBroadcastBotSelected(selectBotCtx);
 
-    // Verify: Goes to message input (for "All bots", skips subscription selection)
-    expect(selectAllBotsCtx.session.broadcastFilterBotId).toBeNull();
-    expect(selectAllBotsCtx.session.flowState).toBe(
-      'awaiting_broadcast_message',
+    // Verify: Goes to subscription selection
+    expect(selectBotCtx.session.broadcastFilterBotId).toBe(TEST_BOT_ID);
+    expect(selectBotCtx.session.flowState).toBe('selecting_subscriptions');
+
+    // Step 3: Manager toggles subscription and clicks "Done"
+    const toggleSubCtx = createMockContext(
+      `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_TOGGLE_PREFIX}${TEST_SUBSCRIPTION_ID}`,
+      {
+        broadcastFilterBotId: TEST_BOT_ID,
+        broadcastSubscriptionIds: [],
+        flowState: 'selecting_subscriptions',
+      },
     );
+    await broadcastUpdate.onBroadcastSubscriptionToggle(toggleSubCtx);
 
-    // Step 3: Manager selects signals subscription via legacy flow (for testing purposes)
-    const selectSubCtx = createMockContext(
-      `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${TEST_SUBSCRIPTION_ID}`,
-    );
-    await broadcastUpdate.onBroadcastSubscriptionSelected(selectSubCtx);
-
-    // Verify: Status filter keyboard shown
-    expect(selectSubCtx.session.flowState).toBe('selecting_status_filter');
-    expect(selectSubCtx.session.broadcastSubscriptionIds).toEqual([
+    // Verify: Subscription toggled
+    expect(toggleSubCtx.session.broadcastSubscriptionIds).toEqual([
       TEST_SUBSCRIPTION_ID,
     ]);
 
-    // Step 4: Manager selects "Active subscribers" filter
+    // Step 4: Manager clicks "Done" to proceed
+    const doneCtx = createMockContext(
+      MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_DONE,
+      {
+        broadcastFilterBotId: TEST_BOT_ID,
+        broadcastSubscriptionIds: [TEST_SUBSCRIPTION_ID],
+        flowState: 'selecting_subscriptions',
+      },
+    );
+    await broadcastUpdate.onBroadcastSubscriptionsDone(doneCtx);
+
+    // Verify: Status filter keyboard shown
+    expect(doneCtx.session.flowState).toBe('selecting_status_filter');
+
+    // Step 5: Manager selects "Active subscribers" filter
     const selectActiveCtx = createMockContext(
       MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
       {
         broadcastSubscriptionIds: [TEST_SUBSCRIPTION_ID],
+        broadcastFilterBotId: TEST_BOT_ID,
         flowState: 'selecting_status_filter',
       },
     );
@@ -430,22 +438,7 @@ describe('Broadcast Command Extraction E2E Tests', () => {
 
     // Verify: Goes directly to message input after status selection (new flow)
     expect(selectActiveCtx.session.broadcastFilterStatus).toBe('active');
-    expect(selectActiveCtx.session.flowState).toBe('awaiting_broadcast_message');
-
-    // Step 5: Manager selects "All bots" filter again
-    const selectAllBotsCtx2 = createMockContext(
-      MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
-      {
-        broadcastSubscriptionIds: [TEST_SUBSCRIPTION_ID],
-        broadcastFilterStatus: 'active',
-        flowState: 'selecting_bot_filter',
-      },
-    );
-    await broadcastUpdate.onBroadcastBotAll(selectAllBotsCtx2);
-
-    // Verify: Message input prompt shown
-    expect(selectAllBotsCtx2.session.broadcastFilterBotId).toBeNull();
-    expect(selectAllBotsCtx2.session.flowState).toBe(
+    expect(selectActiveCtx.session.flowState).toBe(
       'awaiting_broadcast_message',
     );
 
@@ -457,7 +450,7 @@ describe('Broadcast Command Extraction E2E Tests', () => {
         broadcastMessage: 'Special announcement for signals subscribers!',
         broadcastMessageEntities: null,
         broadcastFilterStatus: 'active',
-        broadcastFilterBotId: null,
+        broadcastFilterBotId: TEST_BOT_ID,
       },
     );
     await broadcastUpdate.onBroadcastConfirm(confirmCtx);
@@ -469,7 +462,7 @@ describe('Broadcast Command Extraction E2E Tests', () => {
       undefined,
       TEST_MANAGER_ID,
       'active',
-      null,
+      TEST_BOT_ID,
     );
 
     // Verify: findSubscribersWithUserDetails was called
@@ -727,17 +720,6 @@ describe('Broadcast Command Extraction - Separation of Concerns E2E Tests', () =
       expect.stringContaining('Отправить сообщение'),
       expect.objectContaining({
         parse_mode: 'Markdown',
-        reply_markup: expect.objectContaining({
-          inline_keyboard: expect.arrayContaining([
-            expect.arrayContaining([
-              expect.objectContaining({
-                text: expect.stringContaining('Все боты'),
-                callback_data:
-                  MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
-              }),
-            ]),
-          ]),
-        }),
       }),
     );
 
@@ -747,12 +729,20 @@ describe('Broadcast Command Extraction - Separation of Concerns E2E Tests', () =
     const broadcastButtons =
       broadcastReplyMarkup?.inline_keyboard?.flat() || [];
 
-    // Check that there IS a "All bots" button for broadcast
+    // Check that there is NO "All bots" button (removed in new design)
     const hasAllBotsButton = broadcastButtons.some(
       (btn: { callback_data?: string }) =>
         btn.callback_data ===
         MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
     );
-    expect(hasAllBotsButton).toBe(true);
+    expect(hasAllBotsButton).toBe(false);
+
+    // Check that there IS a cancel button
+    const hasCancelButton = broadcastButtons.some(
+      (btn: { callback_data?: string }) =>
+        btn.callback_data ===
+        MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_CANCEL,
+    );
+    expect(hasCancelButton).toBe(true);
   });
 });

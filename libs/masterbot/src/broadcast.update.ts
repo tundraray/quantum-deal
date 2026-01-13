@@ -175,7 +175,7 @@ export class BroadcastUpdate {
 
   /**
    * Handler for selecting "Active subscribers" filter
-   * Sets session state to track active filter and shows bot selection keyboard
+   * Sets session state to track active filter and shows message input prompt
    */
   @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE)
   async onBroadcastFilterActive(@Ctx() ctx: UserContext): Promise<void> {
@@ -208,7 +208,7 @@ export class BroadcastUpdate {
 
   /**
    * Handler for selecting "Expired subscribers" filter
-   * Sets session state to track expired filter and shows bot selection keyboard
+   * Sets session state to track expired filter and shows message input prompt
    */
   @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED)
   async onBroadcastFilterExpired(@Ctx() ctx: UserContext): Promise<void> {
@@ -240,11 +240,14 @@ export class BroadcastUpdate {
   }
 
   /**
-   * Handler for selecting "All bots" filter
-   * Sets session state to target all bots and proceeds to message input
+   * Handler for selecting "Without subscription" filter
+   * Targets users who have NEVER activated any subscription for the selected bot
+   * Skips subscription and status filter selection, goes directly to message input
    */
-  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL)
-  async onBroadcastBotAll(@Ctx() ctx: UserContext): Promise<void> {
+  @Action(MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_NO_SUBSCRIPTION)
+  async onBroadcastFilterNoSubscription(
+    @Ctx() ctx: UserContext,
+  ): Promise<void> {
     const manager = ctx.manager;
     if (!manager) {
       await ctx.answerCbQuery(MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED);
@@ -255,19 +258,39 @@ export class BroadcastUpdate {
       // Ensure session is initialized
       this.ensureSession(ctx);
 
-      // Set bot filter to null (all bots)
-      ctx.session.broadcastFilterBotId = null;
+      const botId = ctx.session.broadcastFilterBotId;
+
+      // Validate that a specific bot is selected (required for no-subscription filter)
+      if (botId == null) {
+        await ctx.answerCbQuery('Сначала выберите бота', { show_alert: true });
+        return;
+      }
+
+      // Get count for confirmation
+      const count =
+        await this.broadcastService.countUsersWithoutSubscription(botId);
+
+      // Set filter status to 'no_subscription' and clear subscription IDs
+      ctx.session.broadcastFilterStatus = 'no_subscription';
+      ctx.session.broadcastSubscriptionIds = []; // Explicitly clear subscriptions
+
+      // Skip status filter step, go directly to message input
       ctx.session.flowState = 'awaiting_broadcast_message';
 
-      // Show message input prompt
+      this.logger.log(
+        `No-subscription filter selected for bot ${botId}, ${count} users`,
+      );
+
+      // Show message input prompt with recipient count info
       await ctx.editMessageText(
         `📝 *Введите сообщение для рассылки*\n\n` +
+          `🎯 Получатели: ${count} пользователей без подписки\n\n` +
           `_Совет: Вы можете использовать форматирование текста_`,
         { parse_mode: 'Markdown' },
       );
       await ctx.answerCbQuery();
     } catch (error) {
-      this.logger.error('Error in bot all handler', error);
+      this.logger.error('Error in filter no subscription handler', error);
       await ctx.answerCbQuery('Ошибка');
     }
   }
@@ -542,7 +565,7 @@ export class BroadcastUpdate {
     // Ensure session is initialized
     this.ensureSession(ctx);
 
-    // Get subscription IDs from session (multi-subscription support)
+    // Get session values
     const subscriptionIds = ctx.session.broadcastSubscriptionIds || [];
     const message = ctx.session.broadcastMessage;
     const entities = ctx.session.broadcastMessageEntities;
@@ -550,7 +573,14 @@ export class BroadcastUpdate {
     const filterBotId = ctx.session.broadcastFilterBotId ?? null;
     const managerId = manager.telegramId;
 
-    if (!message || subscriptionIds.length === 0) {
+    // Check if this is a no-subscription broadcast
+    const isNoSubscriptionBroadcast = filterStatus === 'no_subscription';
+
+    // Validate: need message and either subscriptions OR no_subscription filter
+    if (
+      !message ||
+      (!isNoSubscriptionBroadcast && subscriptionIds.length === 0)
+    ) {
       await ctx.editMessageText('❌ Ошибка: данные сессии потеряны');
       await ctx.answerCbQuery('Ошибка');
       return;
@@ -567,35 +597,71 @@ export class BroadcastUpdate {
 
       await ctx.answerCbQuery('Рассылка началась...');
 
-      // Send broadcast to multiple subscriptions with deduplication
-      const result = await this.broadcastService.sendBroadcastMulti(
-        subscriptionIds,
-        message,
-        entities || undefined,
-        managerId,
-        filterStatus,
-        filterBotId,
-      );
+      if (isNoSubscriptionBroadcast) {
+        // No-subscription broadcast: send to users without any subscription
+        if (filterBotId == null) {
+          await ctx.reply('❌ Ошибка: бот не выбран');
+          return;
+        }
 
-      // Display delivery report
-      const reportText = this.buildDeliveryReport(
-        result,
-        subscriptionIds.length,
-      );
-      await ctx.reply(reportText, { parse_mode: 'Markdown' });
+        const result =
+          await this.broadcastService.sendBroadcastToNonSubscribers(
+            filterBotId,
+            message,
+            entities || undefined,
+            managerId,
+          );
 
-      // Log completion
-      this.logger.log(
-        `Broadcast multi: ${subscriptionIds.length} subs, ${result.queuedCount} unique users queued`,
-      );
+        // Display delivery report for no-subscription broadcast
+        const reportText =
+          `✅ *Рассылка завершена!*\n\n` +
+          `🎯 Цель: Без подписки\n` +
+          `📬 Сообщений в очереди: ${result.recipientCount}\n`;
+        await ctx.reply(reportText, { parse_mode: 'Markdown' });
 
-      // Log the action
-      this.masterbotService.logManagerAction(manager, 'BROADCAST_SENT', {
-        subscriptionIds,
-        queuedCount: result.queuedCount,
-        errorCount: result.errorCount,
-        hasFormatting: entities && entities.length > 0,
-      });
+        // Log completion
+        this.logger.log(
+          `Broadcast no-subscription: bot ${filterBotId}, ${result.recipientCount} users queued`,
+        );
+
+        // Log the action
+        this.masterbotService.logManagerAction(manager, 'BROADCAST_SENT', {
+          filterType: 'no_subscription',
+          botId: filterBotId,
+          recipientCount: result.recipientCount,
+          hasFormatting: entities && entities.length > 0,
+        });
+      } else {
+        // Multi-subscription broadcast: send to selected subscriptions with deduplication
+        const result = await this.broadcastService.sendBroadcastMulti(
+          subscriptionIds,
+          message,
+          entities || undefined,
+          managerId,
+          filterStatus,
+          filterBotId,
+        );
+
+        // Display delivery report
+        const reportText = this.buildDeliveryReport(
+          result,
+          subscriptionIds.length,
+        );
+        await ctx.reply(reportText, { parse_mode: 'Markdown' });
+
+        // Log completion
+        this.logger.log(
+          `Broadcast multi: ${subscriptionIds.length} subs, ${result.queuedCount} unique users queued`,
+        );
+
+        // Log the action
+        this.masterbotService.logManagerAction(manager, 'BROADCAST_SENT', {
+          subscriptionIds,
+          queuedCount: result.queuedCount,
+          errorCount: result.errorCount,
+          hasFormatting: entities && entities.length > 0,
+        });
+      }
     } catch (error) {
       this.logger.error('Broadcast failed', error);
       const errorMessage =
@@ -650,8 +716,27 @@ export class BroadcastUpdate {
 
   /**
    * Shows inline keyboard for selecting subscription status filter (Active/Expired)
+   * Displays subscriber counts in each button for better visibility of audience size
    */
   private async showStatusFilterKeyboard(ctx: UserContext): Promise<void> {
+    // Get subscription IDs and bot ID from session for counting
+    const subscriptionIds = ctx.session.broadcastSubscriptionIds ?? [];
+    const botId = ctx.session.broadcastFilterBotId;
+
+    // Query counts for active and expired subscribers in parallel
+    const [activeCount, expiredCount] = await Promise.all([
+      this.countSubscribersForMultipleSubscriptions(
+        subscriptionIds,
+        'active',
+        botId,
+      ),
+      this.countSubscribersForMultipleSubscriptions(
+        subscriptionIds,
+        'expired',
+        botId,
+      ),
+    ]);
+
     await ctx.editMessageText(
       `📊 *Выберите тип подписчиков*\n\n` +
         `Выберите, каких подписчиков включить в рассылку:`,
@@ -660,11 +745,11 @@ export class BroadcastUpdate {
         ...Markup.inlineKeyboard([
           [
             Markup.button.callback(
-              '🟢 Активные подписчики',
+              `✅ Активные (${activeCount})`,
               MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
             ),
             Markup.button.callback(
-              '🔴 Истекшие подписки',
+              `⏰ Истёкшие (${expiredCount})`,
               MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED,
             ),
           ],
@@ -677,6 +762,34 @@ export class BroadcastUpdate {
         ]),
       },
     );
+  }
+
+  /**
+   * Count subscribers across multiple subscriptions with deduplication
+   * Used by status filter keyboard to show counts in buttons
+   *
+   * @param subscriptionIds - Array of subscription IDs
+   * @param status - 'active' | 'expired'
+   * @param botId - Bot ID filter or null for all bots
+   * @returns Deduplicated count of subscribers
+   */
+  private async countSubscribersForMultipleSubscriptions(
+    subscriptionIds: number[],
+    status: 'active' | 'expired',
+    botId: number | null | undefined,
+  ): Promise<number> {
+    if (subscriptionIds.length === 0) {
+      return 0;
+    }
+
+    // Use getUniqueUserCount for deduplication across multiple subscriptions
+    const result = await this.broadcastService.getUniqueUserCount(
+      subscriptionIds,
+      status,
+      botId ?? null,
+    );
+
+    return result.total;
   }
 
   /**
@@ -701,12 +814,6 @@ export class BroadcastUpdate {
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              '📱 Все боты',
-              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
-            ),
-          ],
           ...botButtons,
           [
             Markup.button.callback(
@@ -740,12 +847,6 @@ export class BroadcastUpdate {
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              '📱 Все боты',
-              MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
-            ),
-          ],
           ...botButtons,
           [
             Markup.button.callback(
@@ -760,8 +861,9 @@ export class BroadcastUpdate {
 
   /**
    * Shows inline keyboard for selecting subscriptions with toggle UI
-   * Displays subscriptions filtered by selected bot with subscriber counts
+   * Displays subscriptions filtered by selected bot with TOTAL subscriber counts (active + expired)
    * Uses checkmarks to indicate selection state
+   * Includes "Without subscription" option for users who never activated any subscription
    *
    * @param ctx - User context
    * @param botName - Name of the selected bot to display
@@ -776,17 +878,24 @@ export class BroadcastUpdate {
     const subscriptions =
       await this.subscriptionsRepository.findActiveSubscriptions();
 
-    // Get subscriber counts for each subscription filtered by bot
-    const subsWithCounts = await Promise.all(
-      subscriptions.map(async (sub) => ({
-        ...sub,
-        count: await this.broadcastService.countSubscribers(
-          sub.id,
-          'active',
-          botId,
+    // Get TOTAL subscriber counts (active + expired) for each subscription filtered by bot
+    // Also get count of users without any subscription - execute in parallel for performance
+    const [subscriptionCounts, noSubCount] = await Promise.all([
+      Promise.all(
+        subscriptions.map((sub) =>
+          this.broadcastService.countAllSubscribers(sub.id, botId),
         ),
-      })),
-    );
+      ),
+      botId != null
+        ? this.broadcastService.countUsersWithoutSubscription(botId)
+        : Promise.resolve(0),
+    ]);
+
+    // Combine subscriptions with their counts
+    const subsWithCounts = subscriptions.map((sub, index) => ({
+      ...sub,
+      count: subscriptionCounts[index],
+    }));
 
     // Filter out subscriptions with 0 subscribers (unless ALL are 0 - fallback behavior)
     const nonEmpty = subsWithCounts.filter((s) => s.count > 0);
@@ -795,7 +904,7 @@ export class BroadcastUpdate {
     const selectedIds = ctx.session.broadcastSubscriptionIds || [];
 
     this.logger.log(
-      `Subscription toggle: showing ${displaySubs.length} subscriptions for bot ${botName}`,
+      `Subscription toggle: showing ${displaySubs.length} subscriptions for bot ${botName}, ${noSubCount} users without subscription`,
     );
 
     // Build toggle buttons for each subscription
@@ -809,6 +918,17 @@ export class BroadcastUpdate {
         ),
       ];
     });
+
+    // Add "Without subscription" button (users who never had any subscription)
+    // Only show if botId is selected (required for this filter)
+    if (botId != null) {
+      buttons.push([
+        Markup.button.callback(
+          `[ ] Без подписки (${noSubCount})`,
+          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_NO_SUBSCRIPTION,
+        ),
+      ]);
+    }
 
     // Add Select All button
     buttons.push([
@@ -845,8 +965,10 @@ export class BroadcastUpdate {
    * Handles broadcast message input from user
    * Validates message and shows preview with confirm/cancel buttons
    *
-   * NEW: Shows breakdown by subscription with unique user count (deduplicated)
-   * Uses getUniqueUserCount() for multi-subscription broadcasts
+   * Supports three modes:
+   * 1. Multi-subscription broadcast: Uses getUniqueUserCount() for preview
+   * 2. No-subscription broadcast: Uses countUsersWithoutSubscription() for preview
+   * 3. (Legacy single subscription - handled via multi-subscription path)
    */
   private async handleBroadcastMessageInput(ctx: UserContext): Promise<void> {
     const manager = ctx.manager;
@@ -864,10 +986,19 @@ export class BroadcastUpdate {
         ? ctx.message.entities
         : undefined;
 
-    // Use broadcastSubscriptionIds array for multi-subscription support
+    // Get filter values from session
+    const filterStatus = ctx.session.broadcastFilterStatus ?? 'active';
+    const filterBotId = ctx.session.broadcastFilterBotId ?? null;
     const subscriptionIds = ctx.session.broadcastSubscriptionIds || [];
 
-    if (!message || subscriptionIds.length === 0) {
+    // Check if this is a no-subscription broadcast
+    const isNoSubscriptionBroadcast = filterStatus === 'no_subscription';
+
+    // Validate: need message and either subscriptions OR no_subscription filter
+    if (
+      !message ||
+      (!isNoSubscriptionBroadcast && subscriptionIds.length === 0)
+    ) {
       return;
     }
 
@@ -879,28 +1010,6 @@ export class BroadcastUpdate {
     }
 
     try {
-      // Get filter values from session (default to active/all bots for backward compatibility)
-      const filterStatus = ctx.session.broadcastFilterStatus ?? 'active';
-      const filterBotId = ctx.session.broadcastFilterBotId ?? null;
-
-      // NEW: Get unique user count with breakdown using getUniqueUserCount
-      const { total, breakdown } =
-        await this.broadcastService.getUniqueUserCount(
-          subscriptionIds,
-          filterStatus,
-          filterBotId,
-        );
-
-      // Calculate overlap (users in multiple subscriptions)
-      const sumOfCounts = breakdown.reduce((sum, b) => sum + b.count, 0);
-      const overlap = sumOfCounts - total;
-
-      // Build filter description labels for preview
-      const filterStatusLabel =
-        filterStatus === 'expired'
-          ? 'Истекшие подписки'
-          : 'Активные подписчики';
-
       // Get bot name if specific bot is selected
       let botLabel = 'Все боты';
       if (filterBotId != null) {
@@ -908,17 +1017,59 @@ export class BroadcastUpdate {
         botLabel = bot?.name || 'Неизвестный бот';
       }
 
-      // Build subscriptions breakdown text
-      let subscriptionsText = '';
-      for (const item of breakdown) {
-        subscriptionsText += `  • ${item.name}: ${item.count} пользователей\n`;
-      }
+      // Handle preview differently based on broadcast type
+      let total: number;
+      let filterStatusLabel: string;
+      let subscriptionsText: string;
+      let overlapText: string;
 
-      // Build overlap text (only show if there are overlapping users)
-      const overlapText =
-        overlap > 0
-          ? `_(${overlap} пользователей в нескольких подписках)_\n`
-          : '';
+      if (isNoSubscriptionBroadcast) {
+        // No-subscription broadcast: get count from service
+        if (filterBotId == null) {
+          await ctx.reply('❌ Ошибка: бот не выбран');
+          return;
+        }
+        total =
+          await this.broadcastService.countUsersWithoutSubscription(
+            filterBotId,
+          );
+        filterStatusLabel = 'Без подписки';
+        subscriptionsText = '  • Пользователи без подписки\n';
+        overlapText = '';
+      } else {
+        // Multi-subscription broadcast: get unique user count with breakdown
+        const result = await this.broadcastService.getUniqueUserCount(
+          subscriptionIds,
+          filterStatus,
+          filterBotId,
+        );
+        total = result.total;
+
+        // Calculate overlap (users in multiple subscriptions)
+        const sumOfCounts = result.breakdown.reduce(
+          (sum, b) => sum + b.count,
+          0,
+        );
+        const overlap = sumOfCounts - total;
+
+        // Build filter description labels for preview
+        filterStatusLabel =
+          filterStatus === 'expired'
+            ? 'Истекшие подписки'
+            : 'Активные подписчики';
+
+        // Build subscriptions breakdown text
+        subscriptionsText = '';
+        for (const item of result.breakdown) {
+          subscriptionsText += `  • ${item.name}: ${item.count} пользователей\n`;
+        }
+
+        // Build overlap text (only show if there are overlapping users)
+        overlapText =
+          overlap > 0
+            ? `_(${overlap} пользователей в нескольких подписках)_\n`
+            : '';
+      }
 
       // Save message and entities to session
       ctx.session.broadcastMessage = message;
@@ -940,7 +1091,14 @@ export class BroadcastUpdate {
         );
 
         // Forward or copy the formatted message to show preview
-        await ctx.telegram.sendMessage(ctx.chat!.id, message, {
+        if (!ctx.chat) {
+          this.logger.error(
+            'ctx.chat is undefined, cannot send preview message',
+          );
+          await ctx.reply('❌ Ошибка: не удалось определить чат');
+          return;
+        }
+        await ctx.telegram.sendMessage(ctx.chat.id, message, {
           entities: entities,
         });
 
@@ -993,7 +1151,7 @@ export class BroadcastUpdate {
       }
     } catch (error) {
       ctx.session.flowState = null;
-      ctx.session.broadcastSubscriptionIds = [];
+      ctx.session.broadcastSubscriptionIds = null;
       ctx.session.broadcastMessageEntities = null;
       this.logger.error('Error handling broadcast message input', error);
       const errorMessage =

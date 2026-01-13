@@ -33,7 +33,7 @@ export class MasterbotUpdate {
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly codesRepository: CodesRepository,
     private readonly subscriptionManagementService: SubscriptionManagementService,
-  ) { }
+  ) {}
 
   @Start()
   async onStart(@Ctx() ctx: UserContext): Promise<void> {
@@ -420,8 +420,8 @@ export class MasterbotUpdate {
 
       await ctx.editMessageText(
         '📝 *Создание подписки*\n\n' +
-        'Введите название подписки:\n\n' +
-        '_Пример: Premium Market Analysis_',
+          'Введите название подписки:\n\n' +
+          '_Пример: Premium Market Analysis_',
         { parse_mode: 'Markdown' },
       );
 
@@ -535,10 +535,10 @@ export class MasterbotUpdate {
       // Show confirmation
       await ctx.editMessageText(
         `⚠️ *Подтвердите закрытие*\n\n` +
-        `Вы уверены, что хотите закрыть подписку *${subscription.name}*?\n\n` +
-        `• Новые пользователи не смогут присоединиться\n` +
-        `• Существующие подписчики сохранят доступ\n` +
-        `• Это действие можно отменить позже`,
+          `Вы уверены, что хотите закрыть подписку *${subscription.name}*?\n\n` +
+          `• Новые пользователи не смогут присоединиться\n` +
+          `• Существующие подписчики сохранят доступ\n` +
+          `• Это действие можно отменить позже`,
         {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
@@ -611,7 +611,7 @@ export class MasterbotUpdate {
 
       await ctx.editMessageText(
         '✅ *Подписка закрыта*\n\n' +
-        'Новые пользователи не смогут присоединиться к этой подписке.',
+          'Новые пользователи не смогут присоединиться к этой подписке.',
         { parse_mode: 'Markdown' },
       );
 
@@ -702,10 +702,10 @@ export class MasterbotUpdate {
       // Send success message
       await ctx.reply(
         '✅ *Подписка создана!*\n\n' +
-        `📋 Название: ${result.subscription.name}\n` +
-        `🆔 ID: ${result.subscription.id}\n` +
-        `📅 Создана: ${result.subscription.createdAt.toLocaleString('ru-RU')}\n\n` +
-        '💡 Для генерации кодов используйте команду /code',
+          `📋 Название: ${result.subscription.name}\n` +
+          `🆔 ID: ${result.subscription.id}\n` +
+          `📅 Создана: ${result.subscription.createdAt.toLocaleString('ru-RU')}\n\n` +
+          '💡 Для генерации кодов используйте команду /code',
         { parse_mode: 'Markdown' },
       );
     } catch (error) {

@@ -224,26 +224,6 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
   });
 
   describe('Bot Filter Selection Handlers (AC2)', () => {
-    describe('onBroadcastBotAll', () => {
-      it('should set broadcastFilterBotId to null', async () => {
-        const ctx = createMockContext(
-          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
-          { broadcastSubscriptionIds: [1], broadcastFilterStatus: 'active' },
-        );
-        await broadcastUpdate.onBroadcastBotAll(ctx);
-        expect(ctx.session.broadcastFilterBotId).toBeNull();
-      });
-
-      it('should set flowState to awaiting_broadcast_message', async () => {
-        const ctx = createMockContext(
-          MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
-          { broadcastSubscriptionIds: [1], broadcastFilterStatus: 'active' },
-        );
-        await broadcastUpdate.onBroadcastBotAll(ctx);
-        expect(ctx.session.flowState).toBe('awaiting_broadcast_message');
-      });
-    });
-
     describe('onBroadcastBotSelected', () => {
       it('should set broadcastFilterBotId to parsed bot ID', async () => {
         const botId = 5;
@@ -280,12 +260,13 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
       );
     });
 
-    it('should require manager authentication for bot filter handlers', async () => {
+    it('should require manager authentication for bot selected handler', async () => {
+      const botId = 5;
       const ctx = createMockContext(
-        MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_ALL,
+        `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_BOT_PREFIX}${botId}`,
       );
       ctx.manager = undefined;
-      await broadcastUpdate.onBroadcastBotAll(ctx);
+      await broadcastUpdate.onBroadcastBotSelected(ctx);
       expect(ctx.answerCbQuery).toHaveBeenCalledWith(
         MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED,
       );

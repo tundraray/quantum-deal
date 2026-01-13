@@ -14,7 +14,7 @@ export class TrialService {
     private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly configService: ConfigService,
-  ) { }
+  ) {}
 
   /**
    * Check if user is eligible for trial

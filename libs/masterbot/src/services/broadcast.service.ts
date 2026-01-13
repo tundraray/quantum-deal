@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   UserSubscriptionsRepository,
   SubscriptionsRepository,
+  BotUsersRepository,
+  BotsRepository,
 } from '@quantumdeal/db';
 import { BroadcastResultDto, MessageValidationResult } from '../dto';
 import { NotificationService } from '@quantumdeal/framework/notifications';
@@ -39,6 +41,15 @@ export interface UserCountBreakdown {
 }
 
 /**
+ * Subscriber data for broadcast operations
+ * Contains minimal required fields from botUser and userSubscription
+ */
+interface BroadcastSubscriber {
+  botUser: { userId: number; botId: number; lang: string | null };
+  userSubscription: { id: number; subscriptionId: number };
+}
+
+/**
  * Service for broadcasting messages to subscription subscribers
  *
  * CRITICAL: All operations validate subscription is broadcast type INLINE
@@ -54,7 +65,9 @@ export class BroadcastService {
     private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly notificationService: NotificationService,
     private readonly llmService: LLMService,
-  ) { }
+    private readonly botUsersRepository: BotUsersRepository,
+    private readonly botsRepository: BotsRepository,
+  ) {}
 
   /**
    * Count subscribers with optional filters
@@ -400,15 +413,9 @@ export class BroadcastService {
    * @private
    */
   private groupUsersByLanguage(
-    subscribers: Array<{
-      botUser: { userId: number; lang: string | null };
-      userSubscription: any;
-    }>,
-  ): Map<string, Array<{ botUser: any; userSubscription: any }>> {
-    const grouped = new Map<
-      string,
-      Array<{ botUser: any; userSubscription: any }>
-    >();
+    subscribers: BroadcastSubscriber[],
+  ): Map<string, BroadcastSubscriber[]> {
+    const grouped = new Map<string, BroadcastSubscriber[]>();
 
     for (const sub of subscribers) {
       const lang = sub.botUser.lang || 'en'; // Default to English if no language set
@@ -441,7 +448,7 @@ export class BroadcastService {
    */
   private async translateMessagesForLanguages(
     originalMessage: string,
-    usersByLang: Map<string, Array<{ botUser: any; userSubscription: any }>>,
+    usersByLang: Map<string, BroadcastSubscriber[]>,
   ): Promise<Map<string, string>> {
     const translatedMessages = new Map<string, string>();
     const languages = Array.from(usersByLang.keys());
@@ -659,6 +666,114 @@ export class BroadcastService {
       this.logger.error('Failed to queue broadcast multi messages:', err);
       throw new Error('Failed to queue broadcast messages');
     }
+  }
+
+  /**
+   * Count bot users who have no subscription records
+   *
+   * Used to display count in "Without subscription" button during broadcast flow.
+   *
+   * @param botId - The bot ID to filter by
+   * @returns Count of users without any subscription
+   */
+  async countUsersWithoutSubscription(botId: number): Promise<number> {
+    return this.botUsersRepository.countWithoutSubscription(botId);
+  }
+
+  /**
+   * Count all subscribers (active + expired) for a subscription
+   *
+   * Used for displaying total user counts in subscription toggle keyboard.
+   * Unlike countSubscribers which filters by status, this counts ALL users
+   * who have ever subscribed regardless of their current status.
+   *
+   * @param subscriptionId - The subscription to count
+   * @param filterBotId - Optional bot filter (undefined/null = all bots)
+   * @returns Total subscriber count regardless of status
+   */
+  async countAllSubscribers(
+    subscriptionId: number,
+    filterBotId?: number | null,
+  ): Promise<number> {
+    // Get active subscribers
+    const activeSubscribers =
+      await this.userSubscriptionsRepository.findSubscribersWithUserDetails(
+        subscriptionId,
+      );
+
+    // Get expired subscribers
+    const expiredSubscribers =
+      await this.userSubscriptionsRepository.findExpired(
+        undefined, // subscriptionType - not filtering by type
+        filterBotId ?? undefined, // botId filter
+        subscriptionId, // subscriptionId filter
+      );
+
+    // Apply bot filter to active subscribers (in-memory, same pattern as countSubscribers)
+    const filteredActive =
+      filterBotId != null
+        ? activeSubscribers.filter((s) => s.botUser.botId === filterBotId)
+        : activeSubscribers;
+
+    return filteredActive.length + expiredSubscribers.length;
+  }
+
+  /**
+   * Send broadcast to users who have no subscription records
+   *
+   * Used for conversion/onboarding campaigns targeting users who never activated
+   * any subscription. Follows same pattern as sendBroadcast but queries
+   * BotUsersRepository.findWithoutSubscription instead of subscription-based queries.
+   *
+   * @param botId - Target bot ID
+   * @param message - Message text
+   * @param entities - Message entities for formatting (optional)
+   * @param managerId - Manager who initiated broadcast
+   * @returns Broadcast result with recipient count and status
+   */
+  async sendBroadcastToNonSubscribers(
+    botId: number,
+    message: string,
+    entities: MessageEntity[] | undefined,
+    managerId: number,
+  ): Promise<{ recipientCount: number; status: 'completed' | 'queued' }> {
+    const usersWithoutSub =
+      await this.botUsersRepository.findWithoutSubscription(botId);
+
+    if (usersWithoutSub.length === 0) {
+      return { recipientCount: 0, status: 'completed' };
+    }
+
+    const bot = await this.botsRepository.findById(botId);
+    if (!bot) {
+      throw new Error(`Bot ${botId} not found`);
+    }
+
+    // Prepare messages for notification service
+    const messages = usersWithoutSub.map((item) => ({
+      telegramId: item.botUser.userId,
+      botId: item.botUser.botId,
+      message,
+      options: {
+        priority: MessagePriority.CRITICAL,
+        messageType: QueuedMessageType.TEXT,
+        metadata: {
+          managerId,
+          broadcastType: 'no_subscription',
+        },
+      },
+    }));
+
+    this.notificationService.addMessages(messages);
+
+    this.logger.log(
+      `Broadcast to ${usersWithoutSub.length} users without subscription for bot ${botId} by manager ${managerId}`,
+    );
+
+    return {
+      recipientCount: usersWithoutSub.length,
+      status: 'queued',
+    };
   }
 
   /**

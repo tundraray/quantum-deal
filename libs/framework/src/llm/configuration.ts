@@ -9,7 +9,7 @@ import { ConfigService } from '@nestjs/config';
 export class LLMConfigurationService {
   private readonly logger = new Logger(LLMConfigurationService.name);
 
-  constructor(private readonly configService: ConfigService) { }
+  constructor(private readonly configService: ConfigService) {}
 
   /**
    * Gets Gemini API key
