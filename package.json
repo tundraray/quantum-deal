@@ -45,12 +45,15 @@
     "class-validator": "^0.14.2",
     "cron": "4.3.0",
     "drizzle-orm": "^0.44.5",
-    "nestjs-telegraf": "^2.9.1",
+    "nanoid": "^5.1.6",
+    "pg": "^8.16.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "telegraf": "^4.16.3",
+    "lodash": "^4.17.21",
     "telegramify-markdown": "^1.3.0",
-    "uuid": "^12.0.0"
+    "uuid": "^12.0.0",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -63,6 +66,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.7",
     "@types/supertest": "^6.0.2",
+    "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.4",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
@@ -76,6 +80,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
@@ -90,6 +95,9 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(.pnpm|nanoid|uuid)/)"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
@@ -103,7 +111,10 @@
       "^@quantumdeal/bot(|/.*)$": "<rootDir>/libs/bot/src/$1",
       "^@quantumdeal/db(|/.*)$": "<rootDir>/libs/db/src/$1",
       "^@quantumdeal/framework(|/.*)$": "<rootDir>/libs/framework/src/$1",
-      "^@quantumdeal/masterbot(|/.*)$": "<rootDir>/libs/masterbot/src/$1"
+      "^@quantumdeal/masterbot(|/.*)$": "<rootDir>/libs/masterbot/src/$1",
+      "^@quantumdeal/partner-bot(|/.*)$": "<rootDir>/libs/partner-bot/src/$1",
+      "^@quantumdeal/telegraf(|/.*)$": "<rootDir>/libs/telegraf/src/$1"
     }
-  }
+  },
+  "packageManager": "pnpm@10.0.0"
 }

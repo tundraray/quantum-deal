@@ -1,0 +1,29 @@
+import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
+
+export const TELEGRAF_MODULE_OPTIONS = 'TELEGRAF_MODULE_OPTIONS';
+export const TELEGRAF_BOT_NAME = 'TELEGRAF_BOT_NAME';
+export const DEFAULT_BOT_NAME = 'DEFAULT_BOT_NAME';
+
+export const COMPOSER_METADATA = 'COMPOSER_METADATA';
+export const UPDATE_METADATA = 'UPDATE_METADATA';
+export const SCENE_METADATA = 'SCENE_METADATA';
+export const LISTENERS_METADATA = 'LISTENERS_METADATA';
+export const WIZARD_STEP_METADATA = 'WIZARD_STEP_METADATA';
+
+export const PARAM_ARGS_METADATA = ROUTE_ARGS_METADATA;
+
+export const TELEGRAF_STAGE = 'TelegrafStage';
+
+export const TELEGRAF_ALL_BOTS = 'TELEGRAF_ALL_BOTS';
+
+// Dynamic Telegraf Module tokens
+export const DYNAMIC_TELEGRAF_SERVICE = 'DYNAMIC_TELEGRAF_SERVICE';
+export const DYNAMIC_TELEGRAF_MODULE_OPTIONS =
+  'DYNAMIC_TELEGRAF_MODULE_OPTIONS';
+
+// Dynamic Telegraf Metadata keys
+export const BOT_TARGET_METADATA = 'BOT_TARGET_METADATA';
+export const FEATURE_FLAG_METADATA = 'FEATURE_FLAG_METADATA';
+
+// Dynamic Telegraf Constants
+export const DYNAMIC_WEBHOOK_PREFIX = '/dynamic';

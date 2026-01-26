@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { BaseExceptionFilter } from '@nestjs/core';
 import * as Sentry from '@sentry/nestjs';
-import { Request, Response } from 'express';
+import { Request } from 'express';
 
 @Injectable()
 @Catch()

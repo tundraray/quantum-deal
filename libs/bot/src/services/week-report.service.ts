@@ -1,45 +1,71 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
-import { inArray } from 'drizzle-orm';
 import {
-  UsersRepository,
   OrdersRepository,
-  SubscriptionsRepository,
+  UserSubscriptionsRepository,
+  SubscriptionFeaturesRepository,
   MessagesRepository,
-  subscriptions,
   Order,
   MessageType,
 } from '@quantumdeal/db';
-import { NotificationService } from './notification.service';
+import { FeatureFlag } from '@quantumdeal/db/schema';
+import { NotificationService } from '@quantumdeal/framework/notifications';
+import { InstrumentFilterService } from './instrument-filter.service';
 import {
   MessagePriority,
   QueuedMessageType,
-} from '../interfaces/notification.interface';
+} from '@quantumdeal/framework/notifications';
 import { ConfigService } from '@nestjs/config';
+import { SentryService } from '@quantumdeal/framework';
+import { createUpgradeToVipButton } from '../helpers/upgrade-button.helper';
 
 enum ReportType {
   WEEKLY = 'weekly',
 }
 
+interface FilteredInstrumentsStats {
+  readonly totalFilteredOrders: number; // Total orders missed due to instrument filters
+  readonly filteredPercentage: number; // Percentage of missed orders
+  readonly topMissedInstruments: ReadonlyArray<{
+    // Top 3 most missed instruments
+    readonly symbol: string;
+    readonly count: number;
+  }>;
+}
+
 interface TradingActivityStats {
+  // Aggregated statistics for client's subscription
   readonly totalOrders: number;
   readonly profitableOrders: number;
   readonly lossingOrders: number;
   readonly totalProfit: number;
   readonly totalLoss: number;
   readonly ordersBySymbol: Record<string, number>;
+
+  // VIP reference data (all sectors combined for comparison)
+  readonly vipTotalOrders: number;
+  readonly vipProfitableOrders: number;
+  readonly vipLossingOrders: number;
+  readonly vipTotalProfit: number;
+  readonly vipTotalLoss: number;
+  readonly vipNetResult: number;
+
+  // Instrument filtering statistics (for CUSTOM_USER_FILTERING feature)
+  readonly filteredByInstruments?: FilteredInstrumentsStats;
 }
 
 interface ClientSubscription {
   readonly telegramId: number;
+  readonly botUserId: number;
+  readonly botId: number;
   readonly firstName?: string | null;
   readonly lastName?: string | null;
   readonly username?: string | null;
   readonly lang?: string | null;
   readonly subscriptionId: number;
   readonly subscriptionName: string;
-  readonly subscriptionScope: unknown;
+  readonly subscriptionSectors: string[]; // Sectors from subscription_features.config.sectors
   readonly subscriptionExpirationDate: Date;
 }
 
@@ -50,11 +76,12 @@ interface ClientWeeklyReportData {
   readonly generatedAt: Date;
   readonly client: {
     readonly telegramId: number;
+    readonly botId: number;
     readonly lang?: string | null;
     readonly subscription: {
       readonly id: number;
       readonly name: string;
-      readonly scope: unknown;
+      readonly sectors: string[]; // Sectors from subscription_features.config.sectors
       readonly expirationDate: Date;
     };
   };
@@ -83,13 +110,15 @@ export class WeekReportService {
   private readonly logger = new Logger(WeekReportService.name);
 
   constructor(
-    private readonly usersRepository: UsersRepository,
     private readonly ordersRepository: OrdersRepository,
-    private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly messagesRepository: MessagesRepository,
+    private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
+    private readonly subscriptionFeaturesRepository: SubscriptionFeaturesRepository,
     private readonly notificationService: NotificationService,
+    private readonly instrumentFilterService: InstrumentFilterService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly configService: ConfigService,
+    private readonly sentryService: SentryService,
   ) {}
 
   /**
@@ -276,52 +305,41 @@ export class WeekReportService {
     ClientSubscription[]
   > {
     try {
-      // Get all users with active subscriptions
-      const usersWithSubscriptions =
-        await this.usersRepository.findActiveUsersWithActiveSubscription();
+      // Get all active users with active subscriptions (signals only)
+      const results =
+        await this.userSubscriptionsRepository.findActiveUsersWithActiveSubscription(
+          1,
+          'signals',
+        );
 
-      if (usersWithSubscriptions.length === 0) {
+      if (results.length === 0) {
         return [];
       }
 
-      // Get subscription details
-      const subscriptionIds = [
-        ...new Set(
-          usersWithSubscriptions.map((u) => u.subscribeId).filter(Boolean),
-        ),
-      ];
-      const subscriptionDetails = await this.subscriptionsRepository.findBy(
-        inArray(subscriptions.id, subscriptionIds as number[]),
+      // Transform to ClientSubscription format with sectors from subscription_features
+      const clientSubscriptions: ClientSubscription[] = await Promise.all(
+        results.map(async (result) => {
+          // Get sectors from TIER_BASED_FILTERING feature config
+          const sectors = await this.getSubscriptionSectors(
+            result.subscription.id,
+          );
+
+          return {
+            telegramId: result.user.telegramId,
+            botUserId: result.botUser.id,
+            botId: result.botUser.botId,
+            firstName: result.user.firstName,
+            lastName: result.user.lastName,
+            username: result.user.username,
+            lang: result.botUser.lang,
+            subscriptionId: result.subscription.id,
+            subscriptionName: result.subscription.name,
+            subscriptionSectors: sectors,
+            subscriptionExpirationDate:
+              result.userSubscription.expiresAt || new Date(),
+          };
+        }),
       );
-
-      const subscriptionMap = new Map(
-        subscriptionDetails.map((sub) => [sub.id, sub]),
-      );
-
-      // Build client subscription objects
-      const clientSubscriptions: ClientSubscription[] = [];
-
-      for (const user of usersWithSubscriptions) {
-        if (user.subscribeId && user.subscribeExpirationDate) {
-          const subscription = subscriptionMap.get(user.subscribeId);
-
-          if (subscription) {
-            clientSubscriptions.push({
-              telegramId: user.telegramId,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              username: user.username,
-              lang: user.lang,
-              subscriptionId: subscription.id,
-              subscriptionName: subscription.name,
-              subscriptionScope: subscription.scope,
-              subscriptionExpirationDate: new Date(
-                user.subscribeExpirationDate,
-              ),
-            });
-          }
-        }
-      }
 
       return clientSubscriptions;
     } catch (error) {
@@ -329,6 +347,38 @@ export class WeekReportService {
       this.logger.error(
         `Failed to get active clients with subscriptions: ${err.message}`,
         err.stack,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Get sectors from subscription_features.config.sectors for TIER_BASED_FILTERING feature
+   * Returns empty array if feature not found or no sectors configured
+   */
+  private async getSubscriptionSectors(
+    subscriptionId: number,
+  ): Promise<string[]> {
+    try {
+      const feature = await this.subscriptionFeaturesRepository.getFeature(
+        subscriptionId,
+        FeatureFlag.TIER_BASED_FILTERING,
+      );
+
+      if (!feature || !feature.isEnabled || !feature.config) {
+        return [];
+      }
+
+      const sectors = feature.config.sectors;
+      if (Array.isArray(sectors)) {
+        return sectors.filter((s): s is string => typeof s === 'string');
+      }
+
+      return [];
+    } catch (error) {
+      const err = error as Error;
+      this.logger.warn(
+        `Failed to get sectors for subscription ${subscriptionId}: ${err.message}`,
       );
       return [];
     }
@@ -343,11 +393,12 @@ export class WeekReportService {
     try {
       const { startDate, endDate } = this.calculateWeeklyPeriod();
 
-      // Get sector-filtered trading data for this client
+      // Get sector-filtered trading data for this client (includes instrument filtering stats)
       const tradingActivity = await this.gatherClientTradingActivityData(
+        client.botUserId,
         startDate,
         endDate,
-        client.subscriptionScope,
+        client.subscriptionSectors,
       );
 
       // Build client-specific report data
@@ -358,11 +409,12 @@ export class WeekReportService {
         generatedAt: new Date(),
         client: {
           telegramId: client.telegramId,
+          botId: client.botId,
           lang: client.lang, // Add language to client data
           subscription: {
             id: client.subscriptionId,
             name: client.subscriptionName,
-            scope: client.subscriptionScope,
+            sectors: client.subscriptionSectors,
             expirationDate: client.subscriptionExpirationDate,
           },
         },
@@ -388,37 +440,63 @@ export class WeekReportService {
   }
 
   private async gatherClientTradingActivityData(
+    botUserId: number,
     startDate: Date,
     endDate: Date,
-    subscriptionScope: unknown,
+    subscriptionSectors: string[],
   ): Promise<TradingActivityStats> {
-    this.logger.debug('Gathering client-specific trading activity data');
+    this.logger.debug(
+      `Gathering client-specific trading activity data for bot user ${botUserId}`,
+    );
 
     try {
-      // Determine which sectors to include
-      const allowedSectors = this.extractAllowedSectors(subscriptionScope);
-      const isAllSectors = allowedSectors.includes('*');
+      // Use sectors directly from subscription_features.config.sectors
+      const isAllSectors = subscriptionSectors.includes('*');
 
       this.logger.debug(
-        `Client subscription allows sectors: ${isAllSectors ? 'ALL' : allowedSectors.join(', ')}`,
+        `Client subscription allows sectors: ${isAllSectors ? 'ALL' : subscriptionSectors.join(', ')}`,
       );
 
-      const allOrders = isAllSectors
-        ? await this.ordersRepository.findByEventPeriod(startDate, endDate)
+      const allTradingActivity = await this.ordersRepository.findByEventPeriod(
+        startDate,
+        endDate,
+      );
+
+      const allOrdersInSectors = isAllSectors
+        ? allTradingActivity
         : await this.ordersRepository.findByEventPeriod(
             startDate,
             endDate,
-            allowedSectors,
+            subscriptionSectors,
           );
 
+      // Calculate instrument filtering statistics (for CUSTOM_USER_FILTERING feature)
+      const filteredByInstruments =
+        await this.calculateFilteredInstrumentsStats(
+          botUserId,
+          allOrdersInSectors,
+        );
+
+      // Apply instrument filters to get final orders for this user
+      const userFilteredOrders = filteredByInstruments
+        ? await this.applyInstrumentFilters(botUserId, allOrdersInSectors)
+        : allOrdersInSectors;
+
       // Calculate all stats based on filtered orders (only closed orders)
-      const closedOrdersOnly = allOrders.filter((order) => !!order.closeTime);
+      const closedOrdersOnly = userFilteredOrders.filter(
+        (order) => !!order.closeTime,
+      );
       const totalOrders = closedOrdersOnly.length;
 
       const profitLossData =
         this.calculateProfitLossFromOrders(closedOrdersOnly);
       const symbolBreakdown =
         this.calculateSymbolBreakdownFromOrders(closedOrdersOnly);
+
+      const vipProfitLossData =
+        this.calculateProfitLossFromOrders(allTradingActivity);
+      const vipNetResult =
+        vipProfitLossData.totalProfit - vipProfitLossData.totalLoss;
 
       return {
         totalOrders,
@@ -427,6 +505,17 @@ export class WeekReportService {
         totalProfit: profitLossData.totalProfit,
         totalLoss: profitLossData.totalLoss,
         ordersBySymbol: symbolBreakdown,
+
+        // VIP reference data (all sectors combined)
+        vipTotalOrders: allTradingActivity.length,
+        vipProfitableOrders: vipProfitLossData.profitableOrders,
+        vipLossingOrders: vipProfitLossData.lossingOrders,
+        vipTotalProfit: vipProfitLossData.totalProfit,
+        vipTotalLoss: vipProfitLossData.totalLoss,
+        vipNetResult,
+
+        // Instrument filtering statistics (only for users with CUSTOM_USER_FILTERING)
+        filteredByInstruments,
       };
     } catch (error) {
       this.logger.error('Failed to gather client trading activity data', error);
@@ -434,75 +523,143 @@ export class WeekReportService {
     }
   }
 
-  // Monthly trading data aggregation moved to MonthReportService
-
   /**
-   * Find the most profitable single trade from a list of orders
+   * Calculate statistics for orders filtered by instrument selection
+   * Only applies to users with CUSTOM_USER_FILTERING feature
+   *
+   * @param userId - User's telegram ID
+   * @param allOrdersInSectors - All orders in user's allowed sectors
+   * @returns FilteredInstrumentsStats or undefined if feature not enabled or no filters
    */
-  private findBestTrade(
-    orders: Order[],
-  ): { symbol: string; profit: number } | null {
-    const ordersWithProfit = orders.filter(
-      (order) =>
-        order.profit !== null && order.profit !== undefined && order.profit > 0,
-    );
+  private async calculateFilteredInstrumentsStats(
+    botUserId: number,
+    allOrdersInSectors: Order[],
+  ): Promise<FilteredInstrumentsStats | undefined> {
+    try {
+      // Check if user has CUSTOM_USER_FILTERING feature enabled
+      const hasFeature = await this.subscriptionFeaturesRepository.hasFeature(
+        botUserId,
+        FeatureFlag.CUSTOM_USER_FILTERING,
+      );
 
-    if (ordersWithProfit.length === 0) {
-      return null;
+      if (!hasFeature) {
+        this.logger.debug(
+          `Bot user ${botUserId} does not have CUSTOM_USER_FILTERING feature`,
+        );
+        return undefined;
+      }
+
+      // Get user's instrument filters
+      const userSymbols =
+        await this.instrumentFilterService.getUserFilterSymbols(botUserId);
+
+      // Empty array means all instruments selected (no filtering)
+      if (userSymbols.length === 0) {
+        this.logger.debug(
+          `Bot user ${botUserId} has no instrument filters (all selected)`,
+        );
+        return undefined;
+      }
+
+      this.logger.debug(
+        `Bot user ${botUserId} has ${userSymbols.length} instrument filters`,
+      );
+
+      // Create a set of user's selected symbols for fast lookup
+      const selectedSymbolsSet = new Set(userSymbols);
+
+      // Filter out orders that don't match user's selected instruments
+      const closedOrdersInSectors = allOrdersInSectors.filter(
+        (order) => !!order.closeTime,
+      );
+      const missedOrders = closedOrdersInSectors.filter(
+        (order) => !selectedSymbolsSet.has(order.symbol),
+      );
+
+      const totalFilteredOrders = missedOrders.length;
+
+      // If no orders were filtered out, no need to show statistics
+      if (totalFilteredOrders === 0) {
+        this.logger.debug(
+          `Bot user ${botUserId} has no filtered orders (all available orders match filters)`,
+        );
+        return undefined;
+      }
+
+      // Calculate percentage
+      const totalAvailableOrders = closedOrdersInSectors.length;
+      const filteredPercentage =
+        totalAvailableOrders > 0
+          ? Math.round((totalFilteredOrders / totalAvailableOrders) * 100)
+          : 0;
+
+      // Calculate top missed instruments
+      const missedBySymbol = new Map<string, number>();
+      missedOrders.forEach((order) => {
+        const count = missedBySymbol.get(order.symbol) || 0;
+        missedBySymbol.set(order.symbol, count + 1);
+      });
+
+      // Sort by count descending and take top 3
+      const topMissedInstruments = Array.from(missedBySymbol.entries())
+        .map(([symbol, count]) => ({ symbol, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+
+      this.logger.debug(
+        `Bot user ${botUserId}: ${totalFilteredOrders} orders filtered (${filteredPercentage}%), ` +
+          `top missed: ${topMissedInstruments.map((i) => `${i.symbol}:${i.count}`).join(', ')}`,
+      );
+
+      return {
+        totalFilteredOrders,
+        filteredPercentage,
+        topMissedInstruments,
+      };
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to calculate filtered instruments stats for bot user ${botUserId}: ${err.message}`,
+        err.stack,
+      );
+      // Return undefined on error to not break report generation
+      return undefined;
     }
-
-    const bestOrder = ordersWithProfit.reduce((best, current) => {
-      return (current.profit ?? 0) > (best.profit ?? 0) ? current : best;
-    });
-
-    return {
-      symbol: bestOrder.symbol || 'unknown',
-      profit: Math.round((bestOrder.profit ?? 0) * 100) / 100,
-    };
   }
 
-  private extractAllowedSectors(subscriptionScope: unknown): string[] {
-    if (!subscriptionScope) {
-      return [];
-    }
+  /**
+   * Apply user's instrument filters to orders
+   * Returns all orders if no filters are configured
+   *
+   * @param botUserId - Bot user ID
+   * @param orders - Orders to filter
+   * @returns Filtered orders
+   */
+  private async applyInstrumentFilters(
+    botUserId: number,
+    orders: Order[],
+  ): Promise<Order[]> {
+    try {
+      const userSymbols =
+        await this.instrumentFilterService.getUserFilterSymbols(botUserId);
 
-    // Handle different scope formats
-    if (typeof subscriptionScope === 'string') {
-      return subscriptionScope === '*' ? ['*'] : [subscriptionScope];
-    }
-
-    if (Array.isArray(subscriptionScope)) {
-      return subscriptionScope.filter((sector) => typeof sector === 'string');
-    }
-
-    if (typeof subscriptionScope === 'object' && subscriptionScope !== null) {
-      const scope = subscriptionScope as Record<string, unknown>;
-
-      if ('sectors' in scope) {
-        const sectors = scope.sectors;
-        if (sectors === '*') {
-          return ['*'];
-        }
-        if (Array.isArray(sectors)) {
-          return sectors.filter(
-            (sector): sector is string => typeof sector === 'string',
-          );
-        }
-        if (typeof sectors === 'string') {
-          return [sectors];
-        }
+      // Empty array means all instruments (no filtering)
+      if (userSymbols.length === 0) {
+        return orders;
       }
 
-      if ('*' in scope && scope['*']) {
-        return ['*'];
-      }
-
-      return Object.keys(scope).filter(
-        (key) => typeof key === 'string' && scope[key] === true,
+      // Filter orders by user's selected symbols
+      const selectedSymbolsSet = new Set(userSymbols);
+      return orders.filter((order) => selectedSymbolsSet.has(order.symbol));
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to apply instrument filters for bot user ${botUserId}: ${err.message}`,
+        err.stack,
       );
+      // Return all orders on error to not break report generation
+      return orders;
     }
-
-    return [];
   }
 
   private calculateProfitLossFromOrders(orders: Order[]): {
@@ -554,17 +711,28 @@ export class WeekReportService {
     try {
       const reportMessage = await this.formatClientWeeklyReport(clientReport);
 
+      // Check if user has VIP subscription (sectors contains '*' means all sectors)
+      const isVipSubscription =
+        clientReport.client.subscription.sectors.includes('*');
+
+      // Create upgrade button for non-VIP users
+      const buttons = isVipSubscription
+        ? undefined
+        : createUpgradeToVipButton(clientReport.client.lang || 'en');
+
       this.notificationService.addMessage(
         clientReport.client.telegramId,
+        clientReport.client.botId,
         reportMessage,
         {
           messageType: QueuedMessageType.HTML,
           priority: MessagePriority.NORMAL,
+          buttons,
         },
       );
 
       this.logger.debug(
-        `Successfully saved and sent weekly report to client ${clientReport.client.telegramId}`,
+        `Successfully saved and sent weekly report to client ${clientReport.client.telegramId} (VIP: ${isVipSubscription}, buttons: ${buttons ? 'yes' : 'no'})`,
       );
     } catch (error) {
       const err = error as Error;
@@ -583,34 +751,170 @@ export class WeekReportService {
     const clientLang = data.client.lang || 'en';
     const profit = data.tradingActivity.totalProfit;
     const loss = data.tradingActivity.totalLoss;
-    const netResult = profit - loss;
+    const netResult = profit - loss; // loss is already negative
     const positiveTrades = data.tradingActivity.profitableOrders;
     const negativeTrades = data.tradingActivity.lossingOrders;
 
-    try {
-      const template = await this.messagesRepository.getReportTemplate(
-        'weekly_report' as MessageType,
-        clientLang,
-      );
+    // VIP reference data
+    const vipProfit = data.tradingActivity.vipTotalProfit;
+    const vipLoss = data.tradingActivity.vipTotalLoss;
+    const vipNetResult = data.tradingActivity.vipNetResult;
+    const vipPositiveTrades = data.tradingActivity.vipProfitableOrders;
+    const vipNegativeTrades = data.tradingActivity.vipLossingOrders;
 
-      return template
+    // Instrument filtering statistics (optional)
+    const filteredStats = data.tradingActivity.filteredByInstruments;
+
+    // Determine template name based on subscription and filter status
+    // VIP users with active filters get special template with filter stats
+    const hasActiveFilters = filteredStats !== undefined;
+    const isVipSubscription = data.client.subscription.sectors.includes('*');
+
+    let templateName: string;
+    if (hasActiveFilters && isVipSubscription) {
+      // VIP with active filters - use special template with filter stats section
+      templateName = 'weekly_report_3';
+    } else if (isVipSubscription) {
+      // VIP without filters - use base template (no filter stats section)
+      templateName = 'weekly_report';
+    } else {
+      // Other subscriptions - use subscription-specific template
+      templateName = `weekly_report_${data.client.subscription.id}`;
+    }
+
+    this.logger.debug(
+      `Using template '${templateName}' for user ${data.client.telegramId} ` +
+        `(subscription: ${data.client.subscription.id}, VIP: ${isVipSubscription}, hasFilters: ${hasActiveFilters})`,
+    );
+
+    try {
+      let template = await this.messagesRepository
+        .getReportTemplate(templateName as MessageType, clientLang)
+        .catch(() => {
+          return null;
+        });
+
+      if (!template) {
+        this.logger.debug(
+          `Weekly report template not found for template name '${templateName}', falling back to 'weekly_report'`,
+        );
+        template = await this.messagesRepository.getReportTemplate(
+          'weekly_report' as MessageType,
+          clientLang,
+        );
+      }
+
+      // Replace standard placeholders
+      let formattedTemplate = template
         .replace(/\{profit\}/g, profit.toFixed(2))
-        .replace(/\{loss\}/g, loss.toFixed(2))
+        .replace(/\{loss\}/g, Math.abs(loss).toFixed(2))
         .replace(/\{net_result\}/g, netResult.toFixed(2))
         .replace(/\{positive_trades\}/g, positiveTrades.toString())
-        .replace(/\{negative_trades\}/g, negativeTrades.toString());
+        .replace(/\{negative_trades\}/g, negativeTrades.toString())
+        .replace(/\{vip_profit\}/g, vipProfit.toFixed(2))
+        .replace(/\{vip_loss\}/g, Math.abs(vipLoss).toFixed(2))
+        .replace(/\{vip_net_result\}/g, vipNetResult.toFixed(2))
+        .replace(/\{vip_positive_trades\}/g, vipPositiveTrades.toString())
+        .replace(/\{vip_negative_trades\}/g, vipNegativeTrades.toString());
+
+      // Replace instrument filtering placeholders if available
+      if (filteredStats) {
+        formattedTemplate = formattedTemplate
+          .replace(
+            /\{filtered_orders_count\}/g,
+            filteredStats.totalFilteredOrders.toString(),
+          )
+          .replace(
+            /\{filtered_percentage\}/g,
+            filteredStats.filteredPercentage.toString(),
+          )
+          .replace(
+            /\{top_missed_1\}/g,
+            filteredStats.topMissedInstruments[0]?.symbol || '-',
+          )
+          .replace(
+            /\{top_missed_count_1\}/g,
+            filteredStats.topMissedInstruments[0]?.count.toString() || '0',
+          )
+          .replace(
+            /\{top_missed_2\}/g,
+            filteredStats.topMissedInstruments[1]?.symbol || '-',
+          )
+          .replace(
+            /\{top_missed_count_2\}/g,
+            filteredStats.topMissedInstruments[1]?.count.toString() || '0',
+          )
+          .replace(
+            /\{top_missed_3\}/g,
+            filteredStats.topMissedInstruments[2]?.symbol || '-',
+          )
+          .replace(
+            /\{top_missed_count_3\}/g,
+            filteredStats.topMissedInstruments[2]?.count.toString() || '0',
+          );
+      } else {
+        // If no filtered stats, replace placeholders with empty strings or defaults
+        formattedTemplate = formattedTemplate
+          .replace(/\{filtered_orders_count\}/g, '0')
+          .replace(/\{filtered_percentage\}/g, '0')
+          .replace(/\{top_missed_1\}/g, '-')
+          .replace(/\{top_missed_count_1\}/g, '0')
+          .replace(/\{top_missed_2\}/g, '-')
+          .replace(/\{top_missed_count_2\}/g, '0')
+          .replace(/\{top_missed_3\}/g, '-')
+          .replace(/\{top_missed_count_3\}/g, '0');
+      }
+
+      return formattedTemplate;
     } catch (error) {
       const err = error as Error;
+      this.sentryService.captureException(err, {
+        client: data.client,
+        weekly_report: templateName,
+      });
+
       this.logger.error(
         `Failed to format weekly report for client ${data.client.telegramId}: ${err.message}`,
         err.stack,
       );
 
-      return `🤝 Weekly summary:
+      // Fallback template with filtering stats if available
+      let fallbackReport = `🤝 Weekly summary — ${data.client.subscription.name}:
 📈 Profit: ${profit.toFixed(2)} USD
-📉 Loss: ${loss.toFixed(2)} USD
+📉 Loss: ${Math.abs(loss).toFixed(2)} USD
 💹 Result: ${netResult.toFixed(2)} USD
+✅ Positive trades: ${positiveTrades}
+❌ Negative trades: ${negativeTrades}`;
+
+      if (filteredStats) {
+        fallbackReport += `
+
+📊 Filter Statistics:
+Missed due to filters: ${filteredStats.totalFilteredOrders} signals (${filteredStats.filteredPercentage}%)
+
+Top missed instruments:`;
+        if (filteredStats.topMissedInstruments[0]) {
+          fallbackReport += `\n💱 ${filteredStats.topMissedInstruments[0].symbol}: ${filteredStats.topMissedInstruments[0].count} signals`;
+        }
+        if (filteredStats.topMissedInstruments[1]) {
+          fallbackReport += `\n🛢️ ${filteredStats.topMissedInstruments[1].symbol}: ${filteredStats.topMissedInstruments[1].count} signals`;
+        }
+        if (filteredStats.topMissedInstruments[2]) {
+          fallbackReport += `\n💰 ${filteredStats.topMissedInstruments[2].symbol}: ${filteredStats.topMissedInstruments[2].count} signals`;
+        }
+      }
+
+      fallbackReport += `
+
+🟣 VIP reference:
+📈 Profit: ${vipProfit.toFixed(2)} USD
+📉 Loss: ${Math.abs(vipLoss).toFixed(2)} USD
+💹 Result: ${vipNetResult.toFixed(2)} USD
+✅ Positive trades: ${vipPositiveTrades}
+❌ Negative trades: ${vipNegativeTrades}
 The key is consistency.`;
+
+      return fallbackReport;
     }
   }
 

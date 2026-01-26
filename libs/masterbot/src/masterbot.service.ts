@@ -5,6 +5,7 @@ import {
   Manager,
 } from '@quantumdeal/db';
 import { AdminStats } from './interfaces';
+import { MASTERBOT_CONSTANTS } from './constants';
 
 @Injectable()
 export class MasterbotService {
@@ -20,15 +21,19 @@ export class MasterbotService {
       `Master bot start command from manager ${manager.telegramId}`,
     );
 
+    const { COMMAND_DESCRIPTIONS: CMD } = MASTERBOT_CONSTANTS;
     const managerName =
       manager.firstName || manager.username || `Manager ${manager.telegramId}`;
+
     const welcomeMessage =
-      `🔧 *Master Bot Admin Panel*\n\n` +
-      `Welcome, ${managerName}! You have access to the following commands:\n\n` +
-      `📊 /stats - View user and subscription statistics\n` +
-      `🎫 /code - Generate subscription codes\n` +
-      `💡 /help - Show available commands\n\n` +
-      `Use these commands to monitor and manage the bot ecosystem.\n\n` +
+      `🔧 *Master Bot — Панель управления*\n\n` +
+      `Добро пожаловать, ${managerName}!\n\n` +
+      `*Доступные команды:*\n` +
+      `${CMD.STATS}\n` +
+      `${CMD.CODE}\n` +
+      `${CMD.SUBSCRIPTION}\n` +
+      `${CMD.BROADCAST}\n` +
+      `${CMD.HELP}\n\n` +
       `_Manager ID: ${manager.telegramId}_`;
 
     return welcomeMessage;
@@ -42,17 +47,6 @@ export class MasterbotService {
       ]);
 
       const currentDate = new Date();
-      const activeUsers = allUsers.filter(
-        (user) =>
-          user.subscribeExpirationDate &&
-          new Date(user.subscribeExpirationDate) > currentDate,
-      );
-
-      const expiredUsers = allUsers.filter(
-        (user) =>
-          user.subscribeExpirationDate &&
-          new Date(user.subscribeExpirationDate) <= currentDate,
-      );
 
       // Get recent users (last 7 days)
       const sevenDaysAgo = new Date(
@@ -70,8 +64,9 @@ export class MasterbotService {
 
       return {
         totalUsers: allUsers.length,
-        activeSubscriptions: activeUsers.length,
-        expiredSubscriptions: expiredUsers.length,
+        activeSubscriptions: 0,
+        expiredSubscriptions: 0,
+        blockedUsers: 0,
         totalSubscriptions: allSubscriptions.length,
         recentUsers,
         lastUpdated: new Date(),
@@ -88,7 +83,8 @@ export class MasterbotService {
     message += `👥 *Users Overview:*\n`;
     message += `• Total Users: ${stats.totalUsers}\n`;
     message += `• Active Subscriptions: ${stats.activeSubscriptions}\n`;
-    message += `• Expired Subscriptions: ${stats.expiredSubscriptions}\n\n`;
+    message += `• Expired Subscriptions: ${stats.expiredSubscriptions}\n`;
+    message += `• Blocked Users: ${stats.blockedUsers}\n\n`;
 
     message += `📋 *Subscriptions:*\n`;
     message += `• Total Subscription Plans: ${stats.totalSubscriptions}\n\n`;

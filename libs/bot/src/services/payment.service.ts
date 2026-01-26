@@ -1,0 +1,442 @@
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Telegraf, Context as TelegrafContext } from 'telegraf';
+import { InjectBot } from '@quantumdeal/telegraf';
+import {
+  PaymentTransactionsRepository,
+  RenewalTariffsRepository,
+  UserSubscriptionsRepository,
+  SubscriptionsRepository,
+  BotUsersRepository,
+  BotsRepository,
+} from '@quantumdeal/db';
+import { PaymentState } from '@quantumdeal/db/schema';
+import { getRenewalMessage } from '../commands/renew/renewal.i18n';
+import { BotRegistryService } from '@quantumdeal/framework/webhook';
+import { PromocodeService, type DiscountInfo } from './promocode.service';
+
+/**
+ * Renewal invoice payload structure
+ * Stored in Telegram invoice payload field for validation
+ */
+export interface RenewalInvoicePayload {
+  type: 'renewal';
+  version: number;
+  transactionId: number;
+  userSubscriptionId: number;
+  tariffId: number;
+  timestamp: number;
+  /** Promocode ID if discount was applied */
+  promocodeId?: number;
+}
+
+/**
+ * Payment Service
+ *
+ * Handles Telegram Stars payment integration for subscription renewals:
+ * - Creating payment invoices
+ * - Validating pre-checkout queries
+ * - Processing successful payments
+ * - Managing payment states
+ * - Expiring old pending payments
+ */
+@Injectable()
+export class PaymentService {
+  private readonly logger = new Logger(PaymentService.name);
+
+  /** Cached bot ID for QuantumDealBot (resolved lazily) */
+  private cachedBotId: number | null = null;
+
+  constructor(
+    @InjectBot('QuantumDealBot')
+    private readonly bot: Telegraf<TelegrafContext>,
+    private readonly botRegistryService: BotRegistryService,
+    private readonly paymentTransactionsRepo: PaymentTransactionsRepository,
+    private readonly renewalTariffsRepo: RenewalTariffsRepository,
+    private readonly userSubscriptionsRepo: UserSubscriptionsRepository,
+    private readonly subscriptionsRepo: SubscriptionsRepository,
+    private readonly botUsersRepo: BotUsersRepository,
+    private readonly botsRepo: BotsRepository,
+    private readonly promocodeService: PromocodeService,
+  ) {}
+
+  /**
+   * Create renewal invoice and send to user
+   * Finds or creates user_subscription for the given subscription
+   *
+   * @param botUserId - Bot user ID (bot_users.id)
+   * @param subscriptionId - Subscription ID to activate/renew
+   * @param tariffId - Selected tariff
+   * @param discount - Optional discount to apply (from promocode)
+   * @param promocodeId - Optional promocode ID to activate on successful payment
+   * @returns Transaction ID and invoice message ID
+   */
+  async createRenewalInvoice(
+    botUserId: number,
+    subscriptionId: number,
+    tariffId: number,
+    discount?: DiscountInfo,
+    promocodeId?: number,
+  ): Promise<{ transactionId: number; invoiceMessageId: number }> {
+    // Get tariff details
+    const tariff = await this.renewalTariffsRepo.findById(tariffId);
+    if (!tariff || !tariff.isActive) {
+      throw new BadRequestException('Invalid or inactive tariff');
+    }
+
+    // Verify tariff belongs to the requested subscription
+    if (tariff.subscriptionId !== subscriptionId) {
+      throw new BadRequestException(
+        'Tariff does not belong to this subscription',
+      );
+    }
+
+    // Calculate final price with discount if provided
+    let finalPrice = tariff.priceStars;
+    if (discount) {
+      finalPrice = this.promocodeService.calculateDiscountedPrice(
+        tariff.priceStars,
+        discount,
+      );
+      this.logger.log(
+        `Applying discount to tariff ${tariffId}: ${tariff.priceStars} -> ${finalPrice} Stars`,
+      );
+    }
+
+    // Find or create user_subscription
+    let userSubscription =
+      await this.userSubscriptionsRepo.findByBotUserAndSubscription(
+        botUserId,
+        subscriptionId,
+      );
+
+    if (!userSubscription) {
+      // Create new inactive user_subscription
+      userSubscription = await this.userSubscriptionsRepo.create({
+        botUserId,
+        subscriptionId,
+        isActive: false,
+        activatedAt: new Date(),
+        expiresAt: null,
+      });
+    }
+
+    // Create payment transaction with final price
+    const transaction = await this.paymentTransactionsRepo.create({
+      botUserId,
+      userSubscriptionId: userSubscription.id,
+      tariffId,
+      amountStars: finalPrice,
+      periodDays: tariff.periodDays,
+      state: PaymentState.PENDING,
+    });
+
+    // Create invoice payload (include promocodeId for activation on success)
+    const payload: RenewalInvoicePayload = {
+      type: 'renewal',
+      version: 1,
+      transactionId: transaction.id,
+      userSubscriptionId: userSubscription.id,
+      tariffId,
+      timestamp: Date.now(),
+      promocodeId,
+    };
+
+    // Get subscription and user lang for invoice
+    const subscription = await this.subscriptionsRepo.findById(subscriptionId);
+    const userLang = await this.resolveUserLang(botUserId);
+    const botUser = await this.botUsersRepo.findById(botUserId);
+    if (!botUser) {
+      throw new Error('Bot user not found');
+    }
+
+    // Get bot instance - check if static or dynamic
+    const botRecord = await this.botsRepo.findById(botUser.botId);
+    if (!botRecord) {
+      throw new Error('Bot not found');
+    }
+
+    const botInstance = botRecord.isDynamic
+      ? this.botRegistryService.getBot(botUser.botId)?.instance
+      : this.bot;
+
+    if (!botInstance) {
+      throw new Error('Bot instance not found');
+    }
+
+    try {
+      const invoiceMessage = await botInstance.telegram.sendInvoice(
+        botUser.userId,
+        {
+          title: getRenewalMessage(
+            userLang,
+            'invoiceTitle',
+            subscription?.name || '',
+          ),
+          description: getRenewalMessage(
+            userLang,
+            'invoiceDescription',
+            subscription?.name || '',
+            tariff.displayName,
+          ),
+          payload: JSON.stringify(payload),
+          provider_token: '', // Empty for Telegram Stars
+          currency: 'XTR', // Telegram Stars
+          prices: [
+            {
+              label: tariff.displayName,
+              amount: finalPrice, // Use discounted price if discount was applied
+            },
+          ],
+        },
+      );
+
+      // Update transaction with invoice ID
+      await this.paymentTransactionsRepo.updateState(
+        transaction.id,
+        PaymentState.PENDING,
+        {
+          metadata: {
+            invoiceMessageId: invoiceMessage.message_id,
+          },
+        },
+      );
+
+      this.logger.log(
+        `Created invoice for bot user ${botUserId}, transaction ${transaction.id}`,
+      );
+
+      return {
+        transactionId: transaction.id,
+        invoiceMessageId: invoiceMessage.message_id,
+      };
+    } catch (error) {
+      // If invoice creation fails, mark transaction as failed
+      await this.paymentTransactionsRepo.updateState(
+        transaction.id,
+        PaymentState.FAILED,
+        {
+          failedAt: new Date(),
+          failureReason: `Invoice creation failed: ${(error as Error).message}`,
+        },
+      );
+
+      this.logger.error(
+        `Failed to create invoice for transaction ${transaction.id}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Validate pre-checkout query before payment processing
+   *
+   * @param payload - Invoice payload from Telegram
+   * @param amount - Payment amount in Stars
+   * @param userId - User making the payment
+   * @returns true if valid, false otherwise
+   */
+  async validatePreCheckout(
+    payload: RenewalInvoicePayload,
+    amount: number,
+    botUserId: number,
+  ): Promise<boolean> {
+    try {
+      this.logger.log('Validating pre-checkout query', payload);
+      // Validate payload structure
+      if (payload.type !== 'renewal' || !payload.transactionId) {
+        this.logger.warn('Invalid payload structure');
+        return false;
+      }
+
+      // Find transaction
+      const transaction = await this.paymentTransactionsRepo.findById(
+        payload.transactionId,
+      );
+
+      if (!transaction) {
+        this.logger.warn(`Transaction ${payload.transactionId} not found`);
+        return false;
+      }
+
+      // Verify state is PENDING
+      if (transaction.state !== (PaymentState.PENDING as string)) {
+        this.logger.warn(
+          `Transaction ${transaction.id} is not pending (state: ${transaction.state})`,
+        );
+        return false;
+      }
+
+      // Verify amount matches
+      if (transaction.amountStars !== amount) {
+        this.logger.warn(
+          `Amount mismatch for transaction ${transaction.id}: expected ${transaction.amountStars}, got ${amount}`,
+        );
+        return false;
+      }
+
+      // Verify user owns transaction
+      if (transaction.botUserId !== botUserId) {
+        this.logger.warn(
+          `Bot user ${botUserId} does not own transaction ${transaction.id}`,
+        );
+        return false;
+      }
+
+      // Verify subscription still exists
+      const subscription = await this.userSubscriptionsRepo.findById(
+        transaction.userSubscriptionId,
+      );
+
+      if (!subscription) {
+        this.logger.warn(
+          `Subscription ${transaction.userSubscriptionId} not found`,
+        );
+        return false;
+      }
+
+      this.logger.log(
+        `Pre-checkout validation passed for transaction ${transaction.id}`,
+      );
+      return true;
+    } catch (error) {
+      this.logger.error('Pre-checkout validation error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Handle successful payment from Telegram
+   * Extends subscription and updates transaction state
+   * Activates promocode if one was used
+   *
+   * @param payload - Invoice payload
+   * @param telegramChargeId - Telegram payment charge ID
+   * @param providerChargeId - Optional provider payment charge ID
+   */
+  async handleSuccessfulPayment(
+    payload: RenewalInvoicePayload,
+    telegramChargeId: string,
+    providerChargeId?: string,
+  ): Promise<void> {
+    const { transactionId, userSubscriptionId, promocodeId } = payload;
+
+    this.logger.log(
+      `Processing successful payment for transaction ${transactionId}`,
+    );
+
+    try {
+      // 1. Update payment state to PAID
+      await this.paymentTransactionsRepo.updateState(
+        transactionId,
+        PaymentState.PAID,
+        {
+          paidAt: new Date(),
+          telegramPaymentChargeId: telegramChargeId,
+          metadata: {
+            providerChargeId,
+          },
+        },
+      );
+
+      // 2. Get transaction details
+      const transaction =
+        await this.paymentTransactionsRepo.findById(transactionId);
+
+      if (!transaction) {
+        throw new Error(`Transaction ${transactionId} not found`);
+      }
+
+      // 3. Extend subscription
+      await this.userSubscriptionsRepo.extendSubscription(
+        userSubscriptionId,
+        transaction.periodDays,
+      );
+
+      // 4. Activate promocode if one was used
+      if (promocodeId && transaction.botUserId) {
+        const userSubscription =
+          await this.userSubscriptionsRepo.findById(userSubscriptionId);
+        if (userSubscription) {
+          const activationResult =
+            await this.promocodeService.activatePromocode(
+              promocodeId,
+              transaction.botUserId,
+              userSubscription.subscriptionId,
+            );
+
+          if (activationResult.ok) {
+            this.logger.log(
+              `Promocode ${promocodeId} activated for bot user ${transaction.botUserId}`,
+            );
+          } else {
+            // Log but don't fail the payment - promocode activation is secondary
+            this.logger.warn(
+              `Failed to activate promocode ${promocodeId}: ${activationResult.error}`,
+            );
+          }
+        }
+      }
+
+      // 5. Update payment state to COMPLETED
+      await this.paymentTransactionsRepo.updateState(
+        transactionId,
+        PaymentState.COMPLETED,
+        {
+          completedAt: new Date(),
+        },
+      );
+
+      this.logger.log(
+        `Payment ${transactionId} completed successfully. Subscription ${userSubscriptionId} extended.${promocodeId ? ` Promocode ${promocodeId} activated.` : ''}`,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to process payment ${transactionId}:`, error);
+
+      // Mark payment as failed
+      await this.paymentTransactionsRepo.updateState(
+        transactionId,
+        PaymentState.FAILED,
+        {
+          failedAt: new Date(),
+          failureReason: `Payment processing failed: ${(error as Error).message}`,
+        },
+      );
+
+      throw error;
+    }
+  }
+
+  /**
+   * Resolve user language for QuantumDealBot
+   * Uses botUsersRepository to get the language from bot_users table
+   *
+   * @param userId - User's Telegram ID
+   * @returns User's language preference or 'en' as default
+   */
+  private async resolveUserLang(userId: number): Promise<string> {
+    try {
+      // Resolve the bot ID for QuantumDealBot (cached)
+      if (this.cachedBotId === null) {
+        const bot = await this.botsRepo.findByName('QuantumDealBot');
+        this.cachedBotId = bot?.id ?? null;
+      }
+
+      if (this.cachedBotId !== null) {
+        return this.botUsersRepo.resolveLanguage(
+          userId,
+          this.cachedBotId,
+          'en',
+        );
+      }
+
+      return 'en';
+    } catch (error) {
+      this.logger.warn(
+        `Failed to resolve user language for ${userId}, defaulting to 'en'`,
+        error,
+      );
+      return 'en';
+    }
+  }
+}

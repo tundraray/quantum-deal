@@ -2,21 +2,18 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 
-import { inArray } from 'drizzle-orm';
 import {
-  UsersRepository,
   OrdersRepository,
-  SubscriptionsRepository,
+  UserSubscriptionsRepository,
   MessagesRepository,
-  subscriptions,
   Order,
   MessageType,
 } from '@quantumdeal/db';
-import { NotificationService } from './notification.service';
+import { NotificationService } from '@quantumdeal/framework/notifications';
 import {
   MessagePriority,
   QueuedMessageType,
-} from '../interfaces/notification.interface';
+} from '@quantumdeal/framework/notifications';
 import { ConfigService } from '@nestjs/config';
 
 enum ReportType {
@@ -30,17 +27,18 @@ interface TradingActivityStats {
   readonly totalProfit: number;
   readonly totalLoss: number;
   readonly ordersBySymbol: Record<string, number>;
+  readonly profitBySymbol: Record<string, number>;
 }
 
 interface ClientSubscription {
   readonly telegramId: number;
+  readonly botId: number;
   readonly firstName?: string | null;
   readonly lastName?: string | null;
   readonly username?: string | null;
   readonly lang?: string | null;
   readonly subscriptionId: number;
   readonly subscriptionName: string;
-  readonly subscriptionScope: unknown;
   readonly subscriptionExpirationDate: Date;
 }
 
@@ -55,7 +53,6 @@ interface ClientMonthlyReportData {
     readonly lang?: string | null;
     readonly subscription: {
       readonly id: number;
-      readonly scope: unknown;
       readonly expirationDate: Date;
     };
   };
@@ -91,10 +88,9 @@ export class MonthReportService {
   private readonly logger = new Logger(MonthReportService.name);
 
   constructor(
-    private readonly usersRepository: UsersRepository,
     private readonly ordersRepository: OrdersRepository,
-    private readonly subscriptionsRepository: SubscriptionsRepository,
     private readonly messagesRepository: MessagesRepository,
+    private readonly userSubscriptionsRepository: UserSubscriptionsRepository,
     private readonly notificationService: NotificationService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly configService: ConfigService,
@@ -278,49 +274,32 @@ export class MonthReportService {
     ClientSubscription[]
   > {
     try {
-      const usersWithSubscriptions =
-        await this.usersRepository.findActiveUsersWithActiveSubscription();
+      // Get all active users with active subscriptions (signals only)
+      const results =
+        await this.userSubscriptionsRepository.findActiveUsersWithActiveSubscription(
+          1,
+          'signals',
+        );
 
-      if (usersWithSubscriptions.length === 0) {
+      if (results.length === 0) {
         return [];
       }
 
-      const subscriptionIds = [
-        ...new Set(
-          usersWithSubscriptions.map((u) => u.subscribeId).filter(Boolean),
-        ),
-      ];
-      const subscriptionDetails = await this.subscriptionsRepository.findBy(
-        inArray(subscriptions.id, subscriptionIds as number[]),
+      // Transform to ClientSubscription format
+      const clientSubscriptions: ClientSubscription[] = results.map(
+        (result) => ({
+          telegramId: result.user.telegramId,
+          botId: result.botUser.botId,
+          firstName: result.user.firstName,
+          lastName: result.user.lastName,
+          username: result.user.username,
+          lang: result.botUser.lang,
+          subscriptionId: result.subscription.id,
+          subscriptionName: result.subscription.name,
+          subscriptionExpirationDate:
+            result.userSubscription.expiresAt || new Date(),
+        }),
       );
-
-      const subscriptionMap = new Map(
-        subscriptionDetails.map((sub) => [sub.id, sub]),
-      );
-
-      const clientSubscriptions: ClientSubscription[] = [];
-
-      for (const user of usersWithSubscriptions) {
-        if (user.subscribeId && user.subscribeExpirationDate) {
-          const subscription = subscriptionMap.get(user.subscribeId);
-
-          if (subscription) {
-            clientSubscriptions.push({
-              telegramId: user.telegramId,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              username: user.username,
-              lang: user.lang,
-              subscriptionId: subscription.id,
-              subscriptionName: subscription.name,
-              subscriptionScope: subscription.scope,
-              subscriptionExpirationDate: new Date(
-                user.subscribeExpirationDate,
-              ),
-            });
-          }
-        }
-      }
 
       return clientSubscriptions;
     } catch (error) {
@@ -400,6 +379,8 @@ export class MonthReportService {
         totalProfit: profitLossData.totalProfit,
         totalLoss: profitLossData.totalLoss,
         ordersBySymbol: symbolBreakdown,
+        profitBySymbol:
+          this.calculateProfitBySymbolFromOrders(closedOrdersOnly),
         bestTradeSymbol: bestTrade?.symbol,
         bestTradeProfit: bestTrade?.profit,
       };
@@ -477,6 +458,18 @@ export class MonthReportService {
     return breakdown;
   }
 
+  private calculateProfitBySymbolFromOrders(
+    orders: Order[],
+  ): Record<string, number> {
+    const breakdown: Record<string, number> = {};
+    orders.forEach((order) => {
+      const symbol = order.symbol || 'unknown';
+      const profit = order.profit ?? 0;
+      breakdown[symbol] = (breakdown[symbol] || 0) + profit;
+    });
+    return breakdown;
+  }
+
   private async sendClientMonthlyReportWithSharedData(
     client: ClientSubscription,
     sharedData: SharedMonthlyReportData,
@@ -492,7 +485,6 @@ export class MonthReportService {
           lang: client.lang,
           subscription: {
             id: client.subscriptionId,
-            scope: client.subscriptionScope,
             expirationDate: client.subscriptionExpirationDate,
           },
         },
@@ -501,10 +493,15 @@ export class MonthReportService {
 
       const reportMessage = await this.formatClientMonthlyReport(clientReport);
 
-      this.notificationService.addMessage(client.telegramId, reportMessage, {
-        messageType: QueuedMessageType.HTML,
-        priority: MessagePriority.NORMAL,
-      });
+      this.notificationService.addMessage(
+        client.telegramId,
+        client.botId,
+        reportMessage,
+        {
+          messageType: QueuedMessageType.HTML,
+          priority: MessagePriority.NORMAL,
+        },
+      );
 
       this.logger.debug(
         `Successfully sent monthly report to client ${client.telegramId} using shared data`,
@@ -531,11 +528,16 @@ export class MonthReportService {
     const profitSign = totalProfit >= 0 ? '+' : '';
     const bestTradeSymbol = data.tradingActivity.bestTradeSymbol || 'N/A';
     const bestTradeProfit = data.tradingActivity.bestTradeProfit || 0;
+    const bestTradeProfitSign = bestTradeProfit >= 0 ? '+' : '';
+    const maxProfitTrade =
+      bestTradeSymbol === 'N/A'
+        ? 'N/A'
+        : `${bestTradeSymbol} (${bestTradeProfitSign}${bestTradeProfit.toFixed(2)} USD)`;
 
     const allOrders =
-      Object.keys(data.tradingActivity.ordersBySymbol).length > 0
-        ? Object.entries(data.tradingActivity.ordersBySymbol)
-            .sort(([, countA], [, countB]) => countB - countA)
+      Object.keys(data.tradingActivity.profitBySymbol).length > 0
+        ? Object.entries(data.tradingActivity.profitBySymbol)
+            .sort(([, profitA], [, profitB]) => profitB - profitA)
             .map(([symbol]) => symbol)
         : [];
 
@@ -552,6 +554,7 @@ export class MonthReportService {
       return template
         .replace(/\{TotalOrders\}/g, totalOrders.toString())
         .replace(/\{TotalProfit\}/g, `${profitSign}${totalProfit.toFixed(2)}`)
+        .replace(/\{MaxProfitTrade\}/g, maxProfitTrade)
         .replace(/\{BestSymbol\}/g, bestTradeSymbol)
         .replace(/\{BestSymbol_1\}/g, bestSymbol1)
         .replace(/\{BestSymbol_2\}/g, bestSymbol2)

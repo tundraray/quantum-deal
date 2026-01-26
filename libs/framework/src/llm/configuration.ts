@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Logger, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /**
@@ -7,6 +7,8 @@ import { ConfigService } from '@nestjs/config';
  */
 @Injectable()
 export class LLMConfigurationService {
+  private readonly logger = new Logger(LLMConfigurationService.name);
+
   constructor(private readonly configService: ConfigService) {}
 
   /**
@@ -57,7 +59,7 @@ export class LLMConfigurationService {
     if (this.openaiApiKey) providers.push('OpenAI');
     if (this.anthropicApiKey) providers.push('Anthropic');
 
-    console.log(`Available AI providers: ${providers.join(', ')}`);
+    this.logger.log(`Available AI providers: ${providers.join(', ')}`);
   }
 
   /**

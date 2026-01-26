@@ -20,14 +20,14 @@ export class WebhookController {
    */
   @Post('events')
   @HttpCode(HttpStatus.OK)
-  async receiveMT5Event(@Body() eventData: unknown) {
+  receiveMT5Event(@Body() eventData: unknown) {
     try {
       const data = eventData as { event?: string; ticket?: string };
       this.logger.debug(
         `Received MT5 event: ${data.event || 'unknown'} for ticket ${data.ticket || 'unknown'}`,
       );
 
-      const result = await this.webhookService.processTradeEvent(eventData);
+      const result = this.webhookService.processTradeEvent(eventData);
 
       return {
         status: 'success',

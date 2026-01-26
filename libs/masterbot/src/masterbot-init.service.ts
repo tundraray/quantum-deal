@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
-import { InjectBot } from 'nestjs-telegraf';
+import { InjectBot } from '@quantumdeal/telegraf';
 import { Telegraf } from 'telegraf';
 import type { UserContext } from './interfaces';
 import { MASTERBOT_BOT_NAME } from './constants';
@@ -15,7 +15,9 @@ export class MasterbotInitService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     try {
-      this.logger.log('Setting up masterbot commands...');
+      const botInfo = await this.bot.telegram.getMe();
+      const botUsername = botInfo.username;
+      this.logger.log(`Setting up masterbot commands for ${botUsername}...`);
 
       // Set up menu button commands (next to text input)
       await this.bot.telegram.setMyCommands([
@@ -23,6 +25,8 @@ export class MasterbotInitService implements OnApplicationBootstrap {
         { command: 'stats', description: '📊 Statistics' },
         { command: 'code', description: '🎫 Generate Code' },
         { command: 'help', description: '💡 Help' },
+        { command: 'subscription', description: '📋 Manage subscriptions' },
+        { command: 'broadcast', description: '📢 Send message to subscribers' },
       ]);
 
       this.logger.log('Masterbot commands set up successfully');

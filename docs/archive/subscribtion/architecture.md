@@ -1,0 +1,1190 @@
+# Technical Architecture
+
+## System Overview
+
+The manual subscription broadcast feature follows NestJS clean architecture principles with clear separation of concerns across modules, services, and repositories.
+
+## CRITICAL: Two Subscription Types Architecture
+
+This system manages **TWO DISTINCT AND INDEPENDENT** subscription types:
+
+### Two Subscription Types - AS-IS (Current State)
+
+#### 1. Signals Subscriptions (`type: 'signals'`)
+- **Purpose**: Automated trading signal distribution
+- **Source**: Trading platform
+- **Existing System**: Already implemented
+- **User Flow**: Users subscribe → receive automated trading signals
+- **NOT affected by this feature**: Continues to operate independently
+- **AS-IS Storage**: ONE per user via `users.subscribeId` field (one-to-one relationship)
+
+#### 2. Broadcast Subscriptions (`type: 'subscription_{uid}'`)
+- **Purpose**: Manual broadcast of content by managers to specific groups
+- **Source**: Manager-initiated via bot commands
+- **NEW Feature**: Implemented by this architecture
+- **User Flow**: Manager creates subscription → users join via invite link → manager broadcasts messages
+- **Isolation**: Only interacts with broadcast subscriptions, never signals subscriptions
+- **Dynamic Type**: Each subscription has unique type like `'subscription_V1StGXR8_Z'`
+- **AS-IS Storage**: Via `codes` table (userId + activationDate + expirationDate)
+
+### Two Subscription Types - TO-BE (After Migration)
+
+#### 1. Signals Subscriptions (`type: 'signals'`)
+- **TO-BE Storage**: MULTIPLE per user via `user_subscriptions` table (many-to-many relationship)
+- **Migration**: Data moved from `users.subscribeId` → `user_subscriptions`
+
+#### 2. Broadcast Subscriptions (`type: 'subscription_{uid}'`)
+- **TO-BE Storage**: MULTIPLE per user via `user_subscriptions` table (many-to-many relationship)
+- **Migration**: Data moved from `codes.userId/activationDate/expirationDate` → `user_subscriptions`
+- **Unified Architecture**: Same table as signals subscriptions
+
+### Architectural Separation Principle
+
+**All broadcast commands MUST filter by `type LIKE 'subscription_%'`**:
+- `/subscription` menu → "Создать подписку" action → Creates ONLY broadcast subscriptions
+- `/subscription` menu → "Закрыть подписку" action → Shows/closes ONLY broadcast subscriptions
+- `/subscription` menu → "Отправить сообщение" action → Sends to ONLY broadcast subscriptions
+
+**Signals subscriptions remain untouched** by manager broadcast commands.
+
+## Architecture Layers
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Presentation Layer                       │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │   MasterbotUpdate (Command Handlers)                 │   │
+│  │   - /subscription (main menu command)                │   │
+│  │   - @Action('subscription_create')                   │   │
+│  │   - @Action('subscription_close')                    │   │
+│  │   - @Action('subscription_broadcast')                │   │
+│  │   - Other Callback Query Handlers                    │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      Business Logic Layer                    │
+│  ┌────────────────────┐  ┌────────────────────────────┐     │
+│  │ Subscription       │  │ Broadcast                  │     │
+│  │ ManagementService  │  │ Service                    │     │
+│  │ - create()         │  │ - sendBroadcast()          │     │
+│  │ - close()          │  │ - countSubscribers()       │     │
+│  │ - getActive()      │  │ - validateMessage()        │     │
+│  │ - getById()        │  └────────────────────────────┘     │
+│  └────────────────────┘                                      │
+│                                                               │
+│  ┌────────────────────┐                                      │
+│  │ Code               │                                      │
+│  │ GenerationService  │                                      │
+│  │ - generate()       │                                      │
+│  │ - validate()       │                                      │
+│  │ - ensureUnique()   │                                      │
+│  └────────────────────┘                                      │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                     Data Access Layer                        │
+│  ┌──────────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │ Subscriptions    │  │ Codes        │  │ Users        │  │
+│  │ Repository       │  │ Repository   │  │ Repository   │  │
+│  │ (Extended)       │  │ (Extended)   │  │ (Existing)   │  │
+│  └──────────────────┘  └──────────────┘  └──────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│                        Database Layer                        │
+│                    PostgreSQL + Drizzle ORM                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Module Structure
+
+### MasterbotModule (Extended)
+
+**Location**: `libs/masterbot/src/masterbot.module.ts`
+
+**New Providers**:
+- `SubscriptionManagementService`
+- `BroadcastService`
+- `CodeGenerationService`
+
+**Existing Providers** (Used):
+- `MasterbotService`
+- `MasterbotUpdate` (Extended)
+- `SubscriptionsRepository` (Extended)
+- `CodesRepository` (Extended)
+- `UsersRepository`
+- `NotificationService` (from BotModule)
+
+**Dependencies**:
+- `DbModule` (Database access)
+- `FrameworkModule` (Utilities)
+- `BotModule` (NotificationService)
+
+## Service Design
+
+### 1. SubscriptionManagementService
+
+**Responsibilities**:
+- Create new **BROADCAST** subscriptions with unique names and dynamic types
+- Mark subscriptions as active/inactive
+- Retrieve active **BROADCAST** subscriptions list (filtered by type pattern)
+- Validate subscription ownership (future)
+- **CRITICAL**: All operations must filter by `type LIKE 'subscription_%'`
+
+**Interface**:
+```typescript
+interface ISubscriptionManagementService {
+  createSubscription(name: string, managerId: number): Promise<CreateSubscriptionResult>;
+  closeSubscription(subscriptionId: number, managerId: number): Promise<void>;
+  getActiveBroadcastSubscriptions(): Promise<SubscriptionDto[]>; // UPDATED: only broadcast
+  getSubscriptionById(id: number): Promise<SubscriptionDto | null>;
+  validateSubscriptionName(name: string): boolean;
+}
+```
+
+**Key Methods**:
+- `createSubscription()`: Creates **broadcast** subscription with dynamic type (`subscription_{uid}`) + generates invite code
+- `closeSubscription()`: Soft delete via `isActive` flag (validates it's broadcast type)
+- `getActiveBroadcastSubscriptions()`: Filter by `type LIKE 'subscription_%' AND isActive = true`
+- **Type Safety**: All methods ensure they only operate on broadcast subscriptions
+
+### 2. CodeGenerationService
+
+**Responsibilities**:
+- Generate unique alphanumeric codes
+- Validate code uniqueness
+- Link codes to subscriptions and managers
+- Generate shareable invite URLs
+
+**Interface**:
+```typescript
+interface ICodeGenerationService {
+  generateUniqueCode(subscriptionId: number, managerId: number): Promise<CodeDto>;
+  validateCode(code: string): Promise<boolean>;
+  getInviteUrl(code: string): Promise<string>;
+}
+```
+
+**Key Methods**:
+- `generateUniqueCode()`: 15-character alphanumeric code with collision check
+- `validateCode()`: Check if code exists and is unused
+- `getInviteUrl()`: Returns `t.me/{botUsername}?start={code}`
+
+### 3. BroadcastService
+
+**Responsibilities**:
+- Count subscribers for **BROADCAST** subscriptions only
+- Validate broadcast messages
+- Translate messages to user-preferred languages using LLM
+- Queue messages via NotificationService
+- Track broadcast status and errors
+- **CRITICAL**: All operations validate subscription is broadcast type
+
+**Interface**:
+```typescript
+interface IBroadcastService {
+  countSubscribers(subscriptionId: number): Promise<number>;
+  validateMessage(message: string): MessageValidationResult;
+  sendBroadcast(subscriptionId: number, message: string, managerId: number): Promise<BroadcastResultDto>;
+}
+```
+
+**Key Methods**:
+- `countSubscribers()`: Count active users with **broadcast** subscription (validates type inline)
+- `validateMessage()`: Check length, format, forbidden content
+- `sendBroadcast()`: Queue messages via NotificationService (validates broadcast type inline, translates to user languages)
+
+**Dependencies**:
+- `UserSubscriptionsRepository`: Get subscribers with user details (including language preferences)
+- `SubscriptionsRepository`: Validate subscription type
+- `NotificationService`: Queue translated messages for delivery
+- `LLMService`: Translate messages to multiple languages
+
+### 4. LLM Integration for Translation
+
+**Purpose**: Automatic translation of broadcast messages based on user language preferences
+
+**Translation Strategy**:
+1. **Language Grouping**: Group users by language preference to minimize LLM calls
+2. **Single-Call Translation**: **Translate to ALL languages in ONE LLM request** using `generateObject`
+3. **Type-Safe Responses**: Use Zod schema for structured, validated translation responses
+4. **Content Preservation**: Preserve Markdown formatting, emojis, and links during translation
+5. **Fallback Handling**: Use original message if translation fails (all languages fallback together)
+
+**Translation Flow**:
+```typescript
+// In BroadcastService.sendBroadcast()
+1. Get all subscribers with user details (including lang field)
+2. Group users by language: Map<lang, User[]>
+3. Extract unique language codes: ['en', 'ru', 'es']
+4. Single LLM call to translate to ALL languages:
+   - Use generateObject with Zod schema
+   - Request translations for all unique languages
+   - Receive structured JSON response: { en: "...", ru: "...", es: "..." }
+   - Handle errors with fallback to original for all languages
+5. Send language-specific messages to each user
+```
+
+**LLM Model Selection**:
+- **Model**: gpt-5-nano (fast, cost-efficient)
+- **Method**: `generateObject` (structured output with Zod schema)
+- **Temperature**: 0.3 (consistent translation quality)
+- **Schema**: `z.record(z.string(), z.string())` - maps language code to translated message
+
+**Zod Schema**:
+```typescript
+const TranslationsSchema = z.record(z.string(), z.string());
+type Translations = z.infer<typeof TranslationsSchema>;
+// Returns Record<languageCode, translatedMessage>
+```
+
+**Translation Prompt Structure**:
+```typescript
+const prompt = `Translate the following message to multiple languages.
+
+IMPORTANT RULES:
+- Preserve ALL Markdown formatting (bold **text**, italic *text*, code blocks \`\`\`, etc.)
+- Preserve ALL emojis EXACTLY as they are (do not modify or remove)
+- Preserve ALL links and their structure [text](url)
+- Maintain the SAME message structure and layout
+- Only translate the actual text content
+- Keep code blocks, usernames (@username), and technical terms unchanged
+- Keep numbers, dates, and times in their original format
+
+Target languages: ${languageList}
+
+Original message:
+${message}
+
+Return a JSON object with language codes as keys and translated messages as values.
+
+Example format:
+{
+  "en": "translated English text",
+  "ru": "переведенный русский текст",
+  "es": "texto traducido al español"
+}`;
+```
+
+**generateObject Implementation**:
+```typescript
+const translations = await llmService.generateObject<Translations>({
+  model: 'gpt-5-nano',
+  schema: TranslationsSchema,
+  prompt: translationPrompt,
+  temperature: 0.3,
+});
+
+// Returns: { en: "...", ru: "...", es: "..." }
+```
+
+**Error Handling**:
+```typescript
+try {
+  // Single call for ALL languages
+  const translations = await this.translateToMultipleLanguages(
+    originalMessage,
+    languages
+  );
+
+  // Convert Record to Map
+  for (const [lang, text] of Object.entries(translations)) {
+    translatedMessages.set(lang, text);
+  }
+} catch (error) {
+  logger.error(`Translation failed for all languages, using original message`);
+  // Fallback: set original message for ALL languages
+  for (const lang of languages) {
+    translatedMessages.set(lang, originalMessage);
+  }
+}
+```
+
+**Supported Languages**:
+- English (en) - default fallback
+- Russian (ru), Spanish (es), French (fr), German (de)
+- Italian (it), Portuguese (pt), Chinese (zh), Japanese (ja)
+- Korean (ko), Arabic (ar), Hindi (hi), Turkish (tr)
+- Polish (pl), Ukrainian (uk), Dutch (nl), Swedish (sv)
+- Danish (da), Norwegian (no), Finnish (fi)
+
+**Performance Optimization**:
+- **O(1) LLM calls** regardless of number of languages (not O(n))
+- **Single request** translates to all languages simultaneously
+- **Performance Improvements**:
+  - 5 languages: **5x faster** (1 call vs 5 calls)
+  - 10 languages: **10x faster** (1 call vs 10 calls)
+  - 20 languages: **20x faster** (1 call vs 20 calls)
+- Example: 1000 users with 5 languages = **1 LLM call** (vs 5 calls with old approach)
+
+## Data Transfer Objects (DTOs)
+
+### Core DTOs
+
+**SubscriptionDto**:
+```typescript
+interface SubscriptionDto {
+  id: number;
+  name: string;
+  type: string; // 'signals' or 'subscription_{uid}' for broadcasts
+  scope: string[] | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  closedAt?: Date;
+  closedBy?: number;
+}
+```
+
+**CreateSubscriptionResult**:
+```typescript
+interface CreateSubscriptionResult {
+  subscription: SubscriptionDto;
+  code: CodeDto;
+  inviteUrl: string;
+}
+```
+
+**CodeDto**:
+```typescript
+interface CodeDto {
+  id: number;
+  code: string;
+  subscriptionId: number;
+  managerId: number;
+  isActive: boolean;
+  createdAt: Date;
+}
+```
+
+**BroadcastResultDto**:
+```typescript
+interface BroadcastResultDto {
+  queuedCount: number;
+  errorCount: number;
+  recipientCount: number;
+  queuedIds: string[];
+  errors: string[];
+}
+```
+
+**MessageValidationResult**:
+```typescript
+interface MessageValidationResult {
+  valid: boolean;
+  error?: string;
+}
+```
+
+## Code Activation Flow (UPDATED)
+
+### Unified Architecture
+
+ALL subscription types (signals and broadcast) use the same activation flow via `user_subscriptions` table.
+
+**Activation Steps**:
+1. Find code via `codesRepository.findByCode(code)` (validates `userId IS NULL`)
+2. Get subscription via `subscriptionsRepository.findById()`
+3. Validate subscription `isActive` status
+4. Mark code as used: update `codes.userId`, `codes.activationDate`
+5. Create subscription entry: `userSubscriptionsRepository.activate(userId, subscriptionId, expiresAt)`
+6. Return user
+
+**Key Decision**: Old fields (`users.subscribeId`, `users.subscribeExpirationDate`) remain in database but are NOT updated during activation. All services query `user_subscriptions` table instead.
+
+**Code Example**:
+```typescript
+private async activateCode(user: User, code: string) {
+  const $code = await this.codesRepository.findByCode(code);
+  if (!$code) return user;
+
+  const subscription = await this.subscriptionsRepository.findById($code.subscriptionId);
+  if (!subscription || !subscription.isActive) {
+    throw new Error('Subscription not found or closed');
+  }
+
+  // Mark code as used
+  await this.codesRepository.update($code.id, {
+    userId: user.telegramId,
+    activationDate: new Date(),
+  });
+
+  // Create subscription entry (unified for ALL types)
+  const expirationDate = new Date();
+  expirationDate.setDate(expirationDate.getDate() + 30);
+
+  await this.userSubscriptionsRepository.activate(
+    user.telegramId,
+    subscription.id,
+    expirationDate,
+  );
+
+  return user;
+}
+```
+
+## Data Flow
+
+### Create Subscription Flow
+
+```
+Manager → /subscription → Clicks "Создать подписку" button
+    ↓
+MasterbotUpdate.onCreateSubscription() [@Action('subscription_create')]
+    ↓
+SubscriptionManagementService.createSubscription()
+    ↓
+    ├─→ SubscriptionsRepository.create()
+    └─→ CodeGenerationService.generateUniqueCode()
+            ↓
+        CodesRepository.create()
+            ↓
+        Return invite URL
+```
+
+### Broadcast Flow
+
+```
+Manager → /subscription → Clicks "Отправить сообщение" button
+    ↓
+MasterbotUpdate.onBroadcast() [@Action('subscription_broadcast')]
+    ↓
+Show active subscriptions (inline keyboard)
+    ↓
+Manager selects subscription
+    ↓
+MasterbotUpdate.onSubscriptionSelected()
+    ↓
+Enter "waiting for message" state
+    ↓
+Manager sends message
+    ↓
+BroadcastService.countSubscribers()
+    ↓
+Show confirmation with count
+    ↓
+Manager confirms
+    ↓
+BroadcastService.sendBroadcast()
+    ↓
+    ├─→ UsersRepository.findBySubscription()
+    └─→ NotificationService.addMessages()
+            ↓
+        Queue messages with rate limiting
+```
+
+## User Interface Flow
+
+### Main Menu Structure
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Manager Interface                            │
+│                                                                       │
+│  Command: /subscription                                              │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                               │    │
+│  │  📋 Управление подписками                                    │    │
+│  │                                                               │    │
+│  │  Выберите действие:                                          │    │
+│  │                                                               │    │
+│  │  ┌───────────────────────────────────────────────────────┐  │    │
+│  │  │  ➕ Создать подписку                                  │  │    │
+│  │  └───────────────────────────────────────────────────────┘  │    │
+│  │  ┌───────────────────────────────────────────────────────┐  │    │
+│  │  │  🔒 Закрыть подписку                                  │  │    │
+│  │  └───────────────────────────────────────────────────────┘  │    │
+│  │  ┌───────────────────────────────────────────────────────┐  │    │
+│  │  │  📢 Отправить сообщение                               │  │    │
+│  │  └───────────────────────────────────────────────────────┘  │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+│         │                     │                     │                │
+│         ▼                     ▼                     ▼                │
+│    Flow 1: Create        Flow 2: Close        Flow 3: Broadcast     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Flow 1: Create Subscription
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    CREATE SUBSCRIPTION FLOW                          │
+└─────────────────────────────────────────────────────────────────────┘
+
+     Manager clicks "➕ Создать подписку"
+              │
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 1: Request Name                                                │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                               │    │
+│  │  📝 Create New Subscription                                  │    │
+│  │                                                               │    │
+│  │  Please enter the subscription name:                         │    │
+│  │                                                               │    │
+│  │  Example: Premium Trading Signals                            │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+│  State: awaiting_subscription_name                                   │
+└─────────────────────────────────────────────────────────────────────┘
+              │
+              ▼ Manager types: "Premium Trading Signals"
+              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 2: Processing                                                  │
+│                                                                       │
+│  - Validate name (3-50 characters)                                   │
+│  - Generate unique subscription type: subscription_V1StGXR8_Z        │
+│  - Create subscription record                                        │
+│  - Generate 15-char invite code: ABC123XYZ456DEF                     │
+│  - Create invite URL: t.me/QuantumDealBot?start=ABC123XYZ456DEF     │
+└─────────────────────────────────────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 3: Success Message                                             │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                               │    │
+│  │  ✅ Subscription Created Successfully                        │    │
+│  │                                                               │    │
+│  │  📋 Name: Premium Trading Signals                            │    │
+│  │  🆔 ID: 42                                                    │    │
+│  │  📅 Created: 2025-10-08 14:30:00                             │    │
+│  │                                                               │    │
+│  │  🎫 Invite Link:                                             │    │
+│  │  t.me/QuantumDealBot?start=ABC123XYZ456DEF                   │    │
+│  │                                                               │    │
+│  │  Share this link with users to join this subscription.       │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+│  State: null (flow completed)                                        │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Flow 2: Close Subscription
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    CLOSE SUBSCRIPTION FLOW                           │
+└─────────────────────────────────────────────────────────────────────┘
+
+     Manager clicks "🔒 Закрыть подписку"
+              │
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 1: Select Subscription                                         │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                               │    │
+│  │  🔒 Close Subscription                                       │    │
+│  │                                                               │    │
+│  │  Select a subscription to close:                             │    │
+│  │                                                               │    │
+│  │  ┌─────────────────────────────────────────────────────┐    │    │
+│  │  │  Premium Trading Signals                            │    │    │
+│  │  └─────────────────────────────────────────────────────┘    │    │
+│  │  ┌─────────────────────────────────────────────────────┐    │    │
+│  │  │  VIP Signals                                        │    │    │
+│  │  └─────────────────────────────────────────────────────┘    │    │
+│  │  ┌─────────────────────────────────────────────────────┐    │    │
+│  │  │  Basic Package                                      │    │    │
+│  │  └─────────────────────────────────────────────────────┘    │    │
+│  │  ┌─────────────────────────────────────────────────────┐    │    │
+│  │  │  🔙 Cancel                                          │    │    │
+│  │  └─────────────────────────────────────────────────────┘    │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+│  Note: Only shows broadcast subscriptions (type LIKE 'subscription_%')│
+└─────────────────────────────────────────────────────────────────────┘
+              │
+              ▼ Manager clicks "Premium Trading Signals"
+              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 2: Confirmation                                                │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                               │    │
+│  │  ⚠️ Confirm Closure                                          │    │
+│  │                                                               │    │
+│  │  Are you sure you want to close Premium Trading Signals?     │    │
+│  │                                                               │    │
+│  │  • New users cannot join                                     │    │
+│  │  • Existing subscribers keep access                          │    │
+│  │  • This action can be reversed later                         │    │
+│  │                                                               │    │
+│  │  ┌──────────────────────┐  ┌──────────────────────┐         │    │
+│  │  │  ✅ Yes, Close       │  │  ❌ Cancel           │         │    │
+│  │  └──────────────────────┘  └──────────────────────┘         │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+              │
+              ▼ Manager clicks "✅ Yes, Close"
+              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 3: Processing                                                  │
+│                                                                       │
+│  - Update subscription: isActive = false                             │
+│  - Set closedAt = current timestamp                                  │
+│  - Set closedBy = manager's telegramId                               │
+│  - Deactivate unused invite codes                                    │
+│  - Log action                                                        │
+└─────────────────────────────────────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 4: Success Message                                             │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                               │    │
+│  │  ✅ Subscription Closed                                      │    │
+│  │                                                               │    │
+│  │  Premium Trading Signals has been closed.                    │    │
+│  │                                                               │    │
+│  │  No new users can join this subscription.                    │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Flow 3: Broadcast Message
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    BROADCAST MESSAGE FLOW                            │
+└─────────────────────────────────────────────────────────────────────┘
+
+     Manager clicks "📢 Отправить сообщение"
+              │
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 1: Select Subscription                                         │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                               │    │
+│  │  📢 Broadcast Message                                        │    │
+│  │                                                               │    │
+│  │  Select a subscription to broadcast to:                      │    │
+│  │                                                               │    │
+│  │  ┌─────────────────────────────────────────────────────┐    │    │
+│  │  │  Premium Trading Signals (45 users)                 │    │    │
+│  │  └─────────────────────────────────────────────────────┘    │    │
+│  │  ┌─────────────────────────────────────────────────────┐    │    │
+│  │  │  VIP Signals (12 users)                             │    │    │
+│  │  └─────────────────────────────────────────────────────┘    │    │
+│  │  ┌─────────────────────────────────────────────────────┐    │    │
+│  │  │  🔙 Cancel                                          │    │    │
+│  │  └─────────────────────────────────────────────────────┘    │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+│  Note: Only active broadcast subscriptions with subscribers shown    │
+└─────────────────────────────────────────────────────────────────────┘
+              │
+              ▼ Manager clicks "Premium Trading Signals (45 users)"
+              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 2: Enter Message                                               │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                               │    │
+│  │  📝 Enter Broadcast Message                                  │    │
+│  │                                                               │    │
+│  │  Subscription: Premium Trading Signals                       │    │
+│  │                                                               │    │
+│  │  Type your message below.                                    │    │
+│  │  Tip: You can use Markdown formatting                        │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+│  State: awaiting_broadcast_message                                   │
+│  Session: { broadcastSubscriptionId: 42 }                            │
+└─────────────────────────────────────────────────────────────────────┘
+              │
+              ▼ Manager types: "🚀 New trading signal available!"
+              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 3: Validation & Preview                                        │
+│                                                                       │
+│  - Validate message length (max 4096 chars)                          │
+│  - Count active subscribers                                          │
+│  - Store message in session                                          │
+└─────────────────────────────────────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 4: Confirmation Preview                                        │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                               │    │
+│  │  📊 Broadcast Preview                                        │    │
+│  │                                                               │    │
+│  │  Subscription: Premium Trading Signals                       │    │
+│  │  Recipients: 45 active users                                 │    │
+│  │                                                               │    │
+│  │  Message:                                                    │    │
+│  │  🚀 New trading signal available!                            │    │
+│  │                                                               │    │
+│  │  Send this message?                                          │    │
+│  │                                                               │    │
+│  │  ┌──────────────────────┐  ┌──────────────────────┐         │    │
+│  │  │  ✅ Send Now         │  │  ❌ Cancel           │         │    │
+│  │  └──────────────────────┘  └──────────────────────┘         │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+│  State: confirming_broadcast                                         │
+│  Session: { broadcastSubscriptionId: 42,                             │
+│             broadcastMessage: "🚀 New trading signal..." }           │
+└─────────────────────────────────────────────────────────────────────┘
+              │
+              ▼ Manager clicks "✅ Send Now"
+              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 5: Processing                                                  │
+│                                                                       │
+│  - Get all active subscribers for subscription                       │
+│  - Prepare message queue (45 messages)                               │
+│  - Send to NotificationService.addMessages()                         │
+│  - Apply rate limiting (28 msg/sec via Bottleneck)                   │
+│  - Log broadcast action                                              │
+│  - Clear session state                                               │
+└─────────────────────────────────────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 6: Initial Confirmation                                        │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                               │    │
+│  │  ⏳ Broadcast Queued                                         │    │
+│  │                                                               │    │
+│  │  Your message is being sent...                               │    │
+│  │  This may take a few moments.                                │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+              │
+              ▼ (After processing completes)
+              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 7: Completion Report                                           │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                               │    │
+│  │  ✅ Broadcast Completed                                      │    │
+│  │                                                               │    │
+│  │  Queued: 43 messages                                         │    │
+│  │  Errors: 2                                                   │    │
+│  │                                                               │    │
+│  │  Messages are being delivered with rate limiting.            │    │
+│  │                                                               │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+│  State: null (flow completed)                                        │
+│  Session: cleared                                                    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Session State Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     SESSION STATE TRANSITIONS                        │
+└─────────────────────────────────────────────────────────────────────┘
+
+CREATE FLOW:
+    null  →  awaiting_subscription_name  →  null
+             (waiting for name input)        (completed)
+
+CLOSE FLOW:
+    null  (no intermediate states)  →  null
+    (selection and confirmation via callback queries)
+
+BROADCAST FLOW:
+    null  →  awaiting_broadcast_message  →  confirming_broadcast  →  null
+             (waiting for message text)       (preview shown)         (completed)
+
+SESSION DATA STRUCTURE:
+{
+  state: 'awaiting_subscription_name' |
+         'awaiting_broadcast_message' |
+         'confirming_broadcast' |
+         null,
+
+  // Broadcast context
+  broadcastSubscriptionId: number | null,
+  broadcastMessage: string | null,
+}
+```
+
+## State Management
+
+### Conversation State Pattern
+
+For multi-step interactions (broadcast flow), use Telegraf scenes or custom state storage:
+
+**Option 1: Scenes** (Recommended)
+```typescript
+@Scene('BROADCAST_SCENE')
+export class BroadcastScene {
+  @SceneEnter()
+  async onEnter(ctx: UserContext) { }
+
+  @On('text')
+  async onMessage(ctx: UserContext) { }
+
+  @Action('confirm_broadcast')
+  async onConfirm(ctx: UserContext) { }
+}
+```
+
+**Option 2: Context State**
+```typescript
+// Store in ctx.session
+ctx.session.broadcastState = {
+  subscriptionId: 123,
+  step: 'waiting_for_message'
+};
+```
+
+## Repository Extensions
+
+### SubscriptionsRepository (Extended)
+
+**New Methods** (with type filtering):
+```typescript
+// CRITICAL: Filter by broadcast type pattern
+findActiveBroadcastSubscriptions(): Promise<Subscription[]>
+
+// Type-aware operations
+updateStatus(id: number, isActive: boolean): Promise<Subscription>
+findByManager(managerId: number): Promise<Subscription[]> // Future
+
+// Validation helpers
+isBroadcastSubscriptionById(id: number): Promise<boolean>
+```
+
+**Type Safety**:
+All repository methods that interact with broadcast commands MUST filter by `type LIKE 'subscription_%'` to maintain separation from signals subscriptions.
+
+### CodesRepository (Extended)
+
+**New Methods**:
+```typescript
+findBySubscription(subscriptionId: number): Promise<Code[]>
+findActiveCodesBySubscription(subscriptionId: number): Promise<Code[]>
+countCodesBySubscription(subscriptionId: number): Promise<number>
+```
+
+### UsersRepository (Existing)
+
+**Used Methods**:
+```typescript
+findBySubscription(subscriptionId: number): Promise<User[]> // Already exists
+findActiveUsers(): Promise<User[]> // Already exists
+```
+
+### UserSubscriptionsRepository (NEW - CRITICAL)
+
+**Central repository for unified subscription management**
+
+**Location**: `libs/db/src/repositories/user-subscriptions.repository.ts`
+
+**Purpose**: Manages the many-to-many relationship between users and subscriptions, replacing:
+- `users.subscribeId` (old signals subscription)
+- `codes.userId` + activation/expiration data (old broadcast activations)
+
+**New Methods**:
+```typescript
+// Create subscription relationship (activation)
+async create(data: NewUserSubscription): Promise<UserSubscription>
+
+// Find all user subscriptions (unified query - replaces multiple queries)
+async findByUserId(userId: number): Promise<UserSubscription[]>
+
+// Find subscriptions by type for a user
+async findByUserIdAndType(userId: number, subscriptionType: string): Promise<UserSubscription[]>
+
+// Find all subscribers for a subscription (replaces UsersRepository.findBySubscription)
+async findBySubscriptionId(subscriptionId: number): Promise<UserSubscription[]>
+
+// Check if user has active subscription
+async isUserSubscribed(userId: number, subscriptionId: number): Promise<boolean>
+
+// Activate subscription (create relationship)
+async activate(
+  userId: number,
+  subscriptionId: number,
+  expiresAt?: Date
+): Promise<UserSubscription>
+
+// Deactivate subscription
+async deactivate(userId: number, subscriptionId: number): Promise<void>
+
+// Find expiring subscriptions (replaces UsersRepository.findUsersWithExpiringSubscriptions)
+async findExpiring(daysFromNow: number, subscriptionType?: string): Promise<Array<{
+  user: User;
+  subscription: Subscription;
+  userSubscription: UserSubscription;
+}>>
+```
+
+**Key Patterns:**
+
+```typescript
+// Unified query example - get all user subscriptions with JOIN
+const subscriptions = await this.db
+  .select({
+    userSubscription: userSubscriptions,
+    subscription: subscriptions,
+  })
+  .from(userSubscriptions)
+  .innerJoin(subscriptions, eq(subscriptions.id, userSubscriptions.subscriptionId))
+  .where(
+    and(
+      eq(userSubscriptions.userId, userId),
+      eq(userSubscriptions.isActive, true)
+    )
+  );
+```
+
+**Replaces:**
+- `UsersRepository.findBySubscription()` → Use `findBySubscriptionId()` then JOIN with users
+- `UsersRepository.findUsersWithExpiringSubscriptions()` → Use `findExpiring()`
+
+**Naming Convention**:
+- Repository methods use `find*` prefix (data access layer)
+- Service methods use `get*` prefix (business logic layer)
+
+## Error Handling Strategy
+
+### Service Layer Errors
+
+**Custom Exceptions**:
+- `SubscriptionNotFoundException`
+- `DuplicateSubscriptionNameException`
+- `CodeGenerationFailedException`
+- `InvalidMessageException`
+- `BroadcastFailedException`
+
+**Error Handler**:
+```typescript
+@Catch()
+export class BroadcastExceptionFilter implements ExceptionFilter {
+  catch(exception: Error, ctx: TelegrafContext) {
+    // Log to Sentry
+    // Send user-friendly message
+  }
+}
+```
+
+### Telegram API Errors
+
+- Handle blocked users gracefully
+- Retry on rate limit errors
+- Log failed sends for analysis
+
+## Transaction Management
+
+### Critical Operations
+
+Operations requiring transactions:
+1. **Create Subscription + Code**: Ensure both succeed or rollback
+2. **Close Subscription**: Update subscription + invalidate codes
+
+**Pattern**:
+```typescript
+await this.subscriptionsRepository.transaction(async (tx) => {
+  const subscription = await tx.insert(subscriptions).values({...}).returning();
+  const code = await tx.insert(codes).values({...}).returning();
+  return { subscription, code };
+});
+```
+
+## NotificationService Integration
+
+### Overview
+Broadcast messages are sent via `NotificationService` which provides:
+- Rate limiting (28 messages/second via Bottleneck)
+- Priority queue support
+- Automatic retry logic (up to 3 retries)
+- Error handling and user deactivation for permanent errors
+
+### Integration Details
+
+**Module Setup**:
+- `MasterbotModule` imports `BotModule` to access `NotificationService`
+- `BroadcastService` injects `NotificationService` in constructor
+
+**Broadcast Implementation**:
+```typescript
+async sendBroadcast(subscriptionId: number, message: string, managerId: number) {
+  // ... validation ...
+
+  const subscribers = await this.userSubscriptionsRepository
+    .findSubscribersWithUserDetails(subscriptionId);
+
+  const batchResult = this.notificationService.addMessages(
+    subscribers.map(sub => ({
+      userId: sub.user.telegramId,
+      message,
+      options: {
+        priority: MessagePriority.NORMAL,
+        messageType: QueuedMessageType.MARKDOWN,
+        metadata: {
+          subscriptionId,
+          managerId,
+          broadcastType: 'subscription',
+        },
+      },
+    })),
+  );
+
+  return {
+    recipientCount: subscribers.length,
+    queuedCount: batchResult.queuedCount,
+    errorCount: batchResult.errorCount,
+    queuedIds: batchResult.queuedIds,
+    errors: batchResult.errors,
+  };
+}
+```
+
+### Rate Limiting
+- **Max rate**: 28 messages/second (Telegram API limit: 30/second with safety buffer)
+- **Concurrency**: 4 concurrent requests
+- **Min time**: 30ms between messages
+- **Reservoir**: Refills every 1 second
+
+### Message Metadata
+Each broadcast message includes metadata for tracking:
+- `subscriptionId`: Which subscription sent the broadcast
+- `managerId`: Which manager initiated the broadcast
+- `broadcastType`: Always 'subscription' for broadcast messages
+
+This metadata is used for:
+- Analytics and reporting
+- Audit trail
+- Error investigation
+
+## Integration Points
+
+### NotificationService Integration (IMPLEMENTED)
+
+The BroadcastService leverages the existing `NotificationService` for:
+- Rate-limited message queuing (28 msg/sec via Bottleneck)
+- Retry logic for failed sends (up to 3 retries)
+- Telegram API error handling
+- Bottleneck queue management
+- Priority support (NORMAL priority for broadcasts)
+- Metadata tracking for analytics
+
+**Usage**:
+```typescript
+const result = await this.notificationService.addMessages(
+  subscribers.map(user => ({
+    userId: user.telegramId,
+    message: broadcastMessage,
+    options: {
+      priority: MessagePriority.NORMAL,
+      messageType: QueuedMessageType.MARKDOWN,
+      metadata: {
+        subscriptionId,
+        managerId,
+        broadcastType: 'subscription',
+      },
+    }
+  }))
+);
+```
+
+## Performance Considerations
+
+### Scalability
+
+1. **Large Subscriber Lists**: Batch processing via NotificationService
+2. **Code Generation**: In-memory cache for recently generated codes
+3. **Active Subscriptions Query**: Add database index on `isActive`
+4. **Broadcast Status**: Real-time updates via WebSocket (future)
+
+### Caching Strategy
+
+- Cache active subscriptions for 5 minutes
+- Cache subscriber counts for 1 minute
+- Invalidate on subscription updates
+
+## Security Architecture
+
+### Authorization
+
+- Manager authentication via existing middleware
+- Action logging via MasterbotService
+- Subscription ownership validation (future enhancement)
+
+### Input Validation
+
+- DTOs with class-validator decorators
+- Message length limits (Telegram max: 4096 chars)
+- Sanitize HTML/Markdown in messages
+- Prevent code injection in subscription names
+
+### Rate Limiting
+
+- Per-manager command rate limits
+- Global broadcast rate limits
+- Leverage existing Telegram API limits via NotificationService
+
+## Monitoring & Observability
+
+### Logging
+
+- All manager actions logged via `MasterbotService.logManagerAction()`
+- Broadcast events logged with metadata
+- Error tracking via Sentry
+
+### Metrics
+
+Key metrics to track:
+- Subscription creation rate
+- Active subscriptions count
+- Broadcast success/failure rate
+- Average broadcast size (recipients)
+- Code generation failures
+
+### Alerts
+
+- High broadcast failure rate (>5%)
+- Code generation failures
+- Rate limit approaches
+- Subscription creation spikes
+
+## Testing Strategy
+
+### Unit Tests
+
+- Service methods with mocked repositories
+- Code generation uniqueness validation
+- Message validation logic
+- Error handling scenarios
+
+### Integration Tests
+
+- Full command flows with test database
+- Transaction rollbacks on errors
+- Repository method interactions
+
+### E2E Tests
+
+- Complete broadcast cycle
+- Subscription lifecycle (create → use → close)
+- Error scenarios (blocked users, rate limits)
+
+## Future Enhancements
+
+1. **Scheduled Broadcasts**: Send messages at specific times
+2. **Broadcast Templates**: Save and reuse message templates
+3. **Analytics Dashboard**: Track subscription engagement
+4. **Subscription Ownership**: Multi-manager support
+5. **Broadcast History**: View past broadcasts
+6. **Message Preview**: Preview before sending
+7. **Subscriber Import/Export**: CSV import/export
+8. **Webhook Triggers**: Auto-broadcast on events

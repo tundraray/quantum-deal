@@ -1,0 +1,1 @@
+ALTER TABLE "renewal_tariffs" ALTER COLUMN "subscription_id" SET NOT NULL;

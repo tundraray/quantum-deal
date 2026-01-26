@@ -59,6 +59,7 @@ export class OrdersRepository extends BaseRepository<Order, NewOrder, number> {
     const baseCondition = and(
       gte(orders.eventTimestamp, startDate),
       lte(orders.eventTimestamp, endDate),
+      isNotNull(orders.closeTime),
     );
 
     const condition =

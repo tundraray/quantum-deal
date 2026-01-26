@@ -13,7 +13,7 @@ export enum MT5EventType {
   CLOSE = 'CLOSE',
   ORDER_SLTP_UPDATE = 'ORDER_SLTP_UPDATE',
   POSITION_SLTP_UPDATE = 'POSITION_SLTP_UPDATE',
-  TEST = 'TEST',
+  TEST = 'test',
 }
 
 export enum MT5OrderType {
