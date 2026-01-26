@@ -13,6 +13,7 @@ export const MASTERBOT_CONSTANTS = {
     HELP: '/help',
     SUBSCRIPTION: '/subscription',
     BROADCAST: '/broadcast',
+    PROMOCODE: '/promocode',
   },
   COMMAND_DESCRIPTIONS: {
     START: '🚀 /start — Панель управления',
@@ -20,6 +21,7 @@ export const MASTERBOT_CONSTANTS = {
     CODE: '🎫 /code — Генерация кодов подписки',
     SUBSCRIPTION: '📋 /subscription — Управление подписками',
     BROADCAST: '📢 /broadcast — Рассылка сообщений подписчикам',
+    PROMOCODE: '🎁 /promocode — Управление промокодами',
     HELP: '💡 /help — Справка по командам',
   },
   MESSAGES: {
@@ -59,6 +61,18 @@ export const MASTERBOT_CONSTANTS = {
     BROADCAST_SUB_DONE: 'broadcast_sub_done',
     // No-subscription filter (users who never activated any subscription)
     BROADCAST_FILTER_NO_SUBSCRIPTION: 'broadcast_filter_no_subscription',
+    // Promocode management callback actions
+    PROMOCODE_CREATE: 'promocode_create',
+    PROMOCODE_LIST: 'promocode_list',
+    PROMOCODE_DEACTIVATE_PREFIX: 'promocode_deactivate_',
+    PROMOCODE_TYPE_SINGLE: 'promocode_type_single',
+    PROMOCODE_TYPE_MULTI: 'promocode_type_multi',
+    PROMOCODE_DISCOUNT_PERCENTAGE: 'promocode_discount_percentage',
+    PROMOCODE_DISCOUNT_FIXED: 'promocode_discount_fixed',
+    PROMOCODE_SCOPE_GLOBAL: 'promocode_scope_global',
+    PROMOCODE_SCOPE_BOT_PREFIX: 'promocode_scope_bot_',
+    PROMOCODE_CONFIRM_CREATE: 'promocode_confirm_create',
+    PROMOCODE_CANCEL: 'promocode_cancel',
     MENU_STATS: 'menu_stats',
     MENU_CODE: 'menu_code',
     MENU_HELP: 'menu_help',

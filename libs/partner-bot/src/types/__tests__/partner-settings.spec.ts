@@ -1,12 +1,12 @@
 import type {
-  PartnerBotSettings,
+  PartnerSettings,
   VerificationState,
   PartnerBotUserState,
   VerificationResult,
   ReminderStats,
 } from '../partner-settings';
 
-describe('PartnerBotSettings type definitions', () => {
+describe('PartnerSettings type definitions', () => {
   describe('VerificationState type', () => {
     it('should accept valid verification state values', () => {
       const states: VerificationState[] = [
@@ -27,22 +27,45 @@ describe('PartnerBotSettings type definitions', () => {
     });
   });
 
-  describe('PartnerBotSettings interface', () => {
-    it('should have required partner field', () => {
-      const settings: PartnerBotSettings = {
-        partner: '@testchannel',
+  describe('PartnerSettings interface', () => {
+    it('should have optional channelId field', () => {
+      const settings: PartnerSettings = {
+        features: {
+          trialEnabled: false,
+          paymentsEnabled: false,
+          signalsEnabled: false,
+          broadcastEnabled: false,
+        },
+        defaults: {
+          subscriptionDays: 30,
+          trialDays: 7,
+          language: 'en',
+        },
+        channelId: '@testchannel',
       };
 
-      expect(settings.partner).toBe('@testchannel');
+      expect(settings.channelId).toBe('@testchannel');
     });
 
-    it('should extend base settings with partner field', () => {
-      const settings: PartnerBotSettings = {
-        partner: '@testchannel',
-        // Additional base settings can be added if base type exists
+    it('should extend base BotSettings interface', () => {
+      const settings: PartnerSettings = {
+        features: {
+          trialEnabled: true,
+          paymentsEnabled: true,
+          signalsEnabled: false,
+          broadcastEnabled: false,
+        },
+        defaults: {
+          subscriptionDays: 30,
+          trialDays: 7,
+          language: 'en',
+        },
+        channelName: 'Test Channel',
+        referralUrl: 'https://example.com/ref',
       };
 
-      expect(settings).toHaveProperty('partner');
+      expect(settings).toHaveProperty('features');
+      expect(settings).toHaveProperty('defaults');
     });
   });
 

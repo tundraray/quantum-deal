@@ -19,6 +19,11 @@ import {
   BotMessagesRepository,
   BotUsersRepository,
   BotSettingsRepository,
+  // Promocode discount system repositories
+  PromocodesRepository,
+  PromocodeActivationsRepository,
+  UserDiscountsRepository,
+  SystemDiscountRulesRepository,
 } from './repositories';
 
 @Module({
@@ -66,6 +71,11 @@ export class DrizzleModule {}
     BotMessagesRepository,
     BotUsersRepository,
     BotSettingsRepository,
+    // Promocode discount system repositories
+    PromocodesRepository,
+    PromocodeActivationsRepository,
+    UserDiscountsRepository,
+    SystemDiscountRulesRepository,
   ],
   exports: [
     // Export the database client for direct access if needed
@@ -88,6 +98,11 @@ export class DrizzleModule {}
     BotMessagesRepository,
     BotUsersRepository,
     BotSettingsRepository,
+    // Promocode discount system repositories
+    PromocodesRepository,
+    PromocodeActivationsRepository,
+    UserDiscountsRepository,
+    SystemDiscountRulesRepository,
   ],
 })
 export class DbModule {}

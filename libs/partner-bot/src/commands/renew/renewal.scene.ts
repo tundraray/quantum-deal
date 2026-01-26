@@ -41,7 +41,7 @@ export class RenewalScene {
     private readonly renewalTariffsRepo: RenewalTariffsRepository,
     private readonly userSubscriptionsRepo: UserSubscriptionsRepository,
     private readonly localizationService: LocalizationService,
-  ) {}
+  ) { }
 
   /**
    * Get localization context for the current request
@@ -64,7 +64,11 @@ export class RenewalScene {
     const botUserId = ctx.user?.botUserId;
     if (!botUserId) {
       const l10n = this.getL10n(ctx);
+      this.logger.error(
+        `User ${ctx.from?.id} is not authorized to renew subscription for user ${botUserId}`,
+      );
       await ctx.reply(await l10n.t('renewal_error_userNotFound'));
+
       await ctx.scene.leave();
       return;
     }
@@ -125,8 +129,8 @@ export class RenewalScene {
           const status = userSub.isActive ? '✅' : '❌';
           const expiryText = userSub.expiresAt
             ? new Date(userSub.expiresAt).toLocaleDateString(
-                lang === 'ru' ? 'ru-RU' : 'en-US',
-              )
+              lang === 'ru' ? 'ru-RU' : 'en-US',
+            )
             : await l10n.t('renewal_text_noExpiry');
           const untilText = await l10n.t('renewal_text_until');
           messageText += `${status} ${subscription.name} - ${untilText} ${expiryText}\n`;
@@ -247,10 +251,10 @@ export class RenewalScene {
     const currentExpiryText = isExpired
       ? await l10n.t('renewal_text_subscriptionExpired')
       : await l10n.t('renewal_text_currentExpiry', {
-          date: currentExpiry.toLocaleDateString(
-            lang === 'ru' ? 'ru-RU' : 'en-US',
-          ),
-        });
+        date: currentExpiry.toLocaleDateString(
+          lang === 'ru' ? 'ru-RU' : 'en-US',
+        ),
+      });
 
     const renewalTitle = await l10n.t('renewal_text_renewalTitle', {
       subscriptionName,
@@ -325,8 +329,12 @@ export class RenewalScene {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const tariffId = parseInt(match[3]);
 
-    if (!ctx.from?.id || ctx.from.id !== botUserId) {
+    if (!ctx.user?.botUserId || ctx.user.botUserId !== botUserId) {
+      this.logger.error(
+        `User with botUserId ${ctx.user?.botUserId} is not authorized to renew subscription for botUserId ${botUserId}`,
+      );
       await ctx.answerCbQuery(await l10n.t('renewal_error_userNotFound'));
+
       return;
     }
 

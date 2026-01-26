@@ -59,13 +59,42 @@ describe('BroadcastService', () => {
     state: null,
   });
 
+  // Helper to create full UserSubscription mock with all required fields
+  const createMockUserSubscription = (overrides: {
+    id: number;
+    botUserId: number;
+    subscriptionId: number;
+    isActive: boolean;
+    expiresAt: Date;
+  }) => ({
+    ...overrides,
+    createdAt: new Date(),
+    botId: 1,
+    activatedAt: new Date(),
+  });
+
+  // Helper to create full Subscription mock with all required fields
+  const createMockSubscription = (overrides: {
+    id: number;
+    type: string;
+    name: string;
+    isActive: boolean;
+  }) => ({
+    ...overrides,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    isHidden: false,
+    closedAt: null,
+    closedBy: null,
+  });
+
   // Test data fixtures
-  const mockSubscription = {
+  const mockSubscription = createMockSubscription({
     id: TEST_SUBSCRIPTION_ID,
     type: 'signals',
     name: 'Premium Signals',
     isActive: true,
-  };
+  });
 
   const activeSubscribers = [
     {
@@ -76,13 +105,13 @@ describe('BroadcastService', () => {
         lang: 'en',
         isActive: true,
       }),
-      userSubscription: {
+      userSubscription: createMockUserSubscription({
         id: 1,
         botUserId: 1,
         subscriptionId: TEST_SUBSCRIPTION_ID,
         isActive: true,
         expiresAt: new Date('2026-12-31'),
-      },
+      }),
     },
     {
       botUser: createMockBotUser({
@@ -92,13 +121,13 @@ describe('BroadcastService', () => {
         lang: 'ru',
         isActive: true,
       }),
-      userSubscription: {
+      userSubscription: createMockUserSubscription({
         id: 2,
         botUserId: 2,
         subscriptionId: TEST_SUBSCRIPTION_ID,
         isActive: true,
         expiresAt: new Date('2026-12-31'),
-      },
+      }),
     },
     {
       botUser: createMockBotUser({
@@ -108,13 +137,13 @@ describe('BroadcastService', () => {
         lang: 'es',
         isActive: true,
       }),
-      userSubscription: {
+      userSubscription: createMockUserSubscription({
         id: 3,
         botUserId: 3,
         subscriptionId: TEST_SUBSCRIPTION_ID,
         isActive: true,
         expiresAt: new Date('2026-12-31'),
-      },
+      }),
     },
   ];
 
@@ -128,13 +157,13 @@ describe('BroadcastService', () => {
         isActive: true,
       }),
       subscription: mockSubscription,
-      userSubscription: {
+      userSubscription: createMockUserSubscription({
         id: 4,
         botUserId: 4,
         subscriptionId: TEST_SUBSCRIPTION_ID,
         isActive: false,
         expiresAt: new Date('2025-11-01'),
-      },
+      }),
     },
     {
       botUser: createMockBotUser({
@@ -145,13 +174,13 @@ describe('BroadcastService', () => {
         isActive: true,
       }),
       subscription: mockSubscription,
-      userSubscription: {
+      userSubscription: createMockUserSubscription({
         id: 5,
         botUserId: 5,
         subscriptionId: TEST_SUBSCRIPTION_ID,
         isActive: false,
         expiresAt: new Date('2025-10-15'),
-      },
+      }),
     },
   ];
 
@@ -165,13 +194,13 @@ describe('BroadcastService', () => {
         isActive: true,
       }),
       subscription: mockSubscription,
-      userSubscription: {
+      userSubscription: createMockUserSubscription({
         id: 4,
         botUserId: 4,
         subscriptionId: TEST_SUBSCRIPTION_ID,
         isActive: false,
         expiresAt: new Date('2025-11-01'),
-      },
+      }),
     },
   ];
 
@@ -550,19 +579,19 @@ describe('BroadcastService', () => {
     const SUB_1_ID = 1;
     const SUB_2_ID = 2;
 
-    const sub1 = {
+    const sub1 = createMockSubscription({
       id: SUB_1_ID,
       type: 'signals',
       name: 'Premium Signals',
       isActive: true,
-    };
+    });
 
-    const sub2 = {
+    const sub2 = createMockSubscription({
       id: SUB_2_ID,
       type: 'subscription_basic',
       name: 'Basic Plan',
       isActive: true,
-    };
+    });
 
     // Users A, B, C for subscription 1
     const sub1Subscribers = [
@@ -574,13 +603,13 @@ describe('BroadcastService', () => {
           lang: 'en',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 1,
           botUserId: 1,
           subscriptionId: SUB_1_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
       {
         botUser: createMockBotUser({
@@ -590,13 +619,13 @@ describe('BroadcastService', () => {
           lang: 'ru',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 2,
           botUserId: 2,
           subscriptionId: SUB_1_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
       {
         botUser: createMockBotUser({
@@ -606,13 +635,13 @@ describe('BroadcastService', () => {
           lang: 'es',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 3,
           botUserId: 3,
           subscriptionId: SUB_1_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
     ];
 
@@ -626,13 +655,13 @@ describe('BroadcastService', () => {
           lang: 'ru',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 4,
           botUserId: 4,
           subscriptionId: SUB_2_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
       {
         botUser: createMockBotUser({
@@ -642,13 +671,13 @@ describe('BroadcastService', () => {
           lang: 'es',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 5,
           botUserId: 5,
           subscriptionId: SUB_2_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
       {
         botUser: createMockBotUser({
@@ -658,13 +687,13 @@ describe('BroadcastService', () => {
           lang: 'en',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 6,
           botUserId: 6,
           subscriptionId: SUB_2_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
     ];
 
@@ -770,13 +799,13 @@ describe('BroadcastService', () => {
             isActive: true,
           }),
           subscription: sub1,
-          userSubscription: {
+          userSubscription: createMockUserSubscription({
             id: 10,
             botUserId: 10,
             subscriptionId: SUB_1_ID,
             isActive: false,
             expiresAt: new Date('2025-11-01'),
-          },
+          }),
         },
       ];
       mockSubscriptionsRepository.findById.mockResolvedValue(sub1);
@@ -831,19 +860,19 @@ describe('BroadcastService', () => {
     const SUB_1_ID = 1;
     const SUB_2_ID = 2;
 
-    const sub1 = {
+    const sub1 = createMockSubscription({
       id: SUB_1_ID,
       type: 'signals',
       name: 'Premium Signals',
       isActive: true,
-    };
+    });
 
-    const sub2 = {
+    const sub2 = createMockSubscription({
       id: SUB_2_ID,
       type: 'subscription_basic',
       name: 'Basic Plan',
       isActive: true,
-    };
+    });
 
     // Users A, B, C for subscription 1
     const sub1Subscribers = [
@@ -855,13 +884,13 @@ describe('BroadcastService', () => {
           lang: 'en',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 1,
           botUserId: 1,
           subscriptionId: SUB_1_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
       {
         botUser: createMockBotUser({
@@ -871,13 +900,13 @@ describe('BroadcastService', () => {
           lang: 'ru',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 2,
           botUserId: 2,
           subscriptionId: SUB_1_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
       {
         botUser: createMockBotUser({
@@ -887,13 +916,13 @@ describe('BroadcastService', () => {
           lang: 'es',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 3,
           botUserId: 3,
           subscriptionId: SUB_1_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
     ];
 
@@ -907,13 +936,13 @@ describe('BroadcastService', () => {
           lang: 'ru',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 4,
           botUserId: 4,
           subscriptionId: SUB_2_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
       {
         botUser: createMockBotUser({
@@ -923,13 +952,13 @@ describe('BroadcastService', () => {
           lang: 'es',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 5,
           botUserId: 5,
           subscriptionId: SUB_2_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
       {
         botUser: createMockBotUser({
@@ -939,13 +968,13 @@ describe('BroadcastService', () => {
           lang: 'en',
           isActive: true,
         }),
-        userSubscription: {
+        userSubscription: createMockUserSubscription({
           id: 6,
           botUserId: 6,
           subscriptionId: SUB_2_ID,
           isActive: true,
           expiresAt: new Date('2026-12-31'),
-        },
+        }),
       },
     ];
 
@@ -1033,13 +1062,13 @@ describe('BroadcastService', () => {
             isActive: true,
           }),
           subscription: sub1,
-          userSubscription: {
+          userSubscription: createMockUserSubscription({
             id: 10,
             botUserId: 10,
             subscriptionId: SUB_1_ID,
             isActive: false,
             expiresAt: new Date('2025-11-01'),
-          },
+          }),
         },
       ];
       mockSubscriptionsRepository.findById.mockResolvedValue(sub1);
@@ -1190,13 +1219,13 @@ describe('BroadcastService', () => {
             isActive: true,
           }),
           subscription: mockSubscription,
-          userSubscription: {
+          userSubscription: createMockUserSubscription({
             id: 4,
             botUserId: 4,
             subscriptionId: TEST_SUBSCRIPTION_ID,
             isActive: false,
             expiresAt: new Date('2025-11-01'),
-          },
+          }),
         },
       ]);
 

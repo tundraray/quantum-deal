@@ -190,6 +190,13 @@
       "when": 1765138224085,
       "tag": "20251207201024_special_molly_hayes",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1769434092780,
+      "tag": "20260126132812_shiny_franklin_richards",
+      "breakpoints": true
     }
   ]
 }

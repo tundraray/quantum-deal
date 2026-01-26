@@ -164,13 +164,13 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
   });
 
   describe('Status Filter Selection Handlers (AC1)', () => {
-    describe('onBroadcastFilterActive', () => {
+    describe('onBroadcastFilterStatus', () => {
       it('should set broadcastFilterStatus to active', async () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
           { broadcastSubscriptionIds: [1] },
         );
-        await broadcastUpdate.onBroadcastFilterActive(ctx);
+        await broadcastUpdate.onBroadcastFilterStatus(ctx);
         expect(ctx.session.broadcastFilterStatus).toBe('active');
       });
 
@@ -179,7 +179,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
           { broadcastSubscriptionIds: [1] },
         );
-        await broadcastUpdate.onBroadcastFilterActive(ctx);
+        await broadcastUpdate.onBroadcastFilterStatus(ctx);
         expect(ctx.session.flowState).toBe('awaiting_broadcast_message');
       });
 
@@ -188,7 +188,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
           { broadcastSubscriptionIds: [1] },
         );
-        await broadcastUpdate.onBroadcastFilterActive(ctx);
+        await broadcastUpdate.onBroadcastFilterStatus(ctx);
         expect(ctx.editMessageText).toHaveBeenCalled();
       });
 
@@ -197,18 +197,18 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
           { broadcastSubscriptionIds: [1] },
         );
-        await broadcastUpdate.onBroadcastFilterActive(ctx);
+        await broadcastUpdate.onBroadcastFilterStatus(ctx);
         expect(ctx.answerCbQuery).toHaveBeenCalled();
       });
     });
 
-    describe('onBroadcastFilterExpired', () => {
+    describe('onBroadcastFilterStatus', () => {
       it('should set broadcastFilterStatus to expired', async () => {
         const ctx = createMockContext(
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED,
           { broadcastSubscriptionIds: [1] },
         );
-        await broadcastUpdate.onBroadcastFilterExpired(ctx);
+        await broadcastUpdate.onBroadcastFilterStatus(ctx);
         expect(ctx.session.broadcastFilterStatus).toBe('expired');
       });
 
@@ -217,7 +217,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
           MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_EXPIRED,
           { broadcastSubscriptionIds: [1] },
         );
-        await broadcastUpdate.onBroadcastFilterExpired(ctx);
+        await broadcastUpdate.onBroadcastFilterStatus(ctx);
         expect(ctx.session.flowState).toBe('awaiting_broadcast_message');
       });
     });
@@ -254,7 +254,7 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
         MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_FILTER_ACTIVE,
       );
       ctx.manager = undefined;
-      await broadcastUpdate.onBroadcastFilterActive(ctx);
+      await broadcastUpdate.onBroadcastFilterStatus(ctx);
       expect(ctx.answerCbQuery).toHaveBeenCalledWith(
         MASTERBOT_CONSTANTS.MESSAGES.AUTH_REQUIRED,
       );
@@ -282,8 +282,11 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
           name: 'Test Subscription',
           type: 'subscription_test',
           isActive: true,
+          isHidden: false,
           createdAt: new Date(),
           updatedAt: new Date(),
+          closedAt: null,
+          closedBy: null,
         });
         const ctx = createMockContext(
           `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${subscriptionId}`,
@@ -299,8 +302,11 @@ describe('BroadcastUpdate - Filter Selection Handlers', () => {
           name: 'Test Subscription',
           type: 'subscription_test',
           isActive: true,
+          isHidden: false,
           createdAt: new Date(),
           updatedAt: new Date(),
+          closedAt: null,
+          closedBy: null,
         });
         const ctx = createMockContext(
           `${MASTERBOT_CONSTANTS.CALLBACK_ACTIONS.BROADCAST_SUB_PREFIX}${subscriptionId}`,

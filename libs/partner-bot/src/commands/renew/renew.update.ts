@@ -38,7 +38,7 @@ export class RenewUpdate {
   constructor(
     private readonly paymentService: PaymentService,
     private readonly localizationService: LocalizationService,
-  ) {}
+  ) { }
 
   /**
    * Get localization context for the current request
@@ -66,7 +66,11 @@ export class RenewUpdate {
   async onRenew(@Ctx() ctx: PartnerBotContext): Promise<void> {
     if (!ctx.user) {
       const l10n = this.getL10n(ctx);
+      this.logger.error(
+        `User ${ctx.from?.id} is not authorized to renew subscription`,
+      );
       await ctx.reply(await l10n.t('renewal_error_userNotFound'));
+
       return;
     }
 

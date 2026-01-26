@@ -302,28 +302,6 @@ describe('Broadcast Filter Extension E2E Tests', () => {
       findActiveSubscriptions: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<SubscriptionsRepository>;
 
-    mockCodesRepository = {
-      findByCode: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockResolvedValue({ id: 1, code: 'TEST123' }),
-    } as jest.Mocked<{ findByCode: jest.Mock; create: jest.Mock }>;
-
-    mockSubscriptionManagementService = {
-      getActiveBroadcastSubscriptions: jest.fn().mockResolvedValue([]),
-      getSubscriptionById: jest.fn().mockResolvedValue({
-        id: TEST_SUBSCRIPTION_ID,
-        name: 'Test Subscription',
-        type: 'subscription_test',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }),
-      validateSubscriptionName: jest.fn().mockReturnValue(true),
-      createSubscription: jest
-        .fn()
-        .mockResolvedValue({ subscription: { id: 1 } }),
-      closeSubscription: jest.fn().mockResolvedValue(undefined),
-    } as unknown as jest.Mocked<SubscriptionManagementService>;
-
     mockBotsRepository = {
       findAllActive: jest.fn().mockResolvedValue(activeBots),
       findById: jest.fn().mockImplementation(async (id: number) => {
@@ -369,12 +347,20 @@ describe('Broadcast Filter Extension E2E Tests', () => {
       }),
     };
 
+    // Create mock BotUsersRepository for BroadcastService
+    const mockBotUsersRepository = {
+      findByBotId: jest.fn().mockResolvedValue([]),
+      findByBotIdWithoutSubscription: jest.fn().mockResolvedValue([]),
+    };
+
     // Create BroadcastService instance
     broadcastService = new BroadcastService(
       mockUserSubscriptionsRepository as never,
       mockSubscriptionsRepository as never,
       mockNotificationService as never,
       mockLLMService as never,
+      mockBotUsersRepository as never,
+      mockBotsRepository as never,
     );
 
     // Create mock for BroadcastService used by BroadcastUpdate
@@ -541,7 +527,7 @@ describe('Broadcast Filter Extension E2E Tests', () => {
         flowState: 'selecting_status_filter',
       },
     );
-    await broadcastUpdate.onBroadcastFilterExpired(selectExpiredCtx);
+    await broadcastUpdate.onBroadcastFilterStatus(selectExpiredCtx);
 
     // Verify: Session state updated, goes directly to message input (new flow)
     expect(selectExpiredCtx.session.broadcastFilterStatus).toBe('expired');
@@ -648,7 +634,7 @@ describe('Broadcast Filter Extension E2E Tests', () => {
         flowState: 'selecting_status_filter',
       },
     );
-    await broadcastUpdate.onBroadcastFilterExpired(selectExpiredCtx);
+    await broadcastUpdate.onBroadcastFilterStatus(selectExpiredCtx);
 
     // Verify: Session state updated, goes directly to message input (new flow)
     expect(selectExpiredCtx.session.broadcastFilterStatus).toBe('expired');
@@ -880,28 +866,6 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
       findActiveSubscriptions: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<SubscriptionsRepository>;
 
-    mockCodesRepository = {
-      findByCode: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockResolvedValue({ id: 1, code: 'TEST123' }),
-    } as jest.Mocked<{ findByCode: jest.Mock; create: jest.Mock }>;
-
-    mockSubscriptionManagementService = {
-      getActiveBroadcastSubscriptions: jest.fn().mockResolvedValue([]),
-      getSubscriptionById: jest.fn().mockResolvedValue({
-        id: TEST_SUBSCRIPTION_ID,
-        name: 'Test Subscription',
-        type: 'subscription_test',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }),
-      validateSubscriptionName: jest.fn().mockReturnValue(true),
-      createSubscription: jest
-        .fn()
-        .mockResolvedValue({ subscription: { id: 1 } }),
-      closeSubscription: jest.fn().mockResolvedValue(undefined),
-    } as unknown as jest.Mocked<SubscriptionManagementService>;
-
     mockBotsRepository = {
       findAllActive: jest.fn().mockResolvedValue(activeBots),
       findById: jest.fn().mockImplementation(async (id: number) => {
@@ -936,12 +900,20 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
       }),
     };
 
+    // Create mock BotUsersRepository for BroadcastService
+    const mockBotUsersRepository = {
+      findByBotId: jest.fn().mockResolvedValue([]),
+      findByBotIdWithoutSubscription: jest.fn().mockResolvedValue([]),
+    };
+
     // Create BroadcastService instance
     broadcastService = new BroadcastService(
       mockUserSubscriptionsRepository as never,
       mockSubscriptionsRepository as never,
       mockNotificationService as never,
       mockLLMService as never,
+      mockBotUsersRepository as never,
+      mockBotsRepository as never,
     );
 
     // Create mock for BroadcastService used by MasterbotUpdate
@@ -1089,7 +1061,7 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
         flowState: 'selecting_status_filter',
       },
     );
-    await broadcastUpdate.onBroadcastFilterActive(selectActiveCtx);
+    await broadcastUpdate.onBroadcastFilterStatus(selectActiveCtx);
 
     // Verify: Default filter status is 'active', goes directly to message input (new flow)
     expect(selectActiveCtx.session.broadcastFilterStatus).toBe('active');
@@ -1184,7 +1156,7 @@ describe('Broadcast Filter Extension - Backward Compatibility E2E Tests', () => 
         flowState: 'selecting_status_filter',
       },
     );
-    await broadcastUpdate.onBroadcastFilterExpired(selectExpiredCtx);
+    await broadcastUpdate.onBroadcastFilterStatus(selectExpiredCtx);
     expect(selectExpiredCtx.session.broadcastFilterStatus).toBe('expired');
 
     // Step 4: Manager confirms broadcast (no expired subscribers exist)

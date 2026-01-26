@@ -24,6 +24,8 @@ import { FeatureFlagService } from './services/feature-flag.service';
 import { InstrumentFilterService } from './services/instrument-filter.service';
 import { FilterSessionService } from './services/filter-session.service';
 import { PaymentService } from './services/payment.service';
+import { PromocodeService } from './services/promocode.service';
+import { DiscountSchedulerService } from './services/discount-scheduler.service';
 import { BotCommandsService } from './services/bot-commands.service';
 import { BotInitService } from './services/bot-init.service';
 import { DynamicBotConfigService } from './services/dynamic-bot-config.service';
@@ -74,6 +76,10 @@ import { RenewalAction } from './actions/renewal/renewal.action';
 
     // Payment services
     PaymentService,
+
+    // Promocode and discount services
+    PromocodeService,
+    DiscountSchedulerService,
 
     // Bot commands & init
     BotCommandsService,
@@ -126,6 +132,10 @@ import { RenewalAction } from './actions/renewal/renewal.action';
 
     // Payment services
     PaymentService,
+
+    // Promocode and discount services
+    PromocodeService,
+    DiscountSchedulerService,
 
     // Bot commands & init
     BotCommandsService,
