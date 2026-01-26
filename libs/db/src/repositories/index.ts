@@ -19,3 +19,9 @@ export * from './bots.repository';
 export * from './bot-settings.repository';
 export * from './bot-users.repository';
 export * from './bot-messages.repository';
+
+// Promocode discount system repositories
+export * from './promocodes.repository';
+export * from './promocode-activations.repository';
+export * from './user-discounts.repository';
+export * from './system-discount-rules.repository';

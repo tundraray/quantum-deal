@@ -12,6 +12,7 @@ import {
 import { PaymentState } from '@quantumdeal/db/schema';
 import { getRenewalMessage } from '../commands/renew/renewal.i18n';
 import { BotRegistryService } from '@quantumdeal/framework/webhook';
+import { PromocodeService, type DiscountInfo } from './promocode.service';
 
 /**
  * Renewal invoice payload structure
@@ -24,6 +25,8 @@ export interface RenewalInvoicePayload {
   userSubscriptionId: number;
   tariffId: number;
   timestamp: number;
+  /** Promocode ID if discount was applied */
+  promocodeId?: number;
 }
 
 /**
@@ -53,21 +56,26 @@ export class PaymentService {
     private readonly subscriptionsRepo: SubscriptionsRepository,
     private readonly botUsersRepo: BotUsersRepository,
     private readonly botsRepo: BotsRepository,
+    private readonly promocodeService: PromocodeService,
   ) {}
 
   /**
    * Create renewal invoice and send to user
    * Finds or creates user_subscription for the given subscription
    *
-   * @param userId - User's Telegram ID
+   * @param botUserId - Bot user ID (bot_users.id)
    * @param subscriptionId - Subscription ID to activate/renew
    * @param tariffId - Selected tariff
+   * @param discount - Optional discount to apply (from promocode)
+   * @param promocodeId - Optional promocode ID to activate on successful payment
    * @returns Transaction ID and invoice message ID
    */
   async createRenewalInvoice(
     botUserId: number,
     subscriptionId: number,
     tariffId: number,
+    discount?: DiscountInfo,
+    promocodeId?: number,
   ): Promise<{ transactionId: number; invoiceMessageId: number }> {
     // Get tariff details
     const tariff = await this.renewalTariffsRepo.findById(tariffId);
@@ -79,6 +87,18 @@ export class PaymentService {
     if (tariff.subscriptionId !== subscriptionId) {
       throw new BadRequestException(
         'Tariff does not belong to this subscription',
+      );
+    }
+
+    // Calculate final price with discount if provided
+    let finalPrice = tariff.priceStars;
+    if (discount) {
+      finalPrice = this.promocodeService.calculateDiscountedPrice(
+        tariff.priceStars,
+        discount,
+      );
+      this.logger.log(
+        `Applying discount to tariff ${tariffId}: ${tariff.priceStars} -> ${finalPrice} Stars`,
       );
     }
 
@@ -100,17 +120,17 @@ export class PaymentService {
       });
     }
 
-    // Create payment transaction
+    // Create payment transaction with final price
     const transaction = await this.paymentTransactionsRepo.create({
       botUserId,
       userSubscriptionId: userSubscription.id,
       tariffId,
-      amountStars: tariff.priceStars,
+      amountStars: finalPrice,
       periodDays: tariff.periodDays,
       state: PaymentState.PENDING,
     });
 
-    // Create invoice payload
+    // Create invoice payload (include promocodeId for activation on success)
     const payload: RenewalInvoicePayload = {
       type: 'renewal',
       version: 1,
@@ -118,6 +138,7 @@ export class PaymentService {
       userSubscriptionId: userSubscription.id,
       tariffId,
       timestamp: Date.now(),
+      promocodeId,
     };
 
     // Get subscription and user lang for invoice
@@ -127,13 +148,23 @@ export class PaymentService {
     if (!botUser) {
       throw new Error('Bot user not found');
     }
-    const bot = this.botRegistryService.getBot(botUser.botId);
-    // Send invoice to user
-    if (!bot) {
+
+    // Get bot instance - check if static or dynamic
+    const botRecord = await this.botsRepo.findById(botUser.botId);
+    if (!botRecord) {
       throw new Error('Bot not found');
     }
+
+    const botInstance = botRecord.isDynamic
+      ? this.botRegistryService.getBot(botUser.botId)?.instance
+      : this.bot;
+
+    if (!botInstance) {
+      throw new Error('Bot instance not found');
+    }
+
     try {
-      const invoiceMessage = await bot.instance.telegram.sendInvoice(
+      const invoiceMessage = await botInstance.telegram.sendInvoice(
         botUser.userId,
         {
           title: getRenewalMessage(
@@ -153,7 +184,7 @@ export class PaymentService {
           prices: [
             {
               label: tariff.displayName,
-              amount: tariff.priceStars,
+              amount: finalPrice, // Use discounted price if discount was applied
             },
           ],
         },
@@ -277,6 +308,7 @@ export class PaymentService {
   /**
    * Handle successful payment from Telegram
    * Extends subscription and updates transaction state
+   * Activates promocode if one was used
    *
    * @param payload - Invoice payload
    * @param telegramChargeId - Telegram payment charge ID
@@ -287,7 +319,7 @@ export class PaymentService {
     telegramChargeId: string,
     providerChargeId?: string,
   ): Promise<void> {
-    const { transactionId, userSubscriptionId } = payload;
+    const { transactionId, userSubscriptionId, promocodeId } = payload;
 
     this.logger.log(
       `Processing successful payment for transaction ${transactionId}`,
@@ -321,7 +353,32 @@ export class PaymentService {
         transaction.periodDays,
       );
 
-      // 4. Update payment state to COMPLETED
+      // 4. Activate promocode if one was used
+      if (promocodeId && transaction.botUserId) {
+        const userSubscription =
+          await this.userSubscriptionsRepo.findById(userSubscriptionId);
+        if (userSubscription) {
+          const activationResult =
+            await this.promocodeService.activatePromocode(
+              promocodeId,
+              transaction.botUserId,
+              userSubscription.subscriptionId,
+            );
+
+          if (activationResult.ok) {
+            this.logger.log(
+              `Promocode ${promocodeId} activated for bot user ${transaction.botUserId}`,
+            );
+          } else {
+            // Log but don't fail the payment - promocode activation is secondary
+            this.logger.warn(
+              `Failed to activate promocode ${promocodeId}: ${activationResult.error}`,
+            );
+          }
+        }
+      }
+
+      // 5. Update payment state to COMPLETED
       await this.paymentTransactionsRepo.updateState(
         transactionId,
         PaymentState.COMPLETED,
@@ -331,7 +388,7 @@ export class PaymentService {
       );
 
       this.logger.log(
-        `Payment ${transactionId} completed successfully. Subscription ${userSubscriptionId} extended.`,
+        `Payment ${transactionId} completed successfully. Subscription ${userSubscriptionId} extended.${promocodeId ? ` Promocode ${promocodeId} activated.` : ''}`,
       );
     } catch (error) {
       this.logger.error(`Failed to process payment ${transactionId}:`, error);

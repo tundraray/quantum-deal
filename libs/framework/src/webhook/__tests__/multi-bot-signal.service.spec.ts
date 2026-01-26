@@ -27,7 +27,7 @@ import {
 } from '@quantumdeal/db';
 import type { MergedOrder } from '@quantumdeal/db/schema';
 import { FeatureFlag } from '@quantumdeal/db/schema';
-import type { SignalCapableBot } from '../../interfaces/bot-registry.interface';
+import type { SignalCapableBot } from '../bot-registry.interface';
 import type { SubscriptionWithFeatures } from '@quantumdeal/db';
 import type Bottleneck from 'bottleneck';
 

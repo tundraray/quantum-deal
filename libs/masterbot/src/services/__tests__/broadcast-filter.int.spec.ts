@@ -205,12 +205,20 @@ describe('Broadcast Filter Extension Integration Tests', () => {
       }),
     };
 
+    // Mock BotUsersRepository for BroadcastService
+    const mockBotUsersRepository = {
+      findByBotId: jest.fn().mockResolvedValue([]),
+      findByBotIdWithoutSubscription: jest.fn().mockResolvedValue([]),
+    };
+
     // Create BroadcastService with mocked dependencies
     broadcastService = new BroadcastService(
       mockUserSubscriptionsRepository as never,
       mockSubscriptionsRepository as never,
       mockNotificationService as never,
       mockLLMService as never,
+      mockBotUsersRepository as never,
+      mockBotsRepository as never,
     );
   });
 

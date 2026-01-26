@@ -18,6 +18,10 @@ export * from './renewal-tariffs';
 export * from './payment-transactions';
 export * from './statistics';
 export * from './bot-messages';
+export * from './promocodes';
+export * from './promocode-activations';
+export * from './user-discounts';
+export * from './system-discount-rules';
 
 // Export all tables for use with drizzle queries
 export { bots } from './bots';
@@ -38,3 +42,7 @@ export { paymentTransactions } from './payment-transactions';
 export { monthlyBotStatistics } from './statistics';
 export { botUsers } from './bot-users';
 export { botMessages } from './bot-messages';
+export { promocodes } from './promocodes';
+export { promocodeActivations } from './promocode-activations';
+export { userDiscounts } from './user-discounts';
+export { systemDiscountRules } from './system-discount-rules';

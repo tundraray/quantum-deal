@@ -187,21 +187,32 @@ describe('Partner Bot Flow E2E Tests', () => {
       mockBotUsersRepository as any,
     );
 
+    // Create mock LocalizationService
+    const mockLocalizationService = {
+      forBot: jest.fn().mockReturnValue({
+        lang: jest.fn().mockReturnValue({
+          t: jest.fn().mockReturnValue('Test message'),
+        }),
+      }),
+    };
+
     const partnerFlowService = new PartnerFlowService(
-      mockBotMessagesRepository as any,
+      mockLocalizationService as any,
       mockBotSettingsRepository as any,
       mockBotUsersRepository as any,
       mockTrialService as any,
       mockBotCommandsService as any,
       channelVerifierService,
       mockDynamicTelegrafService as any,
+      mockUserSubscriptionsRepository as any,
     );
 
     const startCommandUpdate = new StartCommandUpdate(
-      mockBotMessagesRepository as any,
+      mockLocalizationService as any,
       partnerFlowService,
       mockBotUsersRepository as any,
       mockUserSubscriptionsRepository as any,
+      mockBotSettingsRepository as any,
     );
 
     const channelVerificationAction = new ChannelVerificationAction(
@@ -387,6 +398,9 @@ describe('Partner Bot Flow E2E Tests', () => {
       updateState: jest.fn(),
       resolveLanguage: jest.fn(),
     };
+    const mockUserSubscriptionsRepository = {
+      findActiveByBotUserId: jest.fn().mockResolvedValue([]),
+    };
     const mockTrialService = {
       activate: jest.fn(),
     };
@@ -471,14 +485,24 @@ describe('Partner Bot Flow E2E Tests', () => {
       mockBotUsersRepository as any,
     );
 
+    // Create mock LocalizationService
+    const mockLocalizationService = {
+      forBot: jest.fn().mockReturnValue({
+        lang: jest.fn().mockReturnValue({
+          t: jest.fn().mockReturnValue('Test message'),
+        }),
+      }),
+    };
+
     const partnerFlowService = new PartnerFlowService(
-      mockBotMessagesRepository as any,
+      mockLocalizationService as any,
       mockBotSettingsRepository as any,
       mockBotUsersRepository as any,
       mockTrialService as any,
       mockBotCommandsService as any,
       channelVerifierService,
       mockDynamicTelegrafService as any,
+      mockUserSubscriptionsRepository as any,
     );
 
     const channelVerificationAction = new ChannelVerificationAction(
@@ -664,6 +688,9 @@ describe('Partner Bot Flow E2E Tests', () => {
       updateState: jest.fn(),
       resolveLanguage: jest.fn(),
     };
+    const mockUserSubscriptionsRepository = {
+      findActiveByBotUserId: jest.fn().mockResolvedValue([]),
+    };
     const mockTrialService = {
       activate: jest.fn(),
     };
@@ -715,14 +742,24 @@ describe('Partner Bot Flow E2E Tests', () => {
       mockBotUsersRepository as any,
     );
 
+    // Create mock LocalizationService for PartnerFlowService
+    const mockLocalizationService = {
+      forBot: jest.fn().mockReturnValue({
+        lang: jest.fn().mockReturnValue({
+          t: jest.fn().mockReturnValue('Test message'),
+        }),
+      }),
+    };
+
     const partnerFlowService = new PartnerFlowService(
-      mockBotMessagesRepository as any,
+      mockLocalizationService as any,
       mockBotSettingsRepository as any,
       mockBotUsersRepository as any,
       mockTrialService as any,
       mockBotCommandsService as any,
       channelVerifierService,
       mockDynamicTelegrafService as any,
+      mockUserSubscriptionsRepository as any,
     );
 
     const channelVerificationAction = new ChannelVerificationAction(

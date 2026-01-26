@@ -263,12 +263,20 @@ describe('Broadcast Command Extraction E2E Tests', () => {
       }),
     };
 
+    // Create mock BotUsersRepository for BroadcastService
+    const mockBotUsersRepository = {
+      findByBotId: jest.fn().mockResolvedValue([]),
+      findByBotIdWithoutSubscription: jest.fn().mockResolvedValue([]),
+    };
+
     // Create BroadcastService instance
     broadcastService = new BroadcastService(
       mockUserSubscriptionsRepository as never,
       mockSubscriptionsRepository as never,
       mockNotificationService as never,
       mockLLMService as never,
+      mockBotUsersRepository as never,
+      mockBotsRepository as never,
     );
 
     // Create mock for BroadcastService used by BroadcastUpdate
@@ -434,7 +442,7 @@ describe('Broadcast Command Extraction E2E Tests', () => {
         flowState: 'selecting_status_filter',
       },
     );
-    await broadcastUpdate.onBroadcastFilterActive(selectActiveCtx);
+    await broadcastUpdate.onBroadcastFilterStatus(selectActiveCtx);
 
     // Verify: Goes directly to message input after status selection (new flow)
     expect(selectActiveCtx.session.broadcastFilterStatus).toBe('active');

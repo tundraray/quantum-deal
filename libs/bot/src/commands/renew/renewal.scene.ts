@@ -1,23 +1,63 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Scene, SceneEnter, Action, Ctx } from '@quantumdeal/telegraf';
+import { Scene, SceneEnter, Action, Ctx, On } from '@quantumdeal/telegraf';
 import { Markup, Context } from 'telegraf';
 import type { UserContext } from '../../interfaces';
 import { PaymentService } from '../../services/payment.service';
 import {
+  PromocodeService,
+  type DiscountInfo,
+} from '../../services/promocode.service';
+import {
   RenewalTariffsRepository,
   UserSubscriptionsRepository,
+  BotUsersRepository,
 } from '@quantumdeal/db';
-import { getRenewalMessage, formatDays } from './renewal.i18n';
+import {
+  getRenewalMessage,
+  formatDays,
+  getPromocodeErrorMessage,
+  type PromocodeErrorCode,
+} from './renewal.i18n';
 
 export const RENEWAL_SCENE_ID = 'renewal';
+
+/**
+ * Scene state interface for promocode flow
+ */
+interface RenewalSceneState {
+  awaitingPromocode?: boolean;
+  discount?: DiscountInfo | null;
+  validatedPromocodeId?: number;
+}
+
+/**
+ * Format discount for display
+ */
+function formatDiscount(discount: DiscountInfo): string {
+  if (discount.type === 'percentage') {
+    return `${discount.value}%`;
+  }
+  return `${discount.value} Stars`;
+}
+
+/**
+ * Create strikethrough text using Unicode combining characters
+ */
+function strikethrough(text: string): string {
+  return text
+    .split('')
+    .map((char) => char + '\u0336')
+    .join('');
+}
 
 /**
  * RenewalScene
  *
  * Handles subscription renewal UI flow:
  * 1. Show all available subscriptions with tariffs
- * 2. User selects tariff (can be for their current or new subscription)
- * 3. Create and send payment invoice
+ * 2. User can enter promocode for discount
+ * 3. User selects tariff (can be for their current or new subscription)
+ * 4. Create and send payment invoice with discount if applicable
  */
 @Scene(RENEWAL_SCENE_ID)
 @Injectable()
@@ -26,9 +66,23 @@ export class RenewalScene {
 
   constructor(
     private readonly paymentService: PaymentService,
+    private readonly promocodeService: PromocodeService,
     private readonly renewalTariffsRepo: RenewalTariffsRepository,
     private readonly userSubscriptionsRepo: UserSubscriptionsRepository,
+    private readonly botUsersRepo: BotUsersRepository,
   ) {}
+
+  /**
+   * Get scene state with type safety
+   */
+  private getSceneState(ctx: UserContext): RenewalSceneState {
+    // Access scene state through ctx.scene.state
+    const sceneCtx = ctx as unknown as { scene: { state: RenewalSceneState } };
+    if (!sceneCtx.scene.state) {
+      sceneCtx.scene.state = {};
+    }
+    return sceneCtx.scene.state;
+  }
 
   /**
    * Scene entry point
@@ -38,12 +92,32 @@ export class RenewalScene {
   async onSceneEnter(@Ctx() ctx: UserContext): Promise<void> {
     const botUserId = ctx.user?.botUserId;
     if (!botUserId) {
-      await ctx.reply('Ошибка: пользователь не найден');
+      await ctx.reply('Error: user not found');
       await ctx.scene.leave();
       return;
     }
 
     try {
+      // Check for existing user discount
+      const state = this.getSceneState(ctx);
+
+      // Get first subscription to check for discount
+      const allTariffs =
+        await this.renewalTariffsRepo.findAllWithSubscriptions();
+      if (allTariffs.length > 0) {
+        const subscriptionId = allTariffs[0].subscriptionId;
+        const existingDiscount =
+          await this.promocodeService.getUserActiveDiscount(
+            botUserId,
+            subscriptionId,
+          );
+
+        if (existingDiscount) {
+          state.discount =
+            this.promocodeService.userDiscountToDiscountInfo(existingDiscount);
+        }
+      }
+
       await this.showAllTariffs(ctx, botUserId);
     } catch (error) {
       this.logger.error('Error entering renewal scene:', error);
@@ -61,6 +135,7 @@ export class RenewalScene {
     botUserId: number,
   ): Promise<void> {
     const lang = ctx.user?.lang || 'en';
+    const state = this.getSceneState(ctx);
 
     // Get all active tariffs with subscription info
     const allTariffs = await this.renewalTariffsRepo.findAllWithSubscriptions();
@@ -86,6 +161,16 @@ export class RenewalScene {
     // Build message text with subscription status
     let messageText = getRenewalMessage(lang, 'selectTariffHeader') + '\n\n';
 
+    // Add discount info if available
+    if (state.discount) {
+      messageText +=
+        getRenewalMessage(
+          lang,
+          'activeDiscount',
+          formatDiscount(state.discount),
+        ) + '\n\n';
+    }
+
     // Add current subscriptions info
     if (userSubscriptions.length > 0) {
       messageText += getRenewalMessage(lang, 'yourSubscriptions') + '\n';
@@ -109,7 +194,7 @@ export class RenewalScene {
     }
 
     // Build tariff buttons grouped by subscription
-    const buttons: any[] = [];
+    const buttons: ReturnType<typeof Markup.button.callback>[][] = [];
 
     for (const [, tariffs] of subscriptionGroups) {
       const subscription = tariffs[0].subscription;
@@ -117,18 +202,30 @@ export class RenewalScene {
       // Add subscription header (just visual separator in text above)
       for (const tariff of tariffs) {
         let priceText = '';
+        const discount = state.discount;
 
-        if (tariff.discountPercent) {
-          // Calculate original price before discount
+        if (discount) {
+          // Apply user discount
+          const discountedPrice =
+            this.promocodeService.calculateDiscountedPrice(
+              tariff.priceStars,
+              discount,
+            );
+          const savings = tariff.priceStars - discountedPrice;
+
+          if (savings > 0) {
+            // Show strikethrough original price + discounted price
+            priceText = `${strikethrough(String(tariff.priceStars))} ${discountedPrice}⭐`;
+          } else {
+            priceText = `${tariff.priceStars}⭐`;
+          }
+        } else if (tariff.discountPercent) {
+          // Calculate original price before tariff-level discount (for display)
           const originalPrice = Math.round(
             tariff.priceStars / (1 - tariff.discountPercent / 100),
           );
           // Show strikethrough original price + discounted price
-          const strikethrough = String(originalPrice)
-            .split('')
-            .map((char) => char + '\u0336')
-            .join('');
-          priceText = `${strikethrough} ${tariff.priceStars}⭐ 🔥-${tariff.discountPercent}%`;
+          priceText = `${strikethrough(String(originalPrice))} ${tariff.priceStars}⭐ 🔥-${tariff.discountPercent}%`;
         } else {
           priceText = `${tariff.priceStars}⭐`;
         }
@@ -145,6 +242,14 @@ export class RenewalScene {
       }
     }
 
+    // Add promocode button
+    buttons.push([
+      Markup.button.callback(
+        getRenewalMessage(lang, 'enterPromocode'),
+        'renew_enter_promocode',
+      ),
+    ]);
+
     buttons.push([
       Markup.button.callback(getRenewalMessage(lang, 'cancel'), 'renew_cancel'),
     ]);
@@ -152,8 +257,14 @@ export class RenewalScene {
     const keyboard = Markup.inlineKeyboard(buttons);
 
     if (ctx.callbackQuery) {
-      await ctx.reply(messageText, keyboard);
-      await ctx.answerCbQuery();
+      try {
+        await ctx.editMessageText(messageText, keyboard);
+        await ctx.answerCbQuery();
+      } catch {
+        // Message not modified or deleted, send new one
+        await ctx.reply(messageText, keyboard);
+        await ctx.answerCbQuery();
+      }
     } else {
       await ctx.reply(messageText, keyboard);
     }
@@ -239,6 +350,130 @@ export class RenewalScene {
   }
 
   /**
+   * Handle promocode entry button click
+   */
+  @Action('renew_enter_promocode')
+  async onEnterPromocode(@Ctx() ctx: UserContext): Promise<void> {
+    const lang = ctx.user?.lang || 'en';
+    const state = this.getSceneState(ctx);
+
+    // Set state to await promocode input
+    state.awaitingPromocode = true;
+
+    const buttons = [
+      [
+        Markup.button.callback(
+          getRenewalMessage(lang, 'backToTariffs'),
+          'renew_back_to_tariffs',
+        ),
+      ],
+    ];
+
+    const keyboard = Markup.inlineKeyboard(buttons);
+
+    await ctx.editMessageText(
+      getRenewalMessage(lang, 'promocodePrompt'),
+      keyboard,
+    );
+    await ctx.answerCbQuery();
+  }
+
+  /**
+   * Handle back to tariffs button
+   */
+  @Action('renew_back_to_tariffs')
+  async onBackToTariffs(@Ctx() ctx: UserContext): Promise<void> {
+    const state = this.getSceneState(ctx);
+    state.awaitingPromocode = false;
+
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) {
+      await ctx.answerCbQuery('Error');
+      return;
+    }
+
+    await this.showAllTariffs(ctx, botUserId);
+  }
+
+  /**
+   * Handle text input for promocode
+   */
+  @On('text')
+  async onTextInput(@Ctx() ctx: UserContext): Promise<void> {
+    const state = this.getSceneState(ctx);
+
+    // Only process if we're awaiting promocode
+    if (!state.awaitingPromocode) {
+      return;
+    }
+
+    const botUserId = ctx.user?.botUserId;
+    if (!botUserId) {
+      return;
+    }
+
+    const lang = ctx.user?.lang || 'en';
+    const message = ctx.message;
+
+    if (!message || !('text' in message)) {
+      return;
+    }
+
+    const code = message.text.trim().toUpperCase();
+
+    // Get bot ID for the user
+    const botUser = await this.botUsersRepo.findById(botUserId);
+    const botId = botUser?.botId ?? null;
+
+    // Validate promocode
+    const validationResult = await this.promocodeService.validatePromocode(
+      code,
+      botUserId,
+      botId,
+    );
+
+    if (!validationResult.ok) {
+      // Show error and prompt to try again
+      const errorMessage = getPromocodeErrorMessage(
+        lang,
+        validationResult.error as PromocodeErrorCode,
+      );
+
+      const buttons = [
+        [
+          Markup.button.callback(
+            getRenewalMessage(lang, 'backToTariffs'),
+            'renew_back_to_tariffs',
+          ),
+        ],
+      ];
+
+      await ctx.reply(
+        `${errorMessage}\n\n${getRenewalMessage(lang, 'promocodePrompt')}`,
+        Markup.inlineKeyboard(buttons),
+      );
+      return;
+    }
+
+    // Promocode valid - store discount info
+    const promocode = validationResult.promocode!;
+    state.discount = this.promocodeService.promocodeToDiscountInfo(promocode);
+    state.validatedPromocodeId = promocode.id;
+    state.awaitingPromocode = false;
+
+    // Show success message and return to tariffs
+    await ctx.reply(
+      getRenewalMessage(
+        lang,
+        'promocodeSuccess',
+        formatDiscount(state.discount),
+      ),
+    );
+
+    await this.showAllTariffs(ctx, botUserId);
+  }
+
+  /**
    * Handle subscription selection (when user has multiple subscriptions)
    */
   @Action(/^renew_select_sub:(.+)$/)
@@ -251,7 +486,7 @@ export class RenewalScene {
     }
 
     const lang = ctx.user?.lang || 'en';
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
     const userSubscriptionId = parseInt(match[1]);
 
     // Get subscription details
@@ -284,17 +519,19 @@ export class RenewalScene {
     }
 
     const lang = ctx.user?.lang || 'en';
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
     const botUserId = parseInt(match[1]);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
     const subscriptionId = parseInt(match[2]);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
     const tariffId = parseInt(match[3]);
 
-    if (!ctx.from?.id || ctx.from.id !== botUserId) {
+    if (!ctx.user?.botUserId || ctx.user.botUserId !== botUserId) {
       await ctx.answerCbQuery(getRenewalMessage(lang, 'userNotFound'));
       return;
     }
+
+    const state = this.getSceneState(ctx);
 
     try {
       // Delete tariff selection message
@@ -303,16 +540,18 @@ export class RenewalScene {
       // Show processing indicator
       await ctx.answerCbQuery(getRenewalMessage(lang, 'creatingInvoice'));
 
-      // Create invoice
+      // Create invoice with discount if available
       const { transactionId, invoiceMessageId } =
         await this.paymentService.createRenewalInvoice(
           botUserId,
           subscriptionId,
           tariffId,
+          state.discount ?? undefined,
+          state.validatedPromocodeId,
         );
 
       this.logger.log(
-        `Created renewal invoice for bot user ${botUserId}, subscription ${subscriptionId}, transaction ${transactionId}, message ${invoiceMessageId}`,
+        `Created renewal invoice for bot user ${botUserId}, subscription ${subscriptionId}, transaction ${transactionId}, message ${invoiceMessageId}${state.discount ? ', with discount' : ''}`,
       );
 
       // Invoice is automatically sent by Telegram

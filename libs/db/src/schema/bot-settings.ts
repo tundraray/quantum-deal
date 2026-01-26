@@ -33,6 +33,16 @@ export const DEFAULT_LANGS: LangOption[] = [
  * Defines the JSONB structure for per-bot feature configuration.
  * Enables flexible feature flags without schema migrations.
  */
+/**
+ * UI Settings Interface
+ *
+ * Optional UI customization settings for bots.
+ */
+export interface UiSettings {
+  welcomeImage?: string;
+  brandColor?: string;
+}
+
 export interface BotSettings {
   features: {
     trialEnabled: boolean;
@@ -47,6 +57,8 @@ export interface BotSettings {
   };
   /** Per-bot language options. Falls back to DEFAULT_LANGS if not set. */
   langs?: LangOption[];
+  /** Optional UI customization settings. */
+  ui?: UiSettings;
 }
 
 /**

@@ -3,7 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { BaseRepository } from './base.repository';
 import { DRIZZLE_CLIENT, type DrizzleClient } from '../database.provider';
 import { botMessages, BotMessage, NewBotMessage } from '../schema/bot-messages';
-import { Message, messages, MessageType } from '../schema/messages';
+import { Message, messages } from '../schema/messages';
 
 /**
  * BotMessagesRepository
@@ -77,10 +77,7 @@ export class BotMessagesRepository extends BaseRepository<
    * Find messages by type and language
    * Returns a random message template for the specified type and language
    */
-  async findByTypeAndLang(
-    type: MessageType,
-    lang: string,
-  ): Promise<Message | null> {
+  async findByTypeAndLang(type: string, lang: string): Promise<Message | null> {
     const messagesForType = await this.db
       .select()
       .from(messages)
@@ -111,7 +108,7 @@ export class BotMessagesRepository extends BaseRepository<
    */
   async resolveMessage(
     botId: number | null,
-    type: MessageType,
+    type: string,
     lang: string,
   ): Promise<string> {
     // Step 1: Check bot-specific override
@@ -160,7 +157,7 @@ export class BotMessagesRepository extends BaseRepository<
    */
   async upsert(
     botId: number,
-    type: MessageType,
+    type: string,
     lang: string,
     message: string,
   ): Promise<BotMessage> {

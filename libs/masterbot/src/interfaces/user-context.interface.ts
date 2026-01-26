@@ -1,5 +1,5 @@
 import { Context } from '@quantumdeal/framework';
-import { Manager } from '@quantumdeal/db';
+import { Manager, PromocodeType, DiscountType } from '@quantumdeal/db';
 import type { Message } from 'telegraf/types';
 
 /**
@@ -36,6 +36,14 @@ export interface UserContext extends Context {
       | 'selecting_status_filter'
       | 'selecting_bot_filter'
       | 'selecting_subscriptions'
+      // Promocode flow states
+      | 'promocode_selecting_type'
+      | 'promocode_selecting_discount_type'
+      | 'promocode_awaiting_discount_value'
+      | 'promocode_selecting_scope'
+      | 'promocode_awaiting_code'
+      | 'promocode_awaiting_max_activations'
+      | 'promocode_confirming_create'
       | null;
 
     /**
@@ -85,5 +93,47 @@ export interface UserContext extends Context {
      * null = all bots (default behavior)
      */
     broadcastFilterBotId?: number | null;
+
+    // ==================== Promocode Creation Flow Fields ====================
+
+    /**
+     * Promocode type being created
+     * 'single_use' = deactivated after first use
+     * 'multi_use' = one use per user, unlimited users
+     */
+    promocodeType?: PromocodeType | null;
+
+    /**
+     * Discount type for the promocode
+     * 'percentage' = discount as percentage (1-100)
+     * 'fixed' = fixed Stars amount to subtract
+     */
+    promocodeDiscountType?: DiscountType | null;
+
+    /**
+     * Discount value
+     * For percentage: 1-100 (e.g., 20 = 20% off)
+     * For fixed: positive integer (e.g., 50 = -50 Stars)
+     */
+    promocodeDiscountValue?: number | null;
+
+    /**
+     * Bot scope for the promocode
+     * null = global (works across all bots)
+     * number = bot-specific (works only in that bot)
+     */
+    promocodeBotId?: number | null;
+
+    /**
+     * Optional custom code string
+     * If null, code will be auto-generated
+     */
+    promocodeCode?: string | null;
+
+    /**
+     * Optional maximum activations
+     * null = unlimited
+     */
+    promocodeMaxActivations?: number | null;
   };
 }
