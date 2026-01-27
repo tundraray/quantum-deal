@@ -41,7 +41,7 @@ export class RenewalScene {
     private readonly renewalTariffsRepo: RenewalTariffsRepository,
     private readonly userSubscriptionsRepo: UserSubscriptionsRepository,
     private readonly localizationService: LocalizationService,
-  ) { }
+  ) {}
 
   /**
    * Get localization context for the current request
@@ -129,8 +129,8 @@ export class RenewalScene {
           const status = userSub.isActive ? '✅' : '❌';
           const expiryText = userSub.expiresAt
             ? new Date(userSub.expiresAt).toLocaleDateString(
-              lang === 'ru' ? 'ru-RU' : 'en-US',
-            )
+                lang === 'ru' ? 'ru-RU' : 'en-US',
+              )
             : await l10n.t('renewal_text_noExpiry');
           const untilText = await l10n.t('renewal_text_until');
           messageText += `${status} ${subscription.name} - ${untilText} ${expiryText}\n`;
@@ -251,10 +251,10 @@ export class RenewalScene {
     const currentExpiryText = isExpired
       ? await l10n.t('renewal_text_subscriptionExpired')
       : await l10n.t('renewal_text_currentExpiry', {
-        date: currentExpiry.toLocaleDateString(
-          lang === 'ru' ? 'ru-RU' : 'en-US',
-        ),
-      });
+          date: currentExpiry.toLocaleDateString(
+            lang === 'ru' ? 'ru-RU' : 'en-US',
+          ),
+        });
 
     const renewalTitle = await l10n.t('renewal_text_renewalTitle', {
       subscriptionName,

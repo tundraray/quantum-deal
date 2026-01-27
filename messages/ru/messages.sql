@@ -248,4 +248,19 @@ Stop Loss: {old_stop_loss} → {stop_loss}
 💹 Результат: {vip_net_result} USD
 ✅ Плюсовых: {vip_positive_trades}
 ❌ Минусовых: {vip_negative_trades}
-Хочешь так же? Отключай фильтрацию в /filter.', 'weekly_report_3');
+Хочешь так же? Отключай фильтрацию в /filter.', 'weekly_report_3'),
+	('ru', '📊 *Пакет торговых сигналов*
+
+Вы получили {count} сигналов:
+
+{{#each signals}}
+{emoji} *Сигнал №{index}*
+📈 Символ: {symbol}
+📍 Событие: {eventType}
+💰 Прибыль: {profit}
+📅 Время: {time}
+---
+{{/each}}
+
+Всего сигналов: {count}
+Бот: {botName}', 'batch_signals');

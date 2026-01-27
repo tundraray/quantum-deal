@@ -28,6 +28,7 @@ import {
 import type { MergedOrder } from '@quantumdeal/db/schema';
 import { FeatureFlag } from '@quantumdeal/db/schema';
 import type { SignalCapableBot } from '../bot-registry.interface';
+import { SignalBatchingService, BatchMessageFormatter } from '../batching';
 import type { SubscriptionWithFeatures } from '@quantumdeal/db';
 import type Bottleneck from 'bottleneck';
 
@@ -86,6 +87,23 @@ describe('SignalService', () => {
         ),
     } as unknown as Bottleneck,
     type: 'dynamic',
+    // Default to batching disabled to maintain backward compatibility with existing tests
+    // Tests that want to test batching behavior should override this
+    settings: {
+      features: {
+        trialEnabled: true,
+        paymentsEnabled: true,
+        signalsEnabled: true,
+        broadcastEnabled: false,
+        partnerFlowEnabled: false,
+        batching: { enabled: false }, // Disable batching by default for unit tests
+      },
+      defaults: {
+        subscriptionDays: 30,
+        trialDays: 7,
+        language: 'en',
+      },
+    } as SignalCapableBot['settings'],
     ...overrides,
   });
 
@@ -96,6 +114,7 @@ describe('SignalService', () => {
     subscriptionName: 'VIP',
     subscriptionIsActive: true,
     hasCustomFiltering: false,
+    filterSettings: null,
     botUserId: 1,
     botId: 1,
     userTelegramId: '123456',
@@ -146,6 +165,24 @@ describe('SignalService', () => {
       getBotUserFeatureSettings: jest.fn().mockResolvedValue(null),
     };
 
+    // Mock SignalBatchingService for batching integration
+    const mockSignalBatchingService = {
+      setFlushCallback: jest.fn(),
+      bufferSignalForUser: jest.fn(),
+      getPendingBatchesForBot: jest.fn().mockReturnValue([]),
+      getBatchStats: jest.fn().mockReturnValue({
+        pendingBatches: 0,
+        pendingSignals: 0,
+        activeTimers: 0,
+      }),
+      onModuleDestroy: jest.fn(),
+    };
+
+    // Mock BatchMessageFormatter for batching integration
+    const mockBatchMessageFormatter = {
+      formatForDelivery: jest.fn().mockResolvedValue(['Formatted message']),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SignalService,
@@ -160,6 +197,14 @@ describe('SignalService', () => {
         {
           provide: UserSubscriptionFeaturesRepository,
           useValue: mockUserSubscriptionFeaturesRepository,
+        },
+        {
+          provide: SignalBatchingService,
+          useValue: mockSignalBatchingService,
+        },
+        {
+          provide: BatchMessageFormatter,
+          useValue: mockBatchMessageFormatter,
         },
       ],
     }).compile();

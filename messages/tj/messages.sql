@@ -247,4 +247,19 @@ SL: {old_stop_loss} → {stop_loss}
 💹 Натиҷа: {vip_net_result} USD
 ✅ Бо фоида: {vip_positive_trades}
 ❌ Бо зиён: {vip_negative_trades}
-Ҳамчун ҳамин мехоҳед? Филтркуниро дар /filter хомӯш кунед.', 'weekly_report_3');
+Ҳамчун ҳамин мехоҳед? Филтркуниро дар /filter хомӯш кунед.', 'weekly_report_3'),
+	('tj', '📊 *Маҷмӯи сигналҳои савдо*
+
+Шумо {count} сигнал гирифтед:
+
+{{#each signals}}
+{emoji} *Сигнал №{index}*
+📈 Рамз: {symbol}
+📍 Ҳодиса: {eventType}
+💰 Фоида: {profit}
+📅 Вақт: {time}
+---
+{{/each}}
+
+Ҳамаи сигналҳо: {count}
+Бот: {botName}', 'batch_signals');

@@ -247,4 +247,19 @@ Want this level? Go VIP.', 'weekly_report_2'),
 💹 परिणाम: {vip_net_result} USD
 ✅ फायदे: {vip_positive_trades}
 ❌ नुकसान: {vip_negative_trades}
-ऐसा ही चाहते हैं? /filter में फ़िल्टरिंग बंद करें.', 'weekly_report_3');
+ऐसा ही चाहते हैं? /filter में फ़िल्टरिंग बंद करें.', 'weekly_report_3'),
+	('hi', '📊 *ट्रेडिंग सिग्नल बैच*
+
+आपको {count} सिग्नल प्राप्त हुए:
+
+{{#each signals}}
+{emoji} *सिग्नल #{index}*
+📈 प्रतीक: {symbol}
+📍 घटना: {eventType}
+💰 लाभ: {profit}
+📅 समय: {time}
+---
+{{/each}}
+
+कुल सिग्नल: {count}
+बॉट: {botName}', 'batch_signals');

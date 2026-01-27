@@ -363,4 +363,19 @@ Want the same? Turn off filtering in /filter.', 'weekly_report_3'),
 💹 Result: **{vip_net_result} USD**
 ✅ Wins: {vip_positive_trades}
 ❌ Losses: {vip_negative_trades}
-Want the same? Turn off filtering in /filter.', 'weekly_report_3');
+Want the same? Turn off filtering in /filter.', 'weekly_report_3'),
+	('en', '📊 *Trading Signals Batch*
+
+You received {count} signals:
+
+{{#each signals}}
+{emoji} *Signal #{index}*
+📈 Symbol: {symbol}
+📍 Event: {eventType}
+💰 Profit: {profit}
+📅 Time: {time}
+---
+{{/each}}
+
+Total signals: {count}
+Bot: {botName}', 'batch_signals');

@@ -363,5 +363,19 @@ Gusto ng pareho? I-off ang filtering sa /filter.', 'weekly_report_3'),
 💹 Resulta: **{vip_net_result} USD**
 ✅ Panalo: {vip_positive_trades}
 ❌ Talo: {vip_negative_trades}
-Gusto ng pareho? I-off ang filtering sa /filter.', 'weekly_report_3');
+Gusto ng pareho? I-off ang filtering sa /filter.', 'weekly_report_3'),
+	('tl', '📊 *Trading Signals Batch*
 
+Nakatanggap ka ng {count} signals:
+
+{{#each signals}}
+{emoji} *Signal #{index}*
+📈 Simbolo: {symbol}
+📍 Pangyayari: {eventType}
+💰 Kita: {profit}
+📅 Oras: {time}
+---
+{{/each}}
+
+Kabuuang signals: {count}
+Bot: {botName}', 'batch_signals');

@@ -1,11 +1,21 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { ResponseTimeInterceptor } from './interceptors/response-time.interceptor';
 import { LLMService, LLMConfigurationService } from './llm';
 import { ConfigModule } from '@nestjs/config';
 import { DbModule } from '@quantumdeal/db';
-import { BotRegistryService, SignalService } from './webhook';
+import {
+  BotRegistryService,
+  BatchMessageFormatter,
+  SignalBatchingService,
+  SignalService,
+  TemplateEngine,
+} from './webhook';
 import { NotificationService } from './notifications';
-import { LocalizationModule } from './localization';
+import { LocalizationModule, LocalizationService } from './localization';
+import {
+  signalsMessages,
+  SIGNALS_I18N_NAMESPACE,
+} from './webhook/signals.i18n';
 
 @Module({
   imports: [ConfigModule, DbModule, LocalizationModule],
@@ -15,6 +25,9 @@ import { LocalizationModule } from './localization';
     LLMService,
     NotificationService,
     BotRegistryService,
+    BatchMessageFormatter,
+    TemplateEngine,
+    SignalBatchingService,
     SignalService,
   ],
   exports: [
@@ -22,8 +35,20 @@ import { LocalizationModule } from './localization';
     LLMService,
     LLMConfigurationService,
     BotRegistryService,
+    BatchMessageFormatter,
+    TemplateEngine,
+    SignalBatchingService,
     SignalService,
     LocalizationModule,
   ],
 })
-export class FrameworkModule {}
+export class FrameworkModule implements OnModuleInit {
+  constructor(private readonly localizationService: LocalizationService) {}
+
+  onModuleInit(): void {
+    this.localizationService.registerI18n(
+      SIGNALS_I18N_NAMESPACE,
+      signalsMessages,
+    );
+  }
+}

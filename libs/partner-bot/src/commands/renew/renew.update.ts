@@ -38,7 +38,7 @@ export class RenewUpdate {
   constructor(
     private readonly paymentService: PaymentService,
     private readonly localizationService: LocalizationService,
-  ) { }
+  ) {}
 
   /**
    * Get localization context for the current request
