@@ -30,6 +30,20 @@ export interface DynamicBotConfig {
 }
 
 /**
+ * Signal Batching Configuration
+ *
+ * Per-bot settings for signal batching feature (ADR-011).
+ * Stored in BotSettings.features.batching JSONB field.
+ */
+export interface BatchingConfig {
+  /** Whether batching is enabled for this bot. Default: true (opt-out) */
+  enabled: boolean;
+  /** Batch window duration in milliseconds. Default: 5000 (5 seconds). Range: 30000-60000 */
+  windowMs: number;
+  /** Maximum signals per batch before forced flush. Default: 10 */
+  maxBatchSize?: number;
+}
+/**
  * Bot settings structure for feature flags and defaults.
  *
  * Enables per-bot configuration without schema changes.
@@ -48,6 +62,8 @@ export interface BotSettings {
     broadcastEnabled: boolean;
 
     partnerFlowEnabled: boolean;
+
+    batching?: BatchingConfig;
   };
   /** Default values for bot operations */
   defaults: {

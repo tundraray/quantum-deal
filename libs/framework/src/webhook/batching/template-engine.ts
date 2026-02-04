@@ -137,7 +137,7 @@ export class TemplateEngine {
       return signals
         .map((signal) => {
           // First process conditional blocks for this signal's event type
-          let processedBlock = this.processConditionalBlocks(
+          const processedBlock = this.processConditionalBlocks(
             blockContent,
             signal.event_type,
           );

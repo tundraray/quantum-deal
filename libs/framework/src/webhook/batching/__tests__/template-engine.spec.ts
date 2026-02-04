@@ -21,6 +21,7 @@ describe('TemplateEngine', () => {
         signals: [
           {
             index: 1,
+            event_type: 'open',
             emoji: '',
             type: '',
             symbol: 'EURUSD',
@@ -31,6 +32,7 @@ describe('TemplateEngine', () => {
           },
           {
             index: 2,
+            event_type: 'open',
             emoji: '',
             type: '',
             symbol: 'GBPUSD',
@@ -68,6 +70,7 @@ describe('TemplateEngine', () => {
         signals: [
           {
             index: 1,
+            event_type: 'open',
             emoji: '',
             type: 'OPEN',
             symbol: 'EURUSD',
@@ -78,6 +81,7 @@ describe('TemplateEngine', () => {
           },
           {
             index: 2,
+            event_type: 'close_plus',
             emoji: '',
             type: 'CLOSE +',
             symbol: 'GBPUSD',
@@ -104,6 +108,7 @@ describe('TemplateEngine', () => {
         signals: [
           {
             index: 1,
+            event_type: 'open',
             emoji: '🟡',
             type: 'OPEN',
             symbol: '**`EURUSD`**',
@@ -158,6 +163,7 @@ describe('TemplateEngine', () => {
         signals: [
           {
             index: 1,
+            event_type: 'open',
             emoji: '',
             type: '',
             symbol: 'EURUSD',
@@ -168,6 +174,7 @@ describe('TemplateEngine', () => {
           },
           {
             index: 2,
+            event_type: 'open',
             emoji: '',
             type: '',
             symbol: 'GBPUSD',
@@ -210,6 +217,7 @@ describe('TemplateEngine', () => {
         signals: [
           {
             index: 1,
+            event_type: 'open',
             emoji: '',
             type: '',
             symbol: 'EURUSD',
@@ -263,6 +271,7 @@ describe('TemplateEngine', () => {
         signals: [
           {
             index: 1,
+            event_type: 'close_plus',
             emoji: '',
             type: '',
             symbol: 'EURUSD',
@@ -274,6 +283,7 @@ describe('TemplateEngine', () => {
           },
           {
             index: 2,
+            event_type: 'open',
             emoji: '',
             type: '',
             symbol: 'GBPUSD',
@@ -306,6 +316,7 @@ describe('TemplateEngine', () => {
         signals: [
           {
             index: 1,
+            event_type: 'open',
             emoji: '🟡',
             type: 'OPEN',
             symbol: 'EURUSD',
@@ -316,6 +327,7 @@ describe('TemplateEngine', () => {
           },
           {
             index: 2,
+            event_type: 'close_plus',
             emoji: '🟢',
             type: 'CLOSE +',
             symbol: 'GBPUSD',
@@ -353,6 +365,7 @@ describe('TemplateEngine', () => {
         signals: [
           {
             index: 1,
+            event_type: 'open',
             emoji: '🟡',
             type: 'OPEN',
             symbol: '**`EURUSD.a`**',
@@ -363,6 +376,7 @@ describe('TemplateEngine', () => {
           },
           {
             index: 2,
+            event_type: 'close_plus',
             emoji: '🟢',
             type: 'CLOSE +',
             symbol: '**`BTCUSD.a`**',
@@ -373,6 +387,7 @@ describe('TemplateEngine', () => {
           },
           {
             index: 3,
+            event_type: 'close_minus',
             emoji: '🔴',
             type: 'CLOSE -',
             symbol: '**`GBPUSD.a`**',

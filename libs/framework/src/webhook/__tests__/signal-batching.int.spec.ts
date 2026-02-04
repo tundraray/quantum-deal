@@ -319,6 +319,7 @@ Timestamp: {timestamp}`;
       signals: [
         {
           index: 1,
+          event_type: 'open',
           emoji: '\uD83D\uDFE2',
           type: 'OPEN',
           symbol: 'EURUSD',
@@ -330,6 +331,7 @@ Timestamp: {timestamp}`;
         },
         {
           index: 2,
+          event_type: 'close_plus',
           emoji: '\uD83D\uDD35',
           type: 'CLOSE +',
           symbol: 'GBPUSD',
@@ -365,6 +367,7 @@ Known: {symbol}, Unknown: {unknown_field}
       signals: [
         {
           index: 1,
+          event_type: 'open',
           emoji: '\uD83D\uDFE2',
           type: 'OPEN',
           symbol: 'EURUSD',
@@ -393,6 +396,7 @@ Known: {symbol}, Unknown: {unknown_field}
     const signals: SignalTemplateData[] = [
       {
         index: 1,
+        event_type: 'open',
         emoji: '\uD83D\uDFE2', // Green circle for OPEN
         type: 'OPEN',
         symbol: '`EURUSD`',
@@ -404,6 +408,7 @@ Known: {symbol}, Unknown: {unknown_field}
       },
       {
         index: 2,
+        event_type: 'close_plus',
         emoji: '\uD83D\uDD35', // Blue circle for CLOSE +
         type: 'CLOSE +',
         symbol: '`GBPUSD`',
@@ -415,6 +420,7 @@ Known: {symbol}, Unknown: {unknown_field}
       },
       {
         index: 3,
+        event_type: 'close_minus',
         emoji: '\uD83D\uDD34', // Red circle for CLOSE -
         type: 'CLOSE -',
         symbol: '`USDJPY`',

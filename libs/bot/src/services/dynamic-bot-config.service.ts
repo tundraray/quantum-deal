@@ -3,6 +3,7 @@ import type {
   BotConfigurationProvider,
   DynamicBotConfig,
   BotSettings,
+  BatchingConfig,
 } from '@quantumdeal/telegraf';
 import { BotsRepository, type BotWithSettings } from '@quantumdeal/db';
 
@@ -113,6 +114,9 @@ export class DynamicBotConfigService implements BotConfigurationProvider {
         partnerFlowEnabled: Boolean(
           (settings.features as Record<string, unknown>).partnerFlowEnabled,
         ),
+        batching: (settings.features as Record<string, unknown>).batching as
+          | BatchingConfig
+          | undefined,
       },
       defaults: {
         subscriptionDays: Number(
