@@ -61,7 +61,7 @@ export class SignalService implements MultiBotSignal, OnModuleInit {
     private readonly userSubscriptionFeaturesRepository: UserSubscriptionFeaturesRepository,
     private readonly signalBatchingService: SignalBatchingService,
     private readonly batchMessageFormatter: BatchMessageFormatter,
-  ) {}
+  ) { }
 
   /**
    * NestJS lifecycle hook: Set up flush callback for batching service.
@@ -106,8 +106,8 @@ export class SignalService implements MultiBotSignal, OnModuleInit {
 
       this.logger.log(
         `Multi-bot notification complete: ${broadcastResult.totalSent} sent, ` +
-          `${broadcastResult.totalFailed} failed across ${broadcastResult.botsProcessed} bots ` +
-          `[${broadcastResult.totalDurationMs}ms]`,
+        `${broadcastResult.totalFailed} failed across ${broadcastResult.botsProcessed} bots ` +
+        `[${broadcastResult.totalDurationMs}ms]`,
       );
 
       // Convert BroadcastResult to NotificationResult for backward compatibility
@@ -209,7 +209,7 @@ export class SignalService implements MultiBotSignal, OnModuleInit {
 
     this.logger.log(
       `Broadcast complete: ${result.totalSent} sent, ${result.totalFailed} failed, ` +
-        `${result.botsProcessed}/${bots.length} bots [${result.totalDurationMs}ms]`,
+      `${result.botsProcessed}/${bots.length} bots [${result.totalDurationMs}ms]`,
     );
 
     return result;
@@ -355,10 +355,12 @@ export class SignalService implements MultiBotSignal, OnModuleInit {
             order,
             eventType,
             {
-              enabled: true,
+              enabled: batchingConfig?.enabled ?? false,
               windowMs:
                 batchingConfig?.windowMs ?? DEFAULT_BATCHING_CONFIG.windowMs,
-              maxBatchSize: DEFAULT_BATCHING_CONFIG.maxBatchSize,
+              maxBatchSize:
+                batchingConfig?.maxBatchSize ??
+                DEFAULT_BATCHING_CONFIG.maxBatchSize,
             },
           );
           bufferedCount++;
@@ -431,9 +433,9 @@ export class SignalService implements MultiBotSignal, OnModuleInit {
           const trialStatusButton = referralUrl
             ? Markup.button.url(extendTrialButtonText, referralUrl)
             : Markup.button.callback(
-                extendTrialButtonText,
-                'partner_extend_trial',
-              );
+              extendTrialButtonText,
+              'partner_extend_trial',
+            );
           buttons.push([trialStatusButton]);
         }
 
