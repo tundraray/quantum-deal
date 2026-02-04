@@ -1,5 +1,6 @@
 import { pgTable, bigint, jsonb, timestamp } from 'drizzle-orm/pg-core';
 import { bots } from './bots';
+import { BatchingConfig } from '@quantumdeal/telegraf';
 
 /**
  * Language Option Interface
@@ -49,6 +50,8 @@ export interface BotSettings {
     paymentsEnabled: boolean;
     signalsEnabled: boolean;
     broadcastEnabled: boolean;
+    /** Signal batching configuration. Default: enabled with 5s window */
+    batching?: BatchingConfig;
   };
   defaults: {
     subscriptionDays: number;
@@ -84,6 +87,10 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
     paymentsEnabled: true,
     signalsEnabled: true,
     broadcastEnabled: false,
+    batching: {
+      enabled: false,
+      windowMs: 60000,
+    },
   },
   defaults: {
     subscriptionDays: 30,

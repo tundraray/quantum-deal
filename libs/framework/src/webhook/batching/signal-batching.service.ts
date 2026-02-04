@@ -151,19 +151,46 @@ export class SignalBatchingService implements OnModuleDestroy {
   }
 
   /**
+   * Minimum batch window in milliseconds (30 seconds).
+   * Prevents excessive timer overhead.
+   */
+  private static readonly MIN_WINDOW_MS = 30000;
+
+  /**
+   * Maximum batch window in milliseconds (60 seconds).
+   * Prevents user experience degradation from long delays.
+   */
+  private static readonly MAX_WINDOW_MS = 120000;
+
+  /**
    * Start timer for a bot.
    * Per FR-003: Independent timer per bot for fault isolation.
+   * Per FR-002-c: Validates windowMs range (30000-60000ms).
    *
    * @param botId - Bot database ID
    * @param windowMs - Batch window in milliseconds
    */
   private startBotTimer(botId: number, windowMs: number): void {
+    // Validate windowMs range per FR-002-c
+    const validatedWindowMs = Math.max(
+      SignalBatchingService.MIN_WINDOW_MS,
+      Math.min(SignalBatchingService.MAX_WINDOW_MS, windowMs),
+    );
+
+    if (validatedWindowMs !== windowMs) {
+      this.logger.warn(
+        `windowMs ${windowMs} out of range [${SignalBatchingService.MIN_WINDOW_MS}-${SignalBatchingService.MAX_WINDOW_MS}], using ${validatedWindowMs}`,
+      );
+    }
+
     const timer = setTimeout(() => {
       this.handleTimerExpiry(botId);
-    }, windowMs);
+    }, validatedWindowMs);
 
     this.botTimers.set(botId, timer);
-    this.logger.debug(`Started batch timer for bot ${botId} (${windowMs}ms)`);
+    this.logger.debug(
+      `Started batch timer for bot ${botId} (${validatedWindowMs}ms)`,
+    );
   }
 
   /**

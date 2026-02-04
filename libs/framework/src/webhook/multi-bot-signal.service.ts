@@ -27,6 +27,7 @@ import {
   DEFAULT_BATCHING_CONFIG,
   type PendingBatch,
 } from './batching';
+import { BatchingConfig } from '@quantumdeal/telegraf';
 
 /**
  * MultiBotSignalService
@@ -278,12 +279,8 @@ export class SignalService implements MultiBotSignal, OnModuleInit {
 
       // Step 3: Check batching configuration (FR-007)
       // Access batching config from bot settings (may not exist yet in settings interface)
-      const batchingConfig = (
-        bot.settings?.features as
-          | { batching?: { enabled?: boolean; windowMs?: number } }
-          | undefined
-      )?.batching;
-      const batchingEnabled = batchingConfig?.enabled ?? true; // Default: enabled (opt-out)
+      const batchingConfig = bot.settings?.features?.batching;
+      const batchingEnabled = batchingConfig?.enabled; // Default: enabled (opt-out)
 
       if (batchingEnabled) {
         // Route through batching layer
@@ -330,7 +327,7 @@ export class SignalService implements MultiBotSignal, OnModuleInit {
     order: MergedOrder,
     eventType: MessageType,
     startTime: number,
-    batchingConfig?: { enabled?: boolean; windowMs?: number },
+    batchingConfig: BatchingConfig,
   ): BotDeliveryResult {
     const botName = bot.name;
     const botId = bot.botId ?? 1;
