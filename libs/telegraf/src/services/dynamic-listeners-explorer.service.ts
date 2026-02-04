@@ -250,8 +250,23 @@ export class DynamicListenersExplorerService extends BaseExplorerService {
     if (!settings?.features) return false;
 
     // Check if feature is enabled
-    const features = settings.features as Record<string, boolean>;
-    return features[featureFlag] === true;
+    // Supports both boolean flags and object flags with `enabled` property
+    const features = settings.features as Record<string, unknown>;
+    const featureValue = features[featureFlag];
+
+    if (typeof featureValue === 'boolean') {
+      return featureValue;
+    }
+
+    if (
+      typeof featureValue === 'object' &&
+      featureValue !== null &&
+      'enabled' in featureValue
+    ) {
+      return (featureValue as { enabled: boolean }).enabled === true;
+    }
+
+    return false;
   }
 
   /**
