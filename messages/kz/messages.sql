@@ -247,4 +247,19 @@ SL: {old_stop_loss} → {stop_loss}
 💹 Нәтиже: {vip_net_result} USD
 ✅ Жеңістер: {vip_positive_trades}
 ❌ Жогалтулар: {vip_negative_trades}
-Осындай нәтиже керек пе? /filter арқылы сүзгіні өшіріңіз.', 'weekly_report_3');
+Осындай нәтиже керек пе? /filter арқылы сүзгіні өшіріңіз.', 'weekly_report_3'),
+	('kz', '📊 *Сауда сигналдарының жинағы*
+
+Сіз {count} сигнал алдыңыз:
+
+{{#each signals}}
+{emoji} *Сигнал №{index}*
+📈 Символ: {symbol}
+📍 Оқиға: {eventType}
+💰 Пайда: {profit}
+📅 Уақыт: {time}
+---
+{{/each}}
+
+Барлық сигналдар: {count}
+Бот: {botName}', 'batch_signals');

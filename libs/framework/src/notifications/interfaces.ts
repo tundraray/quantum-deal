@@ -14,6 +14,9 @@ export interface NotificationUser {
   subscriptionId: number;
   subscriptionExpirationDate: Date | null;
   hasCustomFiltering: boolean; // Feature flag for custom filtering
+  // Filter settings from user_subscription_features for in-memory filtering
+  // Returns null when user has no custom filtering configured
+  filterSettings: { symbols?: string[] } | null;
 }
 
 /**

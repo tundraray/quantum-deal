@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   SubscriptionsRepository,
   UserSubscriptionFeaturesRepository,
@@ -21,6 +21,12 @@ import {
 } from '../notifications';
 import type { PartnerSettings } from '@quantumdeal/partner-bot';
 import { Markup } from 'telegraf';
+import {
+  SignalBatchingService,
+  BatchMessageFormatter,
+  DEFAULT_BATCHING_CONFIG,
+  type PendingBatch,
+} from './batching';
 
 /**
  * MultiBotSignalService
@@ -43,7 +49,7 @@ import { Markup } from 'telegraf';
  * - AC-007: Per-bot stats in BroadcastResult
  */
 @Injectable()
-export class SignalService implements MultiBotSignal {
+export class SignalService implements MultiBotSignal, OnModuleInit {
   private readonly logger = new Logger(SignalService.name);
 
   constructor(
@@ -52,7 +58,22 @@ export class SignalService implements MultiBotSignal {
     private readonly localizationService: LocalizationService,
     private readonly notificationService: NotificationService,
     private readonly userSubscriptionFeaturesRepository: UserSubscriptionFeaturesRepository,
+    private readonly signalBatchingService: SignalBatchingService,
+    private readonly batchMessageFormatter: BatchMessageFormatter,
   ) {}
+
+  /**
+   * NestJS lifecycle hook: Set up flush callback for batching service.
+   * Per Design Doc: When timer fires, SignalBatchingService calls back to deliver messages.
+   */
+  onModuleInit(): void {
+    this.signalBatchingService.setFlushCallback(
+      async (botId: number, batches: PendingBatch[]) => {
+        await this.flushBotBatches(botId, batches);
+      },
+    );
+    this.logger.log('SignalService initialized with batching callback');
+  }
 
   /**
    * Main method to send notifications for order events.
@@ -207,6 +228,8 @@ export class SignalService implements MultiBotSignal {
    * Deliver signal to a single bot.
    * Isolated error handling ensures one bot's failure doesn't affect others (AC-006).
    *
+   * Per Design Doc v1.4: Routes through batching when enabled, immediate delivery when disabled.
+   *
    * @param bot - The bot to deliver to
    * @param order - The order data
    * @param eventType - The signal event type
@@ -225,7 +248,6 @@ export class SignalService implements MultiBotSignal {
 
     try {
       // Step 1: Get users subscribed to this specific bot
-
       const subscriptions =
         await this.subscriptionsRepository.findBySectorForBot(
           sector,
@@ -251,96 +273,274 @@ export class SignalService implements MultiBotSignal {
         subscriptionId: sub.subscriptionId,
         subscriptionExpirationDate: sub.userSubscriptionEndDate,
         hasCustomFiltering: sub.hasCustomFiltering,
+        filterSettings: sub.filterSettings,
       }));
 
-      // Step 3: Apply custom filtering
-      const filteredUsers = await this.applyCustomFiltering(
-        users,
-        order.symbol,
-      );
+      // Step 3: Check batching configuration (FR-007)
+      // Access batching config from bot settings (may not exist yet in settings interface)
+      const batchingConfig = (
+        bot.settings?.features as
+          | { batching?: { enabled?: boolean; windowMs?: number } }
+          | undefined
+      )?.batching;
+      const batchingEnabled = batchingConfig?.enabled ?? true; // Default: enabled (opt-out)
 
-      if (filteredUsers.length === 0) {
-        this.logger.debug(
-          `Bot ${botName}: all users filtered out for symbol ${order.symbol}`,
+      if (batchingEnabled) {
+        // Route through batching layer
+        return this.deliverToBotWithBatching(
+          bot,
+          users,
+          order,
+          eventType,
+          startTime,
+          batchingConfig,
         );
-        return this.createBotResult(bot, true, 0, 0, startTime);
       }
 
-      // Step 4: Send messages to each user
-      let sentCount = 0;
-      let failedCount = 0;
-
-      for (const user of filteredUsers) {
-        const buttons = [] as Array<Array<object>>;
-        try {
-          // Resolve message template for this bot and user's language
-          const template = await this.localizationService
-            .forBot(botId)
-            .lang(user.lang || 'en')
-            .t(eventType);
-
-          // todo: need refactor this
-          if (
-            bot.settings?.features.partnerFlowEnabled &&
-            ['close_plus', 'open'].includes(eventType)
-          ) {
-            const extendTrialButtonText = await this.localizationService
-              .forBot(botId)
-              .lang(user.lang ?? 'en')
-              .t('button_extend_trial');
-            const referralUrl = (bot.settings as PartnerSettings).referralUrl;
-
-            // Create trial status button - url if valid referralUrl, otherwise callback
-            const trialStatusButton = referralUrl
-              ? Markup.button.url(extendTrialButtonText, referralUrl)
-              : Markup.button.callback(
-                  extendTrialButtonText,
-                  'partner_extend_trial',
-                );
-            buttons.push([trialStatusButton]);
-          }
-
-          // Replace placeholders
-          const messageText = this.replacePlaceholders(
-            template,
-            this.createPlaceholders(order),
-          );
-
-          // Send via NotificationService with per-bot limiter
-          this.notificationService.sendWithBot(
-            bot.limiter,
-            user.telegramId,
-            user.botId,
-            messageText,
-            {
-              messageType: QueuedMessageType.MARKDOWN,
-              priority: MessagePriority.HIGH,
-              maxRetries: 3,
-              buttons: buttons,
-            },
-          );
-
-          sentCount++;
-        } catch (error) {
-          failedCount++;
-          const errorMsg =
-            error instanceof Error ? error.message : String(error);
-          this.logger.warn(
-            `Bot ${botName}: failed to send to user ${user.telegramId}: ${errorMsg}`,
-          );
-        }
-      }
-
-      this.logger.debug(
-        `Bot ${botName}: ${sentCount} sent, ${failedCount} failed [${Date.now() - startTime}ms]`,
+      // Step 4: Immediate delivery (batching disabled - FR-007)
+      return this.deliverToBotImmediate(
+        bot,
+        users,
+        order,
+        eventType,
+        startTime,
       );
-
-      return this.createBotResult(bot, true, sentCount, failedCount, startTime);
     } catch (error) {
       // AC-006: Fault isolation - catch error and return failed result
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.logger.error(`Bot ${botName} delivery failed: ${errorMsg}`);
       return this.createBotResult(bot, false, 0, 0, startTime, errorMsg);
+    }
+  }
+
+  /**
+   * Deliver signal via batching layer.
+   * Per Design Doc v1.4: Buffer signals for delivery when timer expires.
+   *
+   * @param bot - The bot
+   * @param users - Subscribed users with filterSettings
+   * @param order - Order data
+   * @param eventType - Signal event type
+   * @param startTime - Processing start time
+   * @param batchingConfig - Optional batching config from bot settings
+   */
+  private deliverToBotWithBatching(
+    bot: SignalCapableBot,
+    users: NotificationUser[],
+    order: MergedOrder,
+    eventType: MessageType,
+    startTime: number,
+    batchingConfig?: { enabled?: boolean; windowMs?: number },
+  ): BotDeliveryResult {
+    const botName = bot.name;
+    const botId = bot.botId ?? 1;
+    const symbol = order.symbol;
+
+    // Use in-memory filtering (0 additional DB queries)
+    const userFilterMap = this.applyCustomFilteringInMemory(users, [symbol]);
+
+    let bufferedCount = 0;
+
+    for (const [botUserId, filteredSymbols] of userFilterMap) {
+      if (filteredSymbols.includes(symbol)) {
+        const user = users.find((u) => u.botUserId === botUserId);
+        if (user) {
+          // Buffer signal for user
+          this.signalBatchingService.bufferSignalForUser(
+            botId,
+            {
+              botUserId: user.botUserId,
+              telegramId: user.telegramId,
+              lang: user.lang ?? 'en',
+              hasCustomFiltering: user.hasCustomFiltering,
+              filterSettings: user.filterSettings,
+            },
+            order,
+            eventType,
+            {
+              enabled: true,
+              windowMs:
+                batchingConfig?.windowMs ?? DEFAULT_BATCHING_CONFIG.windowMs,
+              maxBatchSize: DEFAULT_BATCHING_CONFIG.maxBatchSize,
+            },
+          );
+          bufferedCount++;
+        }
+      }
+    }
+
+    this.logger.debug(
+      `Bot ${botName}: ${bufferedCount} signals buffered for batching [${Date.now() - startTime}ms]`,
+    );
+
+    // Return success - actual delivery happens on timer flush
+    return this.createBotResult(bot, true, bufferedCount, 0, startTime);
+  }
+
+  /**
+   * Deliver signal immediately (batching disabled).
+   * Per FR-007: Maintain backward compatibility when batching is opted out.
+   *
+   * @param bot - The bot
+   * @param users - Subscribed users
+   * @param order - Order data
+   * @param eventType - Signal event type
+   * @param startTime - Processing start time
+   */
+  private async deliverToBotImmediate(
+    bot: SignalCapableBot,
+    users: NotificationUser[],
+    order: MergedOrder,
+    eventType: MessageType,
+    startTime: number,
+  ): Promise<BotDeliveryResult> {
+    const botName = bot.name;
+    const botId = bot.botId;
+
+    // Apply custom filtering (uses DB queries for backward compatibility)
+    const filteredUsers = await this.applyCustomFiltering(users, order.symbol);
+
+    if (filteredUsers.length === 0) {
+      this.logger.debug(
+        `Bot ${botName}: all users filtered out for symbol ${order.symbol}`,
+      );
+      return this.createBotResult(bot, true, 0, 0, startTime);
+    }
+
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const user of filteredUsers) {
+      const buttons = [] as Array<Array<object>>;
+      try {
+        // Resolve message template for this bot and user's language
+        const template = await this.localizationService
+          .forBot(botId)
+          .lang(user.lang || 'en')
+          .t(eventType);
+
+        // todo: need refactor this
+        if (
+          bot.settings?.features.partnerFlowEnabled &&
+          ['close_plus', 'open'].includes(eventType)
+        ) {
+          const extendTrialButtonText = await this.localizationService
+            .forBot(botId)
+            .lang(user.lang ?? 'en')
+            .t('button_extend_trial');
+          const referralUrl = (bot.settings as PartnerSettings).referralUrl;
+
+          // Create trial status button - url if valid referralUrl, otherwise callback
+          const trialStatusButton = referralUrl
+            ? Markup.button.url(extendTrialButtonText, referralUrl)
+            : Markup.button.callback(
+                extendTrialButtonText,
+                'partner_extend_trial',
+              );
+          buttons.push([trialStatusButton]);
+        }
+
+        // Replace placeholders
+        const messageText = this.replacePlaceholders(
+          template,
+          this.createPlaceholders(order),
+        );
+
+        // Send via NotificationService with per-bot limiter
+        this.notificationService.sendWithBot(
+          bot.limiter,
+          user.telegramId,
+          user.botId,
+          messageText,
+          {
+            messageType: QueuedMessageType.MARKDOWN,
+            priority: MessagePriority.HIGH,
+            maxRetries: 3,
+            buttons: buttons,
+          },
+        );
+
+        sentCount++;
+      } catch (error) {
+        failedCount++;
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Bot ${botName}: failed to send to user ${user.telegramId}: ${errorMsg}`,
+        );
+      }
+    }
+
+    this.logger.debug(
+      `Bot ${botName}: ${sentCount} sent, ${failedCount} failed [${Date.now() - startTime}ms]`,
+    );
+
+    return this.createBotResult(bot, true, sentCount, failedCount, startTime);
+  }
+
+  /**
+   * Flush all batches for a bot.
+   * Called by SignalBatchingService when timer expires.
+   *
+   * Per Design Doc v1.4:
+   * - Use BatchMessageFormatter.formatForDelivery() for template selection
+   * - Send via NotificationService.sendWithBot()
+   *
+   * @param botId - Bot ID being flushed
+   * @param batches - Array of pending batches to deliver
+   */
+  private async flushBotBatches(
+    botId: number,
+    batches: PendingBatch[],
+  ): Promise<void> {
+    const bot = this.botRegistryService.getBot(botId);
+
+    for (const batch of batches) {
+      try {
+        // Format batch messages using BatchMessageFormatter
+        const messages = await this.batchMessageFormatter.formatForDelivery(
+          batch.signals,
+          batch.lang,
+          botId,
+        );
+
+        // Send each message (may be split if > 4096 chars)
+        for (const message of messages) {
+          if (bot) {
+            // Use per-bot limiter if bot is available
+            this.notificationService.sendWithBot(
+              bot.limiter,
+              batch.userId,
+              botId,
+              message,
+              {
+                messageType: QueuedMessageType.MARKDOWN,
+                priority: MessagePriority.HIGH,
+                maxRetries: 3,
+              },
+            );
+          } else {
+            // Fallback to default notification service if bot not found
+            this.notificationService.addMessage(batch.userId, botId, message, {
+              messageType: QueuedMessageType.MARKDOWN,
+              priority: MessagePriority.HIGH,
+              maxRetries: 3,
+            });
+          }
+        }
+
+        this.logger.debug(
+          `Flushed batch for bot ${botId}, user ${batch.userId}: ${batch.signals.length} signals, ${messages.length} messages`,
+        );
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        this.logger.error(
+          `Failed to flush batch for bot ${botId}, user ${batch.userId}: ${errorMessage}`,
+          errorStack,
+        );
+        // Continue with next batch - don't let one failure stop others
+      }
     }
   }
 
@@ -413,6 +613,47 @@ export class SignalService implements MultiBotSignal {
       // Fail open: send signal on error
       return true;
     }
+  }
+
+  /**
+   * Apply custom filtering to users using in-memory approach.
+   * NO additional DB queries - all data from findBySectorForBot().
+   *
+   * Per Design Doc v1.4: Use filterSettings from repository extension.
+   *
+   * @param users - All subscribers with filterSettings
+   * @param symbols - Symbols to filter (array for batching support)
+   * @returns Map<botUserId, filteredSymbols[]>
+   */
+  private applyCustomFilteringInMemory(
+    users: NotificationUser[],
+    symbols: string[],
+  ): Map<number, string[]> {
+    const result = new Map<number, string[]>();
+
+    for (const user of users) {
+      let userSymbols: string[];
+
+      if (!user.hasCustomFiltering || !user.filterSettings) {
+        // No filtering - user gets all symbols
+        userSymbols = symbols;
+      } else {
+        const allowedSymbols = user.filterSettings.symbols || [];
+        if (allowedSymbols.length === 0) {
+          // Empty list means all symbols
+          userSymbols = symbols;
+        } else {
+          // Filter to only allowed symbols
+          userSymbols = symbols.filter((s) => allowedSymbols.includes(s));
+        }
+      }
+
+      if (userSymbols.length > 0) {
+        result.set(user.botUserId, userSymbols);
+      }
+    }
+
+    return result;
   }
 
   /**

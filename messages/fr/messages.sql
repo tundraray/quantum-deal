@@ -247,4 +247,19 @@ Tu veux les mêmes résultats ? Désactive le filtrage dans /filter.', 'weekly_r
 💹 Résultat : {vip_net_result} USD
 ✅ Gagnants : {vip_positive_trades}
 ❌ Perdants : {vip_negative_trades}
-Tu veux les mêmes résultats ? Désactive le filtrage dans /filter.', 'weekly_report_3');
+Tu veux les mêmes résultats ? Désactive le filtrage dans /filter.', 'weekly_report_3'),
+	('fr', '📊 *Lot de signaux de trading*
+
+Vous avez reçu {count} signaux:
+
+{{#each signals}}
+{emoji} *Signal #{index}*
+📈 Symbole: {symbol}
+📍 Événement: {eventType}
+💰 Profit: {profit}
+📅 Heure: {time}
+---
+{{/each}}
+
+Total des signaux: {count}
+Bot: {botName}', 'batch_signals');

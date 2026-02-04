@@ -247,4 +247,19 @@ SL: {old_stop_loss} → {stop_loss}
 💹 Результат: {vip_net_result} USD
 ✅ Плюсових: {vip_positive_trades}
 ❌ Мінусових: {vip_negative_trades}
-Хочеш так само? Вимикай фільтрацію в /filter.', 'weekly_report_3');
+Хочеш так само? Вимикай фільтрацію в /filter.', 'weekly_report_3'),
+	('uk', '📊 *Пакет торгових сигналів*
+
+Ви отримали {count} сигналів:
+
+{{#each signals}}
+{emoji} *Сигнал №{index}*
+📈 Символ: {symbol}
+📍 Подія: {eventType}
+💰 Прибуток: {profit}
+📅 Час: {time}
+---
+{{/each}}
+
+Всього сигналів: {count}
+Бот: {botName}', 'batch_signals');

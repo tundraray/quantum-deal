@@ -247,4 +247,19 @@ Xuddi shunday natija istaysizmi? /filter da filtrlashni o‘chirib qo‘ying.', 
 💹 Natija: {vip_net_result} USD
 ✅ Yutuqli savdolar: {vip_positive_trades}
 ❌ Zararli savdolar: {vip_negative_trades}
-Xuddi shunday natija istaysizmi? /filter da filtrlashni o‘chirib qo‘ying.', 'weekly_report_3');
+Xuddi shunday natija istaysizmi? /filter da filtrlashni o''chirib qo''ying.', 'weekly_report_3'),
+	('uz', '📊 *Savdo signallari to''plami*
+
+Siz {count} ta signal oldingiz:
+
+{{#each signals}}
+{emoji} *Signal #{index}*
+📈 Belgi: {symbol}
+📍 Hodisa: {eventType}
+💰 Foyda: {profit}
+📅 Vaqt: {time}
+---
+{{/each}}
+
+Jami signallar: {count}
+Bot: {botName}', 'batch_signals');

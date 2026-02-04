@@ -9,6 +9,7 @@ import {
   isBroadcastSubscription,
 } from '../schema/subscriptions';
 import { subscriptionFeatures } from '../schema/subscription-features';
+import { userSubscriptionFeatures } from '../schema/user-subscription-features';
 import { users } from '../schema/users';
 import { userSubscriptions } from '../schema/user-subscriptions';
 import { botUsers } from '../schema/bot-users';
@@ -25,6 +26,10 @@ export interface SubscriptionWithFeatures {
 
   // Feature flag: hasCustomFiltering
   hasCustomFiltering: boolean;
+
+  // Filter settings from user_subscription_features for in-memory filtering
+  // Returns null when user has no custom filtering configured
+  filterSettings: { symbols?: string[] } | null;
 
   // User fields
   botUserId: number;
@@ -86,6 +91,17 @@ export class SubscriptionsRepository extends BaseRepository<
              AND sf_custom.feature_key = 'custom_user_filtering'
              AND sf_custom.is_enabled = true
             ), false
+          )
+        `,
+
+        // Filter settings from user_subscription_features for in-memory filtering
+        // Returns null when user has no custom filtering configured
+        filterSettings: sql<{ symbols?: string[] } | null>`
+          (SELECT usf.settings
+           FROM ${userSubscriptionFeatures} usf
+           WHERE usf.bot_user_id = ${botUsers.id}
+           AND usf.feature_key = 'custom_user_filtering'
+           AND usf.is_active = true
           )
         `,
 
@@ -172,6 +188,17 @@ export class SubscriptionsRepository extends BaseRepository<
              AND sf_custom.feature_key = 'custom_user_filtering'
              AND sf_custom.is_enabled = true
             ), false
+          )
+        `,
+
+        // Filter settings from user_subscription_features for in-memory filtering
+        // Returns null when user has no custom filtering configured
+        filterSettings: sql<{ symbols?: string[] } | null>`
+          (SELECT usf.settings
+           FROM ${userSubscriptionFeatures} usf
+           WHERE usf.bot_user_id = ${botUsers.id}
+           AND usf.feature_key = 'custom_user_filtering'
+           AND usf.is_active = true
           )
         `,
 
