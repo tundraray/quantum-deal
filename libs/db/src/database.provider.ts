@@ -1,12 +1,12 @@
 import { ConfigService } from '@nestjs/config';
-import { drizzle, type NeonDatabase } from 'drizzle-orm/neon-serverless';
-import { Pool } from '@neondatabase/serverless';
+import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
 import * as schema from './schema';
 import { Logger } from '@nestjs/common';
 
 export const DRIZZLE_CLIENT = 'DRIZZLE_CLIENT';
 
-export type DrizzleClient = NeonDatabase<typeof schema>;
+export type DrizzleClient = NodePgDatabase<typeof schema>;
 
 export const drizzleProvider = [
   {
